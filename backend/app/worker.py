@@ -10,13 +10,17 @@ from app.pipeline.tasks import process_lecture
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings
 
+STARTUP_CHECK_TIMEOUT_SECONDS = 15
+
 
 async def check_providers(
     settings: Settings, transport: httpx.AsyncBaseTransport | None = None
 ) -> None:
     get_llm(settings)
     if isinstance(get_embeddings(settings), OpenAICompatibleEmbeddings):
-        probe = OpenAICompatibleEmbeddings(settings, transport=transport)
+        probe = OpenAICompatibleEmbeddings(
+            settings, attempts=1, timeout=STARTUP_CHECK_TIMEOUT_SECONDS, transport=transport
+        )
         await probe.embed(["проверка"])
 
 

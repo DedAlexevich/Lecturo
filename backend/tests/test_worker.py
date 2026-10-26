@@ -51,3 +51,15 @@ async def test_embeddings_dimension_matches():
 async def test_embeddings_dimension_mismatch_fails():
     with pytest.raises(OpenAICompatibleError, match="размерности 768"):
         await check_providers(OPENAI_EMBEDDINGS, embeddings_transport(768))
+
+
+async def test_unavailable_embeddings_api_fails_without_retries():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(503)
+
+    with pytest.raises(OpenAICompatibleError, match="503"):
+        await check_providers(OPENAI_EMBEDDINGS, httpx.MockTransport(handler))
+    assert len(requests) == 1
