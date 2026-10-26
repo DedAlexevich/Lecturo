@@ -194,9 +194,7 @@ class SaluteSpeechToText:
             if response.status_code == 401 and attempt == 1:
                 self._token = ""
                 continue
-            if tolerate_unavailable and (
-                response.status_code == 429 or response.is_server_error
-            ):
+            if tolerate_unavailable and (response.status_code == 429 or response.is_server_error):
                 return None
             self._raise_for_status(response, action)
             return response
