@@ -1,8 +1,10 @@
+import asyncio
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 from redis.exceptions import RedisError
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -19,7 +21,7 @@ from app.models import (
 )
 from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
-from app.pipeline.tasks import enqueue_lecture
+from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -119,14 +121,43 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
 
 @router.patch("/{lecture_id}")
 async def update_lecture(
-    lecture_id: uuid.UUID, body: LectureUpdate, user: CurrentUser
+    lecture_id: uuid.UUID, body: LectureUpdate, user: CurrentUser, session: SessionDep
 ) -> LectureOut:
-    not_ready()
+    lecture = await session.scalar(
+        select(Lecture).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    lecture.title = body.title
+    await session.commit()
+    await session.refresh(lecture)
+    return LectureOut.model_validate(lecture)
 
 
 @router.delete("/{lecture_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser) -> None:
-    not_ready()
+async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .with_for_update()
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    started = await session.scalar(
+        select(exists().where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.attempts > 0))
+    )
+    if not started and lecture.status in (LectureStatus.queued, LectureStatus.waiting_quota):
+        await quota.refund_lecture(session, lecture_id)
+    files = [Path(path) for path in (lecture.video_path, lecture.audio_path) if path]
+    await session.execute(delete(Lecture).where(Lecture.id == lecture_id))
+    await session.commit()
+
+    try:
+        await cancel_lecture_job(lecture_id)
+    except (OSError, RedisError):
+        pass
+    for path in files:
+        await asyncio.to_thread(path.unlink, missing_ok=True)
 
 
 @router.get("/{lecture_id}/status")
