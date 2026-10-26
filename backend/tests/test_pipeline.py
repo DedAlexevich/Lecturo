@@ -356,6 +356,28 @@ async def test_retry_returns_lecture_to_failed_when_queue_is_down(
     assert (await load(lecture.id)).status == LectureStatus.failed
 
 
+async def test_retry_publishes_failed_when_queue_is_down(
+    user, sample_video, client, auth_headers, received, monkeypatch
+):
+    lecture = await fail_lecture(user, sample_video)
+    await received(lecture)
+
+    async def queue_down(lecture_id):
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", queue_down)
+    response = await client.post(f"/api/v1/lectures/{lecture.id}/retry", headers=auth_headers)
+    assert response.status_code == 503
+    assert await received(lecture) == [
+        {
+            "lecture_id": str(lecture.id),
+            "user_id": str(user.id),
+            "status": "failed",
+            "error": "Очередь недоступна, попробуйте позже",
+        }
+    ]
+
+
 async def test_second_retry_is_rejected(user, sample_video, client, auth_headers, monkeypatch):
     lecture = await fail_lecture(user, sample_video)
 
