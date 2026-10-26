@@ -23,6 +23,7 @@ function useAcceptAiTransfer() {
 export function useAiTransferConsent() {
   const { data: me } = useMe();
   const accept = useAcceptAiTransfer();
+  const { reset } = accept;
   const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState(false);
   const pending = useRef<(() => void) | null>(null);
@@ -31,19 +32,20 @@ export function useAiTransferConsent() {
     pending.current = null;
     setOpen(false);
     setChecked(false);
-    accept.reset();
-  }, [accept]);
+    reset();
+  }, [reset]);
 
   const requireConsent = useCallback(
     (action: () => void) => {
-      if (me?.ai_transfer_accepted_at) {
+      if (!me) return;
+      if (me.ai_transfer_accepted_at) {
         action();
         return;
       }
       pending.current = action;
       setOpen(true);
     },
-    [me?.ai_transfer_accepted_at],
+    [me],
   );
 
   const confirm = () => {
