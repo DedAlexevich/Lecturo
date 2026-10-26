@@ -111,9 +111,20 @@ async def test_foreign_course_and_lecture_hidden(client, user, auth_headers):
             ("PATCH", f"/api/v1/courses/{foreign['id']}"),
             ("DELETE", f"/api/v1/courses/{foreign['id']}"),
             ("GET", f"/api/v1/courses/{foreign['id']}/lectures"),
+            ("POST", f"/api/v1/courses/{foreign['id']}/lectures"),
+            ("DELETE", f"/api/v1/courses/{foreign['id']}/lectures/{foreign_lecture}"),
         ):
-            response = await client.request(method, path, json={}, headers=auth_headers)
+            response = await client.request(
+                method,
+                path,
+                json={"lecture_id": str(foreign_lecture)},
+                headers=auth_headers,
+            )
             assert response.status_code == 404
+
+        kept = await client.get(f"/api/v1/courses/{foreign['id']}", headers=stranger_headers)
+        assert kept.status_code == 200
+        assert kept.json()["title"] == "Чужой курс"
 
         added = await client.post(
             f"/api/v1/courses/{own['id']}/lectures",
