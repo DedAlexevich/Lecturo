@@ -104,6 +104,14 @@ async def test_export_pdf_not_ready(client, user, auth_headers):
 
     assert response.status_code == 409
 
+    async with SessionLocal() as session:
+        session.add(Summary(lecture_id=lecture.id, content_md="  \n"))
+        await session.commit()
+
+    blank = await client.get(f"/api/v1/lectures/{lecture.id}/export.pdf", headers=auth_headers)
+
+    assert blank.status_code == 409
+
 
 def test_lecture_html_escapes_content():
     lecture = Lecture(

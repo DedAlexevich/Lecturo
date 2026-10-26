@@ -62,7 +62,8 @@ async def export_pdf(lecture_id: uuid.UUID, user: CurrentUser, session: SessionD
     )
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    if lecture.summary is None and not lecture.chapters:
+    has_summary = lecture.summary is not None and lecture.summary.content_md.strip()
+    if not has_summary and not lecture.chapters:
         raise HTTPException(status.HTTP_409_CONFLICT, "Конспект ещё не готов")
 
     html = lecture_html(lecture, get_settings().public_url.rstrip("/"))
