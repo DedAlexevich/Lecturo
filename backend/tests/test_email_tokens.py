@@ -298,3 +298,18 @@ async def test_reset_task_failure_is_logged(client, email, caplog, monkeypatch):
         await issue_and_send_password_reset(email)
 
     assert "Не удалось выдать и отправить ссылку сброса пароля" in caplog.text
+
+
+async def test_address_total_limit_caps_requests_from_many_ips(email, mails, monkeypatch):
+    monkeypatch.setenv("AUTH_MAIL_ADDRESS_RATE_LIMIT", "4")
+    get_settings.cache_clear()
+    statuses = []
+    try:
+        for i in range(6):
+            transport = ASGITransport(app=app, client=(f"203.0.113.{i}", 1234))
+            async with AsyncClient(transport=transport, base_url="http://test") as other:
+                response = await other.post(f"{API}/password-reset/request", json={"email": email})
+                statuses.append(response.status_code)
+    finally:
+        get_settings.cache_clear()
+    assert statuses == [204, 204, 204, 204, 429, 429]

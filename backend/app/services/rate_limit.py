@@ -74,6 +74,11 @@ async def enforce_mail_rate_limit(request: Request, subject: str, per_ip: bool =
         (f"rate:auth-mail:subject:{digest}", settings.auth_mail_rate_limit),
         (f"rate:auth-mail:ip:{ip}", settings.auth_mail_ip_rate_limit),
     ]
+    if per_ip:
+        address_digest = hashlib.sha256(subject.encode()).hexdigest()
+        checks.append(
+            (f"rate:auth-mail:address:{address_digest}", settings.auth_mail_address_rate_limit)
+        )
     try:
         limited = await is_any_limited(
             settings.redis_url, checks, settings.auth_mail_rate_window_seconds
