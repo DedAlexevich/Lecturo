@@ -118,3 +118,16 @@
 .ui-sample--raised {
   border-color: transparent;
 }
+
+.ui-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ui-form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 26rem;
+}
