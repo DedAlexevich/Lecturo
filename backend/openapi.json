@@ -1875,49 +1875,46 @@
       }
     },
     "/api/v1/billing/payments": {
-      "get": {
-        "tags": [
-          "billing"
-        ],
-        "summary": "List Payments",
-        "operationId": "list_payments_api_v1_billing_payments_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PaymentOut"
-                  },
-                  "type": "array",
-                  "title": "Response List Payments Api V1 Billing Payments Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      },
       "post": {
         "tags": [
           "billing"
         ],
         "summary": "Create Payment",
         "operationId": "create_payment_api_v1_billing_payments_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotence-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotence-Key"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PaymentIn"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1940,12 +1937,35 @@
               }
             }
           }
-        },
+        }
+      },
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "List Payments",
+        "operationId": "list_payments_api_v1_billing_payments_get",
         "security": [
           {
             "HTTPBearer": []
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentOut"
+                  },
+                  "title": "Response List Payments Api V1 Billing Payments Get"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/billing/waiting": {
