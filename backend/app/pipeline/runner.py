@@ -58,6 +58,9 @@ async def run_step(
         if isinstance(error, QuotaExceeded):
             step.status = StepStatus.pending
             step.error = str(error)
+            step.progress = 0.0
+            step.attempts -= 1
+            step.started_at = None
             lecture.status = LectureStatus.waiting_quota
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
