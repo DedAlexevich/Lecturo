@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Lecture, LectureStatus, ProcessingStep, StepName, StepStatus
+from app.pipeline.events import publish_status
 
 Report = Callable[[float], Awaitable[None]]
 StepHandler = Callable[[AsyncSession, Lecture, Report], Awaitable[None]]
@@ -58,6 +59,7 @@ async def run_step(
         step.finished_at = datetime.now(UTC)
         lecture.status = LectureStatus.failed
         await session.commit()
+        await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
         raise StepFailed(name) from error
 
     step.status = StepStatus.done
