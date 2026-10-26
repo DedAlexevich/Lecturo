@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Callable
 from typing import Annotated, Any
@@ -18,6 +19,7 @@ from app.schemas.billing import (
 from app.services import quota, yookassa
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+logger = logging.getLogger(__name__)
 
 
 def get_yookassa_factory() -> Callable[[], yookassa.YooKassaClient]:
@@ -83,6 +85,7 @@ async def create_payment(
     except yookassa.PaymentError as error:
         raise HTTPException(422, str(error)) from error
     except yookassa.YooKassaError as error:
+        logger.error("Не удалось создать платёж в ЮKassa: %s", error)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Не удалось создать платёж, попробуйте позже"
         ) from error
