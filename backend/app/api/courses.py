@@ -30,9 +30,7 @@ async def get_own_course(session: AsyncSession, course_id: uuid.UUID, user: User
 
 
 async def course_out(session: AsyncSession, course: Course) -> CourseOut:
-    count = await session.scalar(
-        select(func.count()).where(course_lectures.c.course_id == course.id)
-    )
+    count = await session.scalar(select(lecture_count).where(Course.id == course.id))
     return CourseOut.model_validate(course).model_copy(update={"lecture_count": count})
 
 
