@@ -113,10 +113,15 @@ export function useTusUpload(userId: string | undefined) {
   }, [update]);
 
   const reset = useCallback(() => {
+    current.current = null;
+    setState(idle);
+  }, []);
+
+  const cancel = useCallback(() => {
     const upload = current.current;
     current.current = null;
-    if (upload) void upload.abort();
     setState(idle);
+    upload?.abort(true).catch(() => upload.abort());
   }, []);
 
   useEffect(() => {
@@ -136,5 +141,5 @@ export function useTusUpload(userId: string | undefined) {
 
   useEffect(() => () => void current.current?.abort(), []);
 
-  return { state, active, start, pause, resume, reset };
+  return { state, active, start, pause, resume, reset, cancel };
 }

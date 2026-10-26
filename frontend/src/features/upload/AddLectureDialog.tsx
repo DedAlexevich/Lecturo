@@ -117,7 +117,7 @@ export function AddLectureDialog() {
                     onStart={startUpload}
                     onPause={upload.pause}
                     onResume={upload.resume}
-                    onCancel={upload.reset}
+                    onCancel={upload.cancel}
                     onClose={close}
                   />
                 ),
