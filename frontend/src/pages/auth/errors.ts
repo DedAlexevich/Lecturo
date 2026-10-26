@@ -32,15 +32,16 @@ export function messageOf(error: unknown): string {
   switch (error.status) {
     case 401:
     case 409:
-    case 503:
       return typeof detail === "string" ? detail : "Не получилось, попробуйте ещё раз";
+    case 503:
+      return typeof detail === "string" ? detail : "Сервис временно недоступен, попробуйте позже";
     case 400:
     case 410:
       return typeof detail === "string" ? detail : "Ссылка устарела или уже использована";
     case 422:
       return "Проверьте введённые данные";
     case 429:
-      return "Слишком много попыток. Подождите немного и повторите";
+      return typeof detail === "string" ? detail : "Слишком много попыток. Подождите немного и повторите";
     case 501:
       return "Эта возможность скоро заработает";
     default:
