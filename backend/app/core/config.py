@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     free_video_retention_days: int = 3
     subscription_video_retention_days: int = 30
     local_embeddings_weekly_seconds: int = 10 * 3600
+    local_lectures_weekly_count: int = 20
+    local_min_chars_per_minute: float = 100.0
+    local_max_chars_per_minute: float = 3000.0
+    local_max_segments: int = 20000
+    local_max_chapters: int = 500
+    local_max_text_chars: int = 5000
+    local_timecode_tolerance_sec: float = 1.0
+    local_results_rate_limit: int = 10
+    local_results_rate_window_seconds: int = 60
 
 
 @lru_cache
