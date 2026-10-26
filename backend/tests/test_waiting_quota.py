@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from redis.exceptions import RedisError
 from sqlalchemy import func, select
@@ -12,6 +14,7 @@ from app.models import (
     ProcessingStep,
     SourceType,
     StepName,
+    StepStatus,
     UsageEntry,
     User,
 )
@@ -35,8 +38,20 @@ def handlers(monkeypatch) -> list:
         calls.append(lecture.id)
 
     for name in StepName:
-        monkeypatch.setitem(tasks.HANDLERS, name, done)
+        if name != StepName.transcribe:
+            monkeypatch.setitem(tasks.HANDLERS, name, done)
     return calls
+
+
+@pytest.fixture
+def published(monkeypatch) -> list:
+    events = []
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        events.append((lecture_id, status))
+
+    monkeypatch.setattr(billing_api, "publish_status", fake_publish)
+    return events
 
 
 @pytest.fixture
@@ -50,7 +65,9 @@ def enqueued(monkeypatch) -> list:
     return calls
 
 
-async def new_lecture(user, seconds, status=LectureStatus.queued, title="Лекция") -> Lecture:
+async def new_lecture(
+    user, seconds: float | None, status=LectureStatus.queued, title="Лекция"
+) -> Lecture:
     async with SessionLocal() as session:
         lecture = Lecture(
             owner_id=user.id,
@@ -99,42 +116,56 @@ async def test_lecture_over_limit_waits_without_processing(user, weekly_limit, h
     assert await tasks.process_lecture({}, str(first.id)) == LectureStatus.ready
     assert await tasks.process_lecture({}, str(second.id)) == LectureStatus.waiting_quota
 
-    assert handlers.count(second.id) == 0
     assert await status_of(second) == LectureStatus.waiting_quota
     assert await charged(second) == 0
     async with SessionLocal() as session:
-        steps = await session.scalar(
-            select(func.count())
-            .select_from(ProcessingStep)
-            .where(ProcessingStep.lecture_id == second.id)
+        steps = dict(
+            (
+                await session.execute(
+                    select(ProcessingStep.step, ProcessingStep.status).where(
+                        ProcessingStep.lecture_id == second.id
+                    )
+                )
+            ).all()
         )
-    assert steps == 0
+    assert steps[StepName.transcribe] == StepStatus.pending
+    assert StepName.summarize not in steps
 
 
 async def test_failed_processing_returns_quota(user, weekly_limit, handlers, monkeypatch):
     lecture = await new_lecture(user, HOUR)
 
     async def broken(session, lecture, report):
-        raise RuntimeError("распознавание недоступно")
+        raise RuntimeError("модель недоступна")
 
-    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, broken)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, broken)
 
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
     assert await charged(lecture) == 0
 
 
-async def test_error_outside_step_returns_quota(user, weekly_limit, handlers, monkeypatch):
+async def test_cancelled_processing_returns_quota(user, weekly_limit, handlers, monkeypatch):
     lecture = await new_lecture(user, HOUR)
 
-    async def crash(session, lecture, name, handler):
-        raise RuntimeError("база недоступна")
+    async def cancelled(session, lecture, report):
+        raise asyncio.CancelledError
 
-    monkeypatch.setattr(tasks, "run_step", crash)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, cancelled)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
     assert await status_of(lecture) == LectureStatus.failed
     assert await charged(lecture) == 0
+
+
+async def test_ready_lecture_keeps_charge_after_late_error(user, weekly_limit, handlers):
+    lecture = await new_lecture(user, HOUR)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    await tasks.mark_failed(lecture.id, "поздняя ошибка")
+
+    assert await status_of(lecture) == LectureStatus.ready
+    assert await charged(lecture) == HOUR
 
 
 async def test_local_lecture_is_not_charged(user, weekly_limit, handlers):
@@ -168,7 +199,7 @@ async def test_waiting_lists_lectures_and_remainder(user, auth_headers, client, 
 
 
 async def test_queue_plan_runs_selected_in_given_order(
-    user, auth_headers, client, weekly_limit, enqueued
+    user, auth_headers, client, weekly_limit, enqueued, published
 ):
     first = await new_lecture(user, HOUR, LectureStatus.waiting_quota)
     second = await new_lecture(user, 1800, LectureStatus.waiting_quota)
@@ -182,6 +213,7 @@ async def test_queue_plan_runs_selected_in_given_order(
 
     assert response.status_code == 200
     assert enqueued == [second.id, first.id]
+    assert published == [(second.id, LectureStatus.queued), (first.id, LectureStatus.queued)]
     assert await status_of(first) == LectureStatus.queued
     assert await status_of(second) == LectureStatus.queued
     assert await charged(first) == HOUR
@@ -191,10 +223,17 @@ async def test_queue_plan_runs_selected_in_given_order(
     assert body["available_sec"] == weekly_limit - HOUR - 1800
 
 
-async def test_planned_lecture_is_not_charged_again_by_worker(
-    user, auth_headers, client, weekly_limit, enqueued, handlers
+async def test_waiting_lecture_runs_after_plan_without_second_charge(
+    user, auth_headers, client, weekly_limit, enqueued, handlers, published
 ):
-    lecture = await new_lecture(user, HOUR, LectureStatus.waiting_quota)
+    blocker = await new_lecture(user, 1.5 * HOUR)
+    lecture = await new_lecture(user, HOUR)
+    assert await tasks.process_lecture({}, str(blocker.id)) == LectureStatus.ready
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.waiting_quota
+    async with SessionLocal() as session:
+        session.add(HourPackage(user_id=user.id, seconds_total=HOUR, seconds_left=HOUR))
+        await session.commit()
+
     await client.post(
         "/api/v1/billing/queue-plan", json={"lecture_ids": [str(lecture.id)]}, headers=auth_headers
     )
@@ -274,8 +313,35 @@ async def test_plan_rejects_repeated_lecture(user, auth_headers, client, weekly_
     assert enqueued == []
 
 
+async def test_lecture_without_duration_is_charged_after_transcribe(
+    user, auth_headers, client, weekly_limit, enqueued, handlers, published
+):
+    lecture = await new_lecture(user, None, LectureStatus.waiting_quota)
+
+    response = await client.post(
+        "/api/v1/billing/queue-plan", json={"lecture_ids": [str(lecture.id)]}, headers=auth_headers
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available_sec"] == weekly_limit
+    assert await status_of(lecture) == LectureStatus.queued
+    assert await charged(lecture) == 0
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    assert await charged(lecture) == 60
+
+
+async def test_waiting_shows_lecture_without_duration(user, auth_headers, client, weekly_limit):
+    lecture = await new_lecture(user, None, LectureStatus.waiting_quota)
+
+    response = await client.get("/api/v1/billing/waiting", headers=auth_headers)
+
+    assert response.json()["lectures"] == [
+        {"id": str(lecture.id), "title": "Лекция", "duration_sec": None}
+    ]
+
+
 async def test_plan_returns_lectures_to_waiting_when_queue_is_down(
-    user, auth_headers, client, weekly_limit, monkeypatch
+    user, auth_headers, client, weekly_limit, monkeypatch, published
 ):
     first = await new_lecture(user, 60, LectureStatus.waiting_quota)
     second = await new_lecture(user, 60, LectureStatus.waiting_quota)
@@ -295,6 +361,7 @@ async def test_plan_returns_lectures_to_waiting_when_queue_is_down(
     )
 
     assert response.status_code == 503
+    assert published[-1] == (second.id, LectureStatus.waiting_quota)
     assert await status_of(first) == LectureStatus.queued
     assert await charged(first) == 60
     assert await status_of(second) == LectureStatus.waiting_quota
