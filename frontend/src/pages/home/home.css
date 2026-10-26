@@ -1,6 +1,6 @@
 .home {
   display: grid;
-  grid-template-columns: 14rem minmax(0, 1fr);
+  grid-template-columns: 12rem minmax(0, 1fr);
   grid-template-areas:
     "head head"
     "courses lectures";
@@ -44,7 +44,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--color-accent);
+  color: var(--color-text);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
@@ -52,7 +52,7 @@
 }
 
 .home__text-action:hover {
-  color: var(--color-accent-hover);
+  color: var(--color-data);
   text-decoration: underline;
 }
 
@@ -82,7 +82,6 @@
 .course-filter__title {
   padding: 0 var(--space-3);
   color: var(--color-text-muted);
-  font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   letter-spacing: 0;
@@ -110,13 +109,13 @@
 }
 
 .course-filter__item:hover {
-  background: var(--color-surface-sunken);
+  background: var(--color-accent-soft);
   color: var(--color-text);
 }
 
 .course-filter__item[aria-current="page"] {
-  background: var(--color-surface-sunken);
-  font-weight: var(--weight-semibold);
+  background: var(--color-accent-soft);
+  font-weight: var(--weight-medium);
 }
 
 .course-filter__item:focus-visible {
@@ -174,14 +173,16 @@
 .lecture-row__title {
   overflow: hidden;
   color: var(--color-text);
+  font-size: var(--text-lg);
   font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lecture-row__title:hover {
-  color: var(--color-accent);
+  color: var(--color-data);
 }
 
 .lecture-row__title:focus-visible {
@@ -215,7 +216,7 @@
 .lecture-status {
   flex: none;
   padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
   line-height: 1.5;
@@ -235,12 +236,13 @@
 }
 
 .lecture-status--waiting_quota {
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   color: var(--color-warning);
 }
 
 .lecture-status--processing {
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
+  background: var(--color-data-soft);
+  color: var(--color-data);
 }
 
 .lecture-status--failed {
@@ -276,7 +278,7 @@
   height: 1.3rem;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .home {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
