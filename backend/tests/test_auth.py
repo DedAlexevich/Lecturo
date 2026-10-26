@@ -45,6 +45,7 @@ async def test_register_requires_terms(client, email):
         "/api/v1/auth/register", json=register_body(email, accept_terms=False)
     )
     assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "accept_terms"]
 
 
 async def test_register_duplicate_email(client, email):

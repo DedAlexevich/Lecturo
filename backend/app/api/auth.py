@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
+from fastapi.exceptions import RequestValidationError
 
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
@@ -20,8 +21,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
     if not body.accept_terms:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Нужно принять условия использования"
+        raise RequestValidationError(
+            [
+                {
+                    "loc": ("body", "accept_terms"),
+                    "msg": "Нужно принять условия использования",
+                    "type": "value_error",
+                }
+            ]
         )
     user = await register_user(session, body.email, body.password, body.display_name)
     return TokenOut(access_token=create_access_token(user.id))
