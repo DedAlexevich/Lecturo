@@ -2,7 +2,6 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from fastapi.exceptions import RequestValidationError
 from sqlalchemy import delete, select, update
 
 from app.core.db import SessionLocal
@@ -14,15 +13,20 @@ from app.schemas.user import (
     LoginIn,
     PasswordResetIn,
     RegisterIn,
-    TelegramLoginIn,
+    TelegramSignupIn,
     TokenIn,
     TokenOut,
 )
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import consume_token, issue_token
+from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
 from app.services.rate_limit import enforce_mail_rate_limit
-from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
+from app.services.telegram_auth import (
+    TELEGRAM_PROFILE_FIELDS,
+    get_or_create_telegram_user,
+    verify_login_widget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +35,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
-    if not body.accept_terms:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("body", "accept_terms"),
-                    "msg": "Нужно принять условия использования",
-                    "type": "value_error",
-                }
-            ]
-        )
+    require_signup_consents(body.accept_terms, body.accept_personal_data)
     user = await register_user(session, body.email, body.password, body.display_name)
     return TokenOut(access_token=create_access_token(user.id))
 
@@ -51,11 +46,18 @@ async def login(body: LoginIn, session: SessionDep) -> TokenOut:
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/telegram")
-async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut:
+@router.post(
+    "/telegram",
+    responses={
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"}
+    },
+)
+async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOut:
     verify_login_widget(body)
-    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
-    user = await get_or_create_telegram_user(session, body.id, profile)
+    profile = body.model_dump(include=TELEGRAM_PROFILE_FIELDS, exclude_none=True)
+    user = await get_or_create_telegram_user(
+        session, body.id, profile, body.accept_terms, body.accept_personal_data
+    )
     return TokenOut(access_token=create_access_token(user.id))
 
 

@@ -12,6 +12,7 @@ class RegisterIn(Schema):
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(default="", max_length=120)
     accept_terms: bool
+    accept_personal_data: bool
 
 
 class LoginIn(Schema):
@@ -48,8 +49,15 @@ class TelegramLoginIn(Schema):
     hash: str
 
 
+class TelegramSignupIn(TelegramLoginIn):
+    accept_terms: bool = False
+    accept_personal_data: bool = False
+
+
 class TelegramWebAppIn(Schema):
     init_data: str
+    accept_terms: bool = False
+    accept_personal_data: bool = False
 
 
 class EmailIn(Schema):
