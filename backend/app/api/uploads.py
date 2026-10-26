@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_pascal
 from redis.exceptions import RedisError
@@ -57,7 +57,9 @@ class Hook(HookModel):
 
 
 @router.post("/hooks", include_in_schema=False)
-async def tusd_hook(hook: Hook, session: SessionDep) -> dict[str, Any]:
+async def tusd_hook(hook: Hook, request: Request, session: SessionDep) -> dict[str, Any]:
+    if "x-forwarded-for" in request.headers:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     try:
         if hook.type == "pre-create":
             return await pre_create(session, hook)
