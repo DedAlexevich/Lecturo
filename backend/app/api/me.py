@@ -1,5 +1,6 @@
 from fastapi import APIRouter, status
 
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
 from app.models import AuthProvider
 from app.schemas.user import (
@@ -10,6 +11,7 @@ from app.schemas.user import (
 )
 from app.services import identities
 from app.services.account import confirm_deletion, delete_account
+from app.services.rate_limit import enforce_rate_limit
 from app.services.telegram_auth import verify_login_widget
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -22,6 +24,13 @@ async def get_me(user: CurrentUser, session: SessionDep) -> UserOut:
 
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(body: AccountDeleteIn, user: CurrentUser, session: SessionDep) -> None:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:account-delete:{user.id}",
+        settings.account_delete_rate_limit,
+        settings.account_delete_rate_window_seconds,
+    )
     await confirm_deletion(session, user, body)
     await delete_account(session, user)
 
