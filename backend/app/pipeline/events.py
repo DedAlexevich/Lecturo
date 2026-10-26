@@ -25,9 +25,7 @@ async def publish_status(
         },
         ensure_ascii=False,
     )
-    redis = Redis.from_url(
-        get_settings().redis_url, socket_connect_timeout=2, socket_timeout=2
-    )
+    redis = Redis.from_url(get_settings().redis_url, socket_connect_timeout=2, socket_timeout=2)
     try:
         await redis.publish(CHANNEL, message)
     except (OSError, RedisError):
