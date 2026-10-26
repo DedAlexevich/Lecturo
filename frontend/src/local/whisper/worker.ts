@@ -3,6 +3,7 @@ import { SAMPLE_RATE, WHISPER_MODELS } from "./models";
 import type { Segment, WhisperDevice, WhisperModel, WorkerRequest, WorkerResponse } from "./types";
 
 const BLOCK_SECONDS = 120;
+const OVERLAP_SECONDS = 10;
 const CHUNK_SECONDS = 30;
 const STRIDE_SECONDS = 5;
 
@@ -15,22 +16,22 @@ function post(message: WorkerResponse) {
   self.postMessage(message);
 }
 
-async function loadRecognizer(
+function dtypeFor(device: WhisperDevice) {
+  return device === "webgpu"
+    ? { encoder_model: "fp32", decoder_model_merged: "q4" }
+    : { encoder_model: "q8", decoder_model_merged: "q8" };
+}
+
+async function createRecognizer(
   id: number,
   model: WhisperModel,
   device: WhisperDevice,
 ): Promise<Recognizer> {
-  const key = `${model}:${device}`;
-  if (loaded?.key === key) return loaded.recognizer;
-  loaded = null;
-
   const files = new Map<string, { loaded: number; total: number }>();
-  const recognizer = (await pipeline("automatic-speech-recognition", WHISPER_MODELS[model].repo, {
+  let reported = 0;
+  return (await pipeline("automatic-speech-recognition", WHISPER_MODELS[model].repo, {
     device,
-    dtype:
-      device === "webgpu"
-        ? { encoder_model: "fp32", decoder_model_merged: "q4" }
-        : { encoder_model: "q8", decoder_model_merged: "q8" },
+    dtype: dtypeFor(device),
     progress_callback: (event) => {
       if (event.status !== "progress") return;
       files.set(event.file, { loaded: event.loaded, total: event.total });
@@ -40,13 +41,28 @@ async function loadRecognizer(
         done += file.loaded;
         total += file.total;
       }
-      post({
-        id,
-        type: "progress",
-        progress: { stage: "loading", value: total > 0 ? done / total : 0 },
-      });
+      reported = Math.max(reported, total > 0 ? done / total : 0);
+      post({ id, type: "progress", progress: { stage: "loading", value: reported } });
     },
   })) as Recognizer;
+}
+
+async function loadRecognizer(
+  id: number,
+  model: WhisperModel,
+  device: WhisperDevice,
+): Promise<Recognizer> {
+  const key = `${model}:${device}`;
+  if (loaded?.key === key) return loaded.recognizer;
+  loaded = null;
+
+  let recognizer: Recognizer;
+  try {
+    recognizer = await createRecognizer(id, model, device);
+  } catch (error) {
+    if (device !== "webgpu") throw error;
+    recognizer = await createRecognizer(id, model, "wasm");
+  }
 
   loaded = { key, recognizer };
   return recognizer;
@@ -62,9 +78,13 @@ async function run(request: WorkerRequest) {
     const segments: Segment[] = [];
     post({ id, type: "progress", progress: { stage: "transcribing", value: 0 } });
 
+    const overlapSize = OVERLAP_SECONDS * SAMPLE_RATE;
+
     for (let from = 0; from < audio.length; from += blockSize) {
-      const block = audio.subarray(from, Math.min(from + blockSize, audio.length));
+      const isLast = from + blockSize >= audio.length;
+      const block = audio.subarray(from, Math.min(from + blockSize + overlapSize, audio.length));
       const offset = from / SAMPLE_RATE;
+      const keepUntil = isLast ? Infinity : offset + BLOCK_SECONDS;
       const result = await recognizer(block, {
         return_timestamps: true,
         chunk_length_s: CHUNK_SECONDS,
@@ -73,13 +93,15 @@ async function run(request: WorkerRequest) {
         task: "transcribe",
       });
       const output = Array.isArray(result) ? result[0] : result;
+      const blockEnd = offset + block.length / SAMPLE_RATE;
       for (const chunk of output.chunks ?? []) {
         const text = chunk.text.trim();
         if (!text) continue;
         const [start, end] = chunk.timestamp;
-        const blockEnd = offset + block.length / SAMPLE_RATE;
+        const absoluteStart = offset + start;
+        if (absoluteStart >= keepUntil) continue;
         segments.push({
-          start: offset + start,
+          start: absoluteStart,
           end: end === null ? blockEnd : offset + end,
           text,
         });
@@ -87,7 +109,10 @@ async function run(request: WorkerRequest) {
       post({
         id,
         type: "progress",
-        progress: { stage: "transcribing", value: Math.min(1, (from + block.length) / audio.length) },
+        progress: {
+          stage: "transcribing",
+          value: Math.min(1, (from + blockSize) / audio.length),
+        },
       });
     }
 
