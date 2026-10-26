@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     local_timecode_tolerance_sec: float = 1.0
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60
+    auth_mail_rate_limit: int = 3
+    auth_mail_ip_rate_limit: int = 20
+    auth_mail_rate_window_seconds: int = 3600
     account_delete_rate_limit: int = 5
     account_delete_rate_window_seconds: int = 3600
 
