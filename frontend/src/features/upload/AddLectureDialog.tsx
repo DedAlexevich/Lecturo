@@ -36,7 +36,10 @@ export function AddLectureDialog() {
 
   const selectedCourse = courses.data?.some((course) => course.id === courseId) ? courseId : "";
 
+  const { reset: resetLink } = addLink;
+
   const close = useCallback(() => {
+    resetLink();
     setSearchParams(
       (params) => {
         params.delete("add");
@@ -44,7 +47,7 @@ export function AddLectureDialog() {
       },
       { replace: true },
     );
-  }, [setSearchParams]);
+  }, [resetLink, setSearchParams]);
 
   const refreshLists = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["lectures"] });
@@ -59,8 +62,8 @@ export function AddLectureDialog() {
     toast.show(`Запись «${file?.name ?? ""}» загружена, начинаем обработку`, "success");
     refreshLists();
     reset();
-    if (open) close();
-  }, [phase, file, open, close, refreshLists, reset, toast]);
+    if (open && tab === "file") close();
+  }, [phase, file, open, tab, close, refreshLists, reset, toast]);
 
   const startUpload = (picked: File) => {
     const course = selectedCourse || null;
@@ -78,7 +81,6 @@ export function AddLectureDialog() {
           onSuccess: (lecture) => {
             toast.show(`Лекция «${lecture.title}» добавлена, начинаем обработку`, "success");
             refreshLists();
-            addLink.reset();
             setLinkKey((key) => key + 1);
             close();
           },
