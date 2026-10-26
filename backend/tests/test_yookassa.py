@@ -169,8 +169,27 @@ async def test_invalid_payment_request(client, user, auth_headers, fake, payload
     assert fake.requests == []
 
 
-async def test_yookassa_error_does_not_keep_payment(client, user, auth_headers, fake):
+async def test_retry_after_yookassa_error_reuses_payment(client, user, auth_headers, fake):
+    request = {"product_code": "hours_5", "accept_offer": True}
+    headers = {**auth_headers, "Idempotence-Key": "key-retry"}
     fake.status_code = 500
+
+    failed = await client.post("/api/v1/billing/payments", json=request, headers=headers)
+    history = await client.get("/api/v1/billing/payments", headers=auth_headers)
+    fake.status_code = 200
+    retried = await client.post("/api/v1/billing/payments", json=request, headers=headers)
+
+    assert failed.status_code == 502
+    assert history.json() == []
+    assert retried.status_code == 200
+    assert await count_payments(user) == 1
+    first_body, retry_body = (json.loads(r.content) for r in fake.requests)
+    assert first_body["metadata"]["payment_id"] == retry_body["metadata"]["payment_id"]
+    assert retry_body["metadata"]["payment_id"] == retried.json()["id"]
+
+
+async def test_yookassa_rejection_does_not_keep_payment(client, user, auth_headers, fake):
+    fake.status_code = 400
 
     response = await client.post(
         "/api/v1/billing/payments",

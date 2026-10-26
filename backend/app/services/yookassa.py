@@ -12,7 +12,17 @@ from app.schemas.billing import PaymentOut, ProductOut
 
 
 class YooKassaError(RuntimeError):
-    pass
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+    @property
+    def rejected(self) -> bool:
+        return (
+            self.status_code is not None
+            and 400 <= self.status_code < 500
+            and (self.status_code != 429)
+        )
 
 
 class PaymentError(ValueError):
@@ -51,7 +61,10 @@ class YooKassaClient:
             except httpx.HTTPError as error:
                 raise YooKassaError(f"ЮKassa недоступна: {error}") from error
         if response.is_error:
-            raise YooKassaError(f"ЮKassa вернула {response.status_code}: {response.text[:500]}")
+            raise YooKassaError(
+                f"ЮKassa вернула {response.status_code}: {response.text[:500]}",
+                response.status_code,
+            )
         return response.json()
 
 
@@ -150,9 +163,10 @@ async def create_payment(
     body = payment_request(payment, product, email, return_url, settings)
     try:
         response = await client.create_payment(idempotence_key, body)
-    except YooKassaError:
-        await session.delete(payment)
-        await session.commit()
+    except YooKassaError as error:
+        if error.rejected:
+            await session.delete(payment)
+            await session.commit()
         raise
     payment.yookassa_id = response["id"]
     payment.raw = response
