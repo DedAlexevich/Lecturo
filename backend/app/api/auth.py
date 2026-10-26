@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
@@ -22,6 +23,8 @@ from app.services.auth_tokens import consume_token, issue_token
 from app.services.mail import send_password_reset_mail, send_verification_mail
 from app.services.rate_limit import enforce_mail_rate_limit
 from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -56,7 +59,14 @@ async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/verify-email/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/verify-email/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_email_verification(
     user: CurrentUser, session: SessionDep, background: BackgroundTasks, request: Request
 ) -> None:
@@ -80,22 +90,32 @@ async def confirm_email(body: TokenIn, session: SessionDep) -> None:
     await session.commit()
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_password_reset(
     body: EmailIn, background: BackgroundTasks, request: Request
 ) -> None:
     email = normalize_email(body.email)
-    await enforce_mail_rate_limit(request, f"reset:{email}")
+    await enforce_mail_rate_limit(request, f"reset:{email}", per_ip=True)
     background.add_task(issue_and_send_password_reset, email)
 
 
 async def issue_and_send_password_reset(email: str) -> None:
-    async with SessionLocal() as session:
-        user = await session.scalar(select(User).where(User.email == email))
-        if user is None or user.email is None:
-            return
-        token = await issue_token(session, user.id, AuthTokenKind.reset_password)
-    await send_password_reset_mail(user.email, token)
+    try:
+        async with SessionLocal() as session:
+            user = await session.scalar(select(User).where(User.email == email))
+            if user is None or user.email is None:
+                return
+            token = await issue_token(session, user.id, AuthTokenKind.reset_password)
+        await send_password_reset_mail(user.email, token)
+    except Exception:
+        logger.exception("Не удалось выдать и отправить ссылку сброса пароля")
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
