@@ -10,6 +10,7 @@ import type {
 
 let worker: Worker | null = null;
 let nextId = 1;
+const pending = new Map<number, (error: Error) => void>();
 
 function getWorker(): Worker {
   worker ??= new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -19,6 +20,9 @@ function getWorker(): Worker {
 export function disposeWhisper() {
   worker?.terminate();
   worker = null;
+  const rejections = [...pending.values()];
+  pending.clear();
+  for (const reject of rejections) reject(new DOMException("Aborted", "AbortError"));
 }
 
 export async function transcribe(
@@ -36,7 +40,9 @@ export async function transcribe(
   const id = nextId++;
 
   return new Promise<Segment[]>((resolve, reject) => {
+    pending.set(id, reject);
     const cleanup = () => {
+      pending.delete(id);
       target.removeEventListener("message", onMessage);
       target.removeEventListener("error", onError);
       signal?.removeEventListener("abort", onAbort);
@@ -55,11 +61,10 @@ export async function transcribe(
     const onError = (event: ErrorEvent) => {
       cleanup();
       disposeWhisper();
-      reject(new Error(event.message));
+      reject(new Error(event.message || "Не удалось запустить распознавание"));
     };
     const onAbort = () => {
       cleanup();
-      disposeWhisper();
       reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
     };
 
