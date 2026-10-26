@@ -4,6 +4,7 @@ import styles from "./AccountPage.module.css";
 import { PaymentsSection } from "./PaymentsSection";
 import { PurchaseSection } from "./PurchaseSection";
 import { QuotaSection } from "./QuotaSection";
+import { SettingsSection } from "./SettingsSection";
 import { usePaymentReturn } from "./usePaymentReturn";
 
 export function AccountPage() {
@@ -25,6 +26,7 @@ export function AccountPage() {
       <QuotaSection />
       <PurchaseSection />
       <PaymentsSection />
+      <SettingsSection />
     </div>
   );
 }
