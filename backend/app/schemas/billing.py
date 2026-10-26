@@ -23,6 +23,7 @@ class ProductOut(Schema):
 
 class PaymentIn(Schema):
     product_code: str
+    accept_offer: bool
     return_url: str | None = None
 
 
