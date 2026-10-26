@@ -17,7 +17,7 @@
   min-height: 7.5rem;
   padding: var(--space-5);
   background: var(--color-surface-sunken);
-  border: 1px dashed var(--color-border-strong);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
