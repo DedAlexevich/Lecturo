@@ -339,3 +339,23 @@ def test_parse_amount(amount, expected):
 )
 def test_parse_time(value, expected):
     assert yookassa.parse_time(value) == expected
+
+
+async def test_payment_of_deleted_account_is_settled_without_grant(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded", captured_at="2026-10-26T10:00:00.000Z")
+    async with SessionLocal() as session:
+        stored = await session.get(Payment, payment.id)
+        stored.user_id = None
+        await session.commit()
+
+    response = await client.post(WEBHOOK, json=notification(payment))
+
+    assert response.status_code == 200
+    stored = await load_payment(payment)
+    assert stored.status == PaymentStatus.succeeded
+    assert stored.paid_at == datetime(2026, 10, 26, 10, tzinfo=UTC)
+    assert await packages_of(user) == []
+    async with SessionLocal() as session:
+        await session.delete(stored)
+        await session.commit()

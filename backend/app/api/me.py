@@ -10,6 +10,7 @@ from app.schemas.user import (
     TelegramLoginIn,
     UserOut,
 )
+from app.services.account import confirm_deletion, delete_account
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -28,8 +29,9 @@ async def get_me(user: CurrentUser, session: SessionDep) -> UserOut:
 
 
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_me(body: AccountDeleteIn, user: CurrentUser) -> None:
-    not_ready()
+async def delete_me(body: AccountDeleteIn, user: CurrentUser, session: SessionDep) -> None:
+    await confirm_deletion(session, user, body)
+    await delete_account(session, user)
 
 
 @router.post("/identities/telegram")
