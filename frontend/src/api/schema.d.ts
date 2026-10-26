@@ -1537,6 +1537,20 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Слишком много запросов писем */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Хранилище лимитов недоступно */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     confirm_email_api_v1_auth_verify_email_confirm_post: {
@@ -1598,6 +1612,20 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Слишком много запросов писем */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Хранилище лимитов недоступно */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
