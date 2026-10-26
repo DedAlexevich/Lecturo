@@ -232,3 +232,26 @@ async def test_pre_finish_keeps_incomplete_upload(client, user, auth_headers, st
     assert response.json()["HTTPResponse"]["StatusCode"] == 409
     assert await user_lectures(user.id) == []
     assert path.exists()
+
+
+async def test_pre_finish_over_quota_waits_without_queue(
+    client, user, auth_headers, storage, enqueued, monkeypatch
+):
+    published = []
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, status))
+
+    monkeypatch.setattr(uploads_api, "publish_status", fake_publish)
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
+    upload_id = user.id.hex + "f" * 32
+    put_upload(storage, upload_id, sample_audio(storage))
+
+    request = hook("pre-finish", auth_headers, ID=upload_id, MetaData={"filename": "a.mp4"})
+    response = await client.post(HOOKS_URL, json=request)
+
+    assert response.json()["HTTPResponse"]["StatusCode"] == 200
+    [lecture] = await user_lectures(user.id)
+    assert lecture.status == LectureStatus.waiting_quota
+    assert enqueued == []
+    assert published == [(lecture.id, LectureStatus.waiting_quota)]

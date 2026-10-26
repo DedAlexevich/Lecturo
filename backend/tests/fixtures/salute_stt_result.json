@@ -1,0 +1,66 @@
+[
+  {
+    "results": [
+      {
+        "text": "начнём с определения",
+        "normalized_text": "Начнём с определения.",
+        "start": "3.160s",
+        "end": "4.660s",
+        "word_alignments": [
+          {"word": "начнём", "start": "3.160s", "end": "3.600s"},
+          {"word": "с", "start": "3.640s", "end": "3.700s"},
+          {"word": "определения", "start": "3.760s", "end": "4.660s"}
+        ]
+      }
+    ],
+    "eou": true,
+    "channel": 0
+  },
+  {
+    "results": [
+      {
+        "text": "сегодня разберём производные",
+        "normalized_text": "Сегодня разберём производные.",
+        "start": "0.880s",
+        "end": "2.400s",
+        "word_alignments": [
+          {"word": "сегодня", "start": "0.880s", "end": "1.320s"},
+          {"word": "разберём", "start": "1.360s", "end": "1.840s"},
+          {"word": "производные", "start": "1.880s", "end": "2.400s"}
+        ]
+      }
+    ],
+    "eou": true,
+    "channel": 0
+  },
+  {
+    "results": [
+      {
+        "text": "",
+        "normalized_text": "",
+        "start": "5.000s",
+        "end": "6.000s",
+        "word_alignments": []
+      }
+    ],
+    "eou": true,
+    "channel": 0
+  },
+  {
+    "results": [],
+    "eou": false,
+    "channel": 0
+  },
+  {
+    "results": [
+      {
+        "text": "пример первый",
+        "start": "65.300s",
+        "end": "66.420s",
+        "word_alignments": []
+      }
+    ],
+    "eou": true,
+    "channel": 0
+  }
+]

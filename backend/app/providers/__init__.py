@@ -1,6 +1,7 @@
 from app.core.config import Settings, get_settings
 from app.providers.base import LLM, Embeddings, Segment, SpeechToText
 from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleLLM
+from app.providers.salute import SaluteSpeechToText
 from app.providers.stub import StubEmbeddings, StubLLM, StubSpeechToText
 from app.providers.yandex import YandexSpeechToText
 
@@ -22,6 +23,8 @@ def get_speech_to_text(settings: Settings | None = None) -> SpeechToText:
             return StubSpeechToText()
         case "yandex":
             return YandexSpeechToText(settings)
+        case "salute":
+            return SaluteSpeechToText(settings)
     raise ValueError(f"Неизвестный STT_PROVIDER: {settings.stt_provider}")
 
 

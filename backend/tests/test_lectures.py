@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app.api import lectures as lectures_api
+from app.core.config import get_settings
 from app.core.db import SessionLocal, engine
 from app.models import (
     Chapter,
@@ -222,3 +223,26 @@ async def test_add_link_publishes_failed_when_queue_is_down(
     assert published == [
         (lecture.id, user.id, LectureStatus.failed, "Очередь недоступна, попробуйте позже")
     ]
+
+
+async def test_add_link_over_quota_waits_without_queue(
+    client, user, auth_headers, link_info, monkeypatch
+):
+    published = []
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, status))
+
+    monkeypatch.setattr(lectures_api, "publish_status", fake_publish)
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 2999)
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "waiting_quota"
+    assert link_info["enqueued"] == []
+    assert published == [(uuid.UUID(response.json()["id"]), LectureStatus.waiting_quota)]

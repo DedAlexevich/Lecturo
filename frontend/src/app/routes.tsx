@@ -8,7 +8,7 @@ import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
 import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
-import { EmptyPage } from "./EmptyPage";
+import { CoursePage } from "../pages/course/CoursePage";
 
 export const guestRoutes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -25,6 +25,6 @@ export const publicRoutes: RouteObject[] = [
 export const privateRoutes: RouteObject[] = [
   { path: "/", element: <HomePage /> },
   { path: "/lectures/:id", element: <LecturePage /> },
-  { path: "/courses/:id", element: <EmptyPage title="Курс" /> },
+  { path: "/courses/:id", element: <CoursePage /> },
   { path: "/account", element: <AccountPage /> },
 ];
