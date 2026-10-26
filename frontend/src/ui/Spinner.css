@@ -1,6 +1,6 @@
 .spinner {
   display: inline-flex;
-  color: var(--color-accent);
+  color: var(--color-text-muted);
 }
 
 .spinner svg {

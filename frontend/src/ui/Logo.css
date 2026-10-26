@@ -1,7 +1,9 @@
 .logo {
-  font-family: var(--font-display);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
   font-weight: var(--weight-semibold);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   line-height: 1;
   color: var(--color-text);
 }
@@ -15,6 +17,15 @@
 }
 
 .logo__mark {
-  color: var(--color-accent);
-  font-style: italic;
+  width: 1em;
+  height: 1em;
+  flex: none;
+}
+
+.logo__mark rect {
+  fill: var(--color-text);
+}
+
+.logo__mark .logo__accent {
+  fill: var(--color-data);
 }

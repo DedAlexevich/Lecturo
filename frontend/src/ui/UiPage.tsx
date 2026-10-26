@@ -16,14 +16,14 @@ import "./UiPage.css";
 const colorGroups: { title: string; tokens: string[] }[] = [
   { title: "Фон и поверхности", tokens: ["bg", "surface", "surface-sunken", "border", "border-strong"] },
   { title: "Текст", tokens: ["text", "text-muted"] },
-  { title: "Акцент", tokens: ["accent", "accent-hover", "accent-soft", "on-accent"] },
+  { title: "Акцент", tokens: ["accent", "accent-hover", "accent-soft", "on-accent", "data", "data-soft"] },
   { title: "Состояния", tokens: ["success", "warning", "danger"] },
 ];
 
 const textSizes = [
-  { token: "3xl", sample: "Конспект лекции", display: true },
-  { token: "2xl", sample: "Основы термодинамики", display: true },
-  { token: "xl", sample: "Второе начало и энтропия", display: true },
+  { token: "3xl", sample: "Конспект лекции" },
+  { token: "2xl", sample: "Основы термодинамики" },
+  { token: "xl", sample: "Второе начало и энтропия" },
   { token: "lg", sample: "Энтропия замкнутой системы не убывает" },
   { token: "base", sample: "Преподаватель разбирает цикл Карно и объясняет, почему КПД не может быть равен единице." },
   { token: "sm", sample: "Загружено 12 октября, длительность 1 ч 24 мин" },
@@ -32,7 +32,7 @@ const textSizes = [
 
 const spaces = [1, 2, 3, 4, 5, 6, 7, 8];
 const radii = ["sm", "md", "lg", "pill"];
-const shadows = [1, 2, 3];
+const shadows = [2, 3];
 
 export function UiPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -65,18 +65,12 @@ export function UiPage() {
 
       <section className="ui-section">
         <h2>Типографика</h2>
-        <p className="ui-note">Заголовки и логотип набраны шрифтом с засечками, текст интерфейса остаётся без засечек.</p>
+        <p className="ui-note">Весь интерфейс набран одним шрифтом Inter, иерархию задают размер и насыщенность.</p>
         <ul className="ui-type">
           {textSizes.map((item) => (
             <li key={item.token} className="ui-type__row">
               <code>--text-{item.token}</code>
-              <span
-                style={{
-                  fontSize: `var(--text-${item.token})`,
-                  fontFamily: item.display ? "var(--font-display)" : undefined,
-                  fontWeight: item.display ? "var(--weight-semibold)" : undefined,
-                }}
-              >
+              <span style={{ fontSize: `var(--text-${item.token})` }}>
                 {item.sample}
               </span>
             </li>
