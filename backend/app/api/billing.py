@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
 from app.schemas.billing import (
     PaymentIn,
@@ -12,18 +12,21 @@ from app.schemas.billing import (
     QuotaOut,
     WaitingOut,
 )
+from app.services import quota
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
 
 @router.get("/quota")
-async def get_quota(user: CurrentUser) -> QuotaOut:
-    not_ready()
+async def get_quota(user: CurrentUser, session: SessionDep) -> QuotaOut:
+    result = await quota.get_quota(session, user)
+    await session.commit()
+    return QuotaOut.model_validate(result)
 
 
 @router.get("/products")
 async def list_products() -> list[ProductOut]:
-    not_ready()
+    return quota.list_products()
 
 
 @router.post("/payments")
