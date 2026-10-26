@@ -6,10 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Lecture, SearchChunk, TranscriptSegment, User
 from app.pipeline.runner import Report
 from app.providers import get_embeddings, get_speech_to_text
+from app.services.consents import ai_transfer_given
 from app.services.quota import QuotaExceeded, charge_lecture
 
 CHUNK_SECONDS = 60.0
-AI_TRANSFER_REQUIRED = "Нет согласия на передачу данных на серверную обработку"
+AI_TRANSFER_REQUIRED = (
+    "Нет действующего согласия на передачу данных провайдерам ИИ: "
+    "оно отозвано или обновилась редакция. Дайте согласие заново и повторите обработку"
+)
 
 
 class ConsentMissing(Exception):
@@ -17,10 +21,14 @@ class ConsentMissing(Exception):
 
 
 async def require_ai_transfer(session: AsyncSession, lecture: Lecture) -> None:
-    accepted_at = await session.scalar(
-        select(User.ai_transfer_accepted_at).where(User.id == lecture.owner_id)
-    )
-    if accepted_at is None:
+    row = (
+        await session.execute(
+            select(User.ai_transfer_accepted_at, User.ai_transfer_revision).where(
+                User.id == lecture.owner_id
+            )
+        )
+    ).one_or_none()
+    if row is None or not ai_transfer_given(*row):
         raise ConsentMissing(AI_TRANSFER_REQUIRED)
 
 

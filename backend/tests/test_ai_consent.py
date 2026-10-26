@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from sqlalchemy import func, select, update
 
@@ -19,7 +21,9 @@ from app.pipeline import stages, summarize, tasks
 async def revoke_consent(user: User) -> None:
     async with SessionLocal() as session:
         await session.execute(
-            update(User).where(User.id == user.id).values(ai_transfer_accepted_at=None)
+            update(User)
+            .where(User.id == user.id)
+            .values(ai_transfer_accepted_at=None, ai_transfer_revision=None)
         )
         await session.commit()
 
@@ -158,3 +162,16 @@ async def test_local_lecture_without_consent_is_not_embedded(user, monkeypatch):
             .where(SearchChunk.lecture_id == lecture.id)
         )
         assert chunks == 0
+
+
+async def test_outdated_revision_blocks_server_processing(user):
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
+        )
+        await session.commit()
+    lecture = await create_link_lecture(user)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        with pytest.raises(stages.ConsentMissing):
+            await stages.transcribe(session, stored, report)

@@ -599,6 +599,30 @@
             "HTTPBearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Revoke Ai Transfer",
+        "operationId": "revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/telegram-webapp": {
