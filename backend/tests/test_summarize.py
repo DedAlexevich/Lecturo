@@ -232,3 +232,21 @@ async def test_broken_reduce_answer_fails_step(user, monkeypatch):
 
     with pytest.raises(ValueError, match="не в формате JSON"):
         await run_summarize(lecture.id)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"summary": "да"}',
+        '```json\n{"summary": "да"}\n```',
+        'Вот ответ:\n```JSON\n{"summary": "да"}\n```\nГотово.',
+    ],
+)
+def test_parse_json_finds_object_in_answer(content):
+    assert summarize.parse_json(content) == {"summary": "да"}
+
+
+@pytest.mark.parametrize("content", ["", "нет JSON", "[1, 2]", "} {"])
+def test_parse_json_rejects_answer_without_object(content):
+    with pytest.raises(ValueError):
+        summarize.parse_json(content)

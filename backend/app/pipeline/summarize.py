@@ -68,9 +68,7 @@ def format_part(part: list[TranscriptSegment]) -> str:
 
 
 def parse_json(content: str) -> dict[str, Any]:
-    text = content.strip()
-    if text.startswith("```"):
-        text = text.strip("`").removeprefix("json").strip()
+    text = content[content.find("{") : content.rfind("}") + 1]
     try:
         data = json.loads(text)
     except ValueError as error:
