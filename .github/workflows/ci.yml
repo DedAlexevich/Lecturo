@@ -25,8 +25,13 @@ jobs:
           --health-cmd "pg_isready -U lecturo"
           --health-interval 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
     env:
       DATABASE_URL: postgresql+asyncpg://lecturo:lecturo@localhost:5432/lecturo
+      REDIS_URL: redis://localhost:6379/0
     defaults:
       run:
         working-directory: backend
@@ -37,6 +42,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/pyproject.toml
+      - uses: FedericoCarboni/setup-ffmpeg@v3
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
@@ -76,8 +82,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: cp .env.example .env
-      - run: docker compose up -d --build --wait --wait-timeout 180 db redis api frontend tusd caddy
+      - run: docker compose up -d --build --wait --wait-timeout 180 db redis api worker frontend tusd caddy
       - run: curl -fsS http://localhost/api/v1/health
       - run: curl -fsS http://localhost/ | grep -q Lecturo
+      - run: test "$(docker compose ps worker --format '{{.State}}')" = running
       - if: failure()
         run: docker compose logs
