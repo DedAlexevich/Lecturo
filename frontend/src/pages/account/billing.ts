@@ -19,10 +19,9 @@ export function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-export function useQuota(refetchInterval?: number | false) {
+export function useQuota() {
   return useQuery({
     queryKey: quotaQueryKey,
-    refetchInterval,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/billing/quota");
       if (data === undefined) throw new ApiError(response.status, error);
@@ -49,18 +48,6 @@ export function usePayments(refetchInterval?: number | false) {
     refetchInterval,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/billing/payments");
-      if (data === undefined) throw new ApiError(response.status, error);
-      return data;
-    },
-  });
-}
-
-export function useLegalDocuments() {
-  return useQuery({
-    queryKey: ["legal"],
-    staleTime: Infinity,
-    queryFn: async () => {
-      const { data, error, response } = await api.GET("/api/v1/legal");
       if (data === undefined) throw new ApiError(response.status, error);
       return data;
     },

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
-import { errorMessage, useCreatePayment, useLegalDocuments, useProducts, type Product } from "./billing";
+import { errorMessage, useCreatePayment, useProducts, type Product } from "./billing";
 import { formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 
@@ -40,9 +40,6 @@ function PurchaseForm({ products }: { products: Product[] }) {
   const idempotenceKey = useRef(crypto.randomUUID());
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
-  const { data: documents } = useLegalDocuments();
-  const offer = documents?.find((document) => document.slug === "offer");
-  const refund = documents?.find((document) => document.slug === "refund");
   const selected = products.find((product) => product.code === code) ?? products[0];
   const { reset } = createPayment;
 
@@ -117,7 +114,7 @@ function PurchaseForm({ products }: { products: Product[] }) {
           label={
             <>
               Принимаю условия{" "}
-              <a href={`/legal/${offer?.slug ?? "offer"}`} target="_blank" rel="noreferrer">
+              <a href="/legal/offer" target="_blank" rel="noreferrer">
                 публичной оферты
               </a>
             </>
@@ -128,15 +125,13 @@ function PurchaseForm({ products }: { products: Product[] }) {
             Чтобы перейти к оплате, примите условия оферты.
           </p>
         )}
-        {refund && (
-          <p className={styles.muted}>
-            Возврат денег по{" "}
-            <a href={`/legal/${refund.slug}`} target="_blank" rel="noreferrer">
-              правилам возврата
-            </a>
-            .
-          </p>
-        )}
+        <p className={styles.muted}>
+          Возврат денег по{" "}
+          <a href="/legal/refund" target="_blank" rel="noreferrer">
+            правилам возврата
+          </a>
+          .
+        </p>
       </div>
       {failure && (
         <p className={styles.alert} role="alert">
