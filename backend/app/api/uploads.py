@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.core.deps import SessionDep
 from app.core.security import decode_access_token
 from app.models import Lecture, LectureStatus, SourceType, User
-from app.pipeline.media import MediaError, probe_upload
+from app.pipeline.media import MediaError, original_path, probe_upload
 from app.pipeline.tasks import enqueue_lecture
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     await session.flush()
     if course_id is not None:
         await add_to_course(session, course_id, lecture.id)
-    original = storage_dir / "originals" / str(lecture.id)
+    original = original_path(lecture.id)
     try:
         await asyncio.to_thread(move_original, path, original)
     except FileNotFoundError as error:
