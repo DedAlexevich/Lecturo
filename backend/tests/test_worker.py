@@ -1,23 +1,28 @@
+import json
+
+import httpx
 import pytest
 
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
-from app.providers import openai_compat
+from app.providers.openai_compat import OpenAICompatibleError
 from app.worker import WorkerSettings, check_providers, startup
 
-OPENAI_EMBEDDINGS = {
-    "embeddings_provider": "openai",
-    "embeddings_base_url": "https://embeddings.test/v1",
-    "embeddings_api_key": "embeddings-key",
-    "embeddings_model": "bge-m3",
-}
+OPENAI_EMBEDDINGS = Settings(
+    embeddings_provider="openai",
+    embeddings_base_url="https://embeddings.test/v1",
+    embeddings_api_key="embeddings-key",
+    embeddings_model="bge-m3",
+)
 
 
-def fake_embed(dimension: int):
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        return [[0.0] * dimension for _ in texts]
+def embeddings_transport(dimension: int) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        texts = json.loads(request.content)["input"]
+        data = [{"index": index, "embedding": [0.0] * dimension} for index in range(len(texts))]
+        return httpx.Response(200, json={"data": data})
 
-    return embed
+    return httpx.MockTransport(handler)
 
 
 def test_worker_runs_check_on_startup():
@@ -34,18 +39,15 @@ async def test_missing_llm_key_fails():
 
 
 async def test_missing_embeddings_settings_fail():
+    settings = OPENAI_EMBEDDINGS.model_copy(update={"embeddings_api_key": ""})
     with pytest.raises(ValueError, match="EMBEDDINGS_API_KEY"):
-        await check_providers(Settings(**{**OPENAI_EMBEDDINGS, "embeddings_api_key": ""}))
+        await check_providers(settings)
 
 
-async def test_embeddings_dimension_matches(monkeypatch):
-    monkeypatch.setattr(
-        openai_compat.OpenAICompatibleEmbeddings, "embed", fake_embed(EMBEDDING_DIM)
-    )
-    await check_providers(Settings(**OPENAI_EMBEDDINGS))
+async def test_embeddings_dimension_matches():
+    await check_providers(OPENAI_EMBEDDINGS, embeddings_transport(EMBEDDING_DIM))
 
 
-async def test_embeddings_dimension_mismatch_fails(monkeypatch):
-    monkeypatch.setattr(openai_compat.OpenAICompatibleEmbeddings, "embed", fake_embed(768))
-    with pytest.raises(RuntimeError, match="768"):
-        await check_providers(Settings(**OPENAI_EMBEDDINGS))
+async def test_embeddings_dimension_mismatch_fails():
+    with pytest.raises(OpenAICompatibleError, match="размерности 768"):
+        await check_providers(OPENAI_EMBEDDINGS, embeddings_transport(768))
