@@ -6,6 +6,7 @@ import styles from "./Layout.module.css";
 import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
 import { CookieNotice } from "../features/consent/CookieNotice";
+import { AddLectureDialog } from "../features/upload/AddLectureDialog";
 import { Logo } from "../ui/Logo";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
@@ -98,6 +99,7 @@ export function Layout() {
       </main>
       <LegalFooter />
       {signedIn && <Navigation className={styles.bottomNav} />}
+      {signedIn && <AddLectureDialog />}
       <CookieNotice />
     </div>
   );
