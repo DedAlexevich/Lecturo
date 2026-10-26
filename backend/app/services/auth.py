@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AuthIdentity, AuthProvider, User
 
 hasher = PasswordHasher()
+missing_user_hash = hasher.hash("missing-user")
 
 
 def hash_password(password: str) -> str:
@@ -44,6 +45,8 @@ async def register_user(
 
 async def authenticate(session: AsyncSession, email: str, password: str) -> User:
     user = await session.scalar(select(User).where(User.email == normalize_email(email)))
-    if user is None or not user.password_hash or not verify_password(user.password_hash, password):
+    has_password = user is not None and bool(user.password_hash)
+    password_hash = user.password_hash if has_password else missing_user_hash
+    if not verify_password(password_hash, password) or not has_password:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     return user
