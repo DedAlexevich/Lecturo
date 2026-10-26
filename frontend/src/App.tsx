@@ -1,17 +1,12 @@
-import { useEffect, useState } from "react";
-import { api } from "./api/client";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "react-router";
+import { queryClient } from "./app/queryClient";
+import { router } from "./app/router";
 
 export function App() {
-  const [status, setStatus] = useState("проверяем сервер");
-
-  useEffect(() => {
-    api.GET("/api/v1/health").then(({ data }) => setStatus(data?.status === "ok" ? "сервер на связи" : "сервер недоступен"));
-  }, []);
-
   return (
-    <main>
-      <h1>Lecturo</h1>
-      <p>{status}</p>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
   );
 }
