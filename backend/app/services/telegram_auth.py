@@ -1,6 +1,8 @@
 import hashlib
 import hmac
+import json
 import time
+from urllib.parse import parse_qsl
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -33,6 +35,30 @@ def verify_login_widget(data: TelegramLoginIn) -> None:
     age = time.time() - data.auth_date
     if age > AUTH_MAX_AGE_SECONDS or age < -CLOCK_SKEW_SECONDS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Данные входа Telegram устарели")
+
+
+def verify_webapp_init_data(init_data: str) -> dict:
+    secret = hmac.new(b"WebAppData", bot_token().encode(), hashlib.sha256).digest()
+    pairs = parse_qsl(init_data, keep_blank_values=True)
+    fields = dict(pairs)
+    received_hash = fields.pop("hash", None)
+    if not received_hash or len(fields) + 1 != len(pairs):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная подпись Telegram")
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+    expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, received_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная подпись Telegram")
+    try:
+        age = time.time() - int(fields["auth_date"])
+        telegram_user = json.loads(fields["user"])
+        telegram_user["id"] = int(telegram_user["id"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Неполные данные входа Telegram"
+        ) from None
+    if age > AUTH_MAX_AGE_SECONDS or age < -CLOCK_SKEW_SECONDS:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Данные входа Telegram устарели")
+    return telegram_user
 
 
 async def find_identity(session: AsyncSession, telegram_id: int) -> AuthIdentity | None:
