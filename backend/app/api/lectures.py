@@ -1,12 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from redis.exceptions import RedisError
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
-from app.models import Lecture, LectureStatus, StepStatus
+from app.models import Lecture, LectureStatus, ProcessingStep, StepStatus
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import (
     LectureDetail,
@@ -72,25 +73,49 @@ async def get_status(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusO
 
 @router.post("/{lecture_id}/retry")
 async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> LectureStatusOut:
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .options(selectinload(Lecture.steps))
+    queued = await session.scalar(
+        update(Lecture)
+        .where(
+            Lecture.id == lecture_id,
+            Lecture.owner_id == user.id,
+            Lecture.status == LectureStatus.failed,
+        )
+        .values(status=LectureStatus.queued)
+        .returning(Lecture.id)
     )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    if lecture.status != LectureStatus.failed:
+    if queued is None:
+        owned = await session.scalar(
+            select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        )
+        if owned is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Перезапустить можно только упавшую обработку"
         )
-    for step in lecture.steps:
-        if step.status == StepStatus.failed:
-            step.status = StepStatus.pending
-            step.progress = 0.0
-            step.error = None
-    lecture.status = LectureStatus.queued
+    await session.execute(
+        update(ProcessingStep)
+        .where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.status == StepStatus.failed)
+        .values(status=StepStatus.pending, progress=0.0, error=None)
+    )
     await session.commit()
-    await enqueue_lecture(lecture.id)
+
+    try:
+        await enqueue_lecture(lecture_id)
+    except (OSError, RedisError) as error:
+        await session.execute(
+            update(Lecture).where(Lecture.id == lecture_id).values(status=LectureStatus.failed)
+        )
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
+        ) from error
+
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id)
+        .options(selectinload(Lecture.steps))
+        .execution_options(populate_existing=True)
+    )
     return LectureStatusOut.model_validate(lecture)
 
 

@@ -151,3 +151,46 @@ async def test_cancelled_job_marks_running_step_failed(user, monkeypatch):
     failed = await load(lecture.id)
     assert failed.status == LectureStatus.failed
     assert steps_by_name(failed)[StepName.transcribe].status == StepStatus.failed
+
+
+async def fail_lecture(user) -> Lecture:
+    lecture = await create_lecture(user)
+
+    async def broken(session, lecture, report):
+        raise RuntimeError("сбой")
+
+    original = tasks.HANDLERS[StepName.transcribe]
+    tasks.HANDLERS[StepName.transcribe] = broken
+    try:
+        await tasks.process_lecture({}, str(lecture.id))
+    finally:
+        tasks.HANDLERS[StepName.transcribe] = original
+    return lecture
+
+
+async def test_retry_returns_lecture_to_failed_when_queue_is_down(
+    user, client, auth_headers, monkeypatch
+):
+    lecture = await fail_lecture(user)
+
+    async def queue_down(lecture_id):
+        raise ConnectionRefusedError
+
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", queue_down)
+    response = await client.post(f"/api/v1/lectures/{lecture.id}/retry", headers=auth_headers)
+    assert response.status_code == 503
+    assert (await load(lecture.id)).status == LectureStatus.failed
+
+
+async def test_second_retry_is_rejected(user, client, auth_headers, monkeypatch):
+    lecture = await fail_lecture(user)
+
+    async def fake_enqueue(lecture_id):
+        pass
+
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", fake_enqueue)
+    url = f"/api/v1/lectures/{lecture.id}/retry"
+    first = await client.post(url, headers=auth_headers)
+    second = await client.post(url, headers=auth_headers)
+    assert first.status_code == 200
+    assert second.status_code == 409
