@@ -125,7 +125,7 @@ export async function extractWithWebCodecs(
       method: "webcodecs",
     };
   } finally {
-    if (encoder && encoder.output.state !== "finalized") await encoder.output.cancel();
+    if (encoder && encoder.output.state !== "finalized") await encoder.output.cancel().catch(() => undefined);
     input.dispose();
   }
 }
