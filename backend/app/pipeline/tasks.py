@@ -9,6 +9,7 @@ from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
 from app.pipeline import download, media, stages
 from app.pipeline.runner import StepFailed, StepHandler, run_step
+from app.services import quota
 
 HANDLERS: dict[StepName, StepHandler] = {
     StepName.download: download.download,
@@ -37,6 +38,7 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
     try:
         return await run_plan(lecture_uuid)
     except StepFailed:
+        await refund(lecture_uuid)
         return LectureStatus.failed
     except BaseException as error:
         await mark_failed(lecture_uuid, str(error) or type(error).__name__)
@@ -48,6 +50,9 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
         lecture = await session.get(Lecture, lecture_id)
         if lecture is None:
             return "missing"
+        if not await quota.admit_lecture(session, lecture):
+            await session.commit()
+            return lecture.status
         lecture.status = LectureStatus.processing
         await session.commit()
         for name in PLANS[lecture.source_type]:
@@ -70,6 +75,13 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
         await session.execute(
             update(Lecture).where(Lecture.id == lecture_id).values(status=LectureStatus.failed)
         )
+        await quota.refund_lecture(session, lecture_id)
+        await session.commit()
+
+
+async def refund(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await quota.refund_lecture(session, lecture_id)
         await session.commit()
 
 

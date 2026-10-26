@@ -372,6 +372,7 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
             title="Лекция по ссылке",
             source_type=SourceType.link,
             source_url="https://vkvideo.ru/video-1_2",
+            duration_sec=60.0,
         )
         session.add(lecture)
         await session.commit()
