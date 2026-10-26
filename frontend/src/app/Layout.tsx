@@ -5,6 +5,8 @@ import { ApiError } from "./queryClient";
 import styles from "./Layout.module.css";
 import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
+import { Logo } from "../ui/Logo";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 const navItems = [
   { to: "/", label: "Лекции" },
@@ -62,6 +64,7 @@ function LegalFooter() {
             </li>
           ))}
         </ul>
+        <ThemeToggle />
       </div>
     </footer>
   );
@@ -76,7 +79,7 @@ export function Layout() {
       <header className={styles.header}>
         <div className={styles.bar}>
           <Link to="/" className={styles.logo}>
-            Lecturo
+            <Logo />
           </Link>
           {signedIn && <Navigation className={styles.topNav} />}
           <div className={styles.user}>
