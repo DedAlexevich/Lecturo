@@ -35,7 +35,8 @@ export function useToken() {
 
 api.use({
   onResponse({ request, response }) {
-    if (response.status === 401 && request.headers.has("Authorization")) signOut();
+    const token = tokenStorage.get();
+    if (response.status === 401 && token !== null && request.headers.get("Authorization") === `Bearer ${token}`) signOut();
     return response;
   },
 });
