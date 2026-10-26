@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
-from app.models import Course, Lecture, ShareLink, User, course_lectures
+from app.models import Course, Lecture, LectureStatus, ShareLink, User, course_lectures
 from app.schemas.share import (
     ComplaintIn,
     PublicCourseOut,
@@ -89,7 +89,10 @@ async def public_course(session: AsyncSession, course_id: uuid.UUID) -> PublicCo
             & (ShareLink.owner_id == course.owner_id)
             & ShareLink.revoked_at.is_(None),
         )
-        .where(course_lectures.c.course_id == course_id)
+        .where(
+            course_lectures.c.course_id == course_id,
+            Lecture.status == LectureStatus.ready,
+        )
         .order_by(course_lectures.c.position, course_lectures.c.added_at)
     )
     lectures: dict[uuid.UUID, PublicLectureSummary] = {}
@@ -119,11 +122,15 @@ async def create_share(body: ShareIn, user: CurrentUser, session: SessionDep) ->
     if (body.lecture_id is None) == (body.course_id is None):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Укажите либо лекцию, либо курс")
     if body.lecture_id is not None:
-        target = await session.scalar(
-            select(Lecture.id).where(Lecture.id == body.lecture_id, Lecture.owner_id == user.id)
+        lecture_status = await session.scalar(
+            select(Lecture.status).where(Lecture.id == body.lecture_id, Lecture.owner_id == user.id)
         )
-        if target is None:
+        if lecture_status is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+        if lecture_status != LectureStatus.ready:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Поделиться можно только обработанной лекцией"
+            )
     else:
         target = await session.scalar(
             select(Course.id).where(Course.id == body.course_id, Course.owner_id == user.id)
