@@ -3,6 +3,7 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
+import certifi
 import httpx
 import pytest
 
@@ -282,3 +283,13 @@ async def test_transcribe_rejects_unknown_language(tmp_path: Path):
     with pytest.raises(ValueError, match="xx"):
         await provider.transcribe(audio, "xx")
     assert requests == []
+
+def test_ca_bundle_is_added_to_system_certificates():
+    system = SaluteSpeechToText(salute_settings())._ssl_context().cert_store_stats()["x509_ca"]
+    settings = Settings(
+        stt_provider="salute", salute_auth_key="auth-key", salute_ca_bundle=certifi.where()
+    )
+    with_bundle = SaluteSpeechToText(settings)._ssl_context().cert_store_stats()["x509_ca"]
+    assert with_bundle > 0
+    assert with_bundle >= system
+

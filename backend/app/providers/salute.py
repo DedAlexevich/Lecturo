@@ -81,17 +81,20 @@ class SaluteSpeechToText:
         if language_code is None:
             raise ValueError(f"Язык не поддерживается SaluteSpeech: {language}")
         encoding, content_type = audio_format
-        verify: ssl.SSLContext | bool = (
-            ssl.create_default_context(cafile=self.ca_bundle) if self.ca_bundle else True
-        )
         async with httpx.AsyncClient(
-            timeout=120, verify=verify, transport=self.transport
+            timeout=120, verify=self._ssl_context(), transport=self.transport
         ) as client:
             file_id = await self._upload(client, audio_path, content_type)
             task_id = await self._start(client, file_id, encoding, language_code)
             response_file_id = await self._wait(client, task_id)
             response = await self._download(client, response_file_id)
         return parse_recognition(response)
+
+    def _ssl_context(self) -> ssl.SSLContext:
+        context = ssl.create_default_context()
+        if self.ca_bundle:
+            context.load_verify_locations(cafile=self.ca_bundle)
+        return context
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, content_type: str) -> str:
         content = await asyncio.to_thread(audio_path.read_bytes)
