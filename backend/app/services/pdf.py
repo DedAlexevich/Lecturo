@@ -1,11 +1,14 @@
 from html import escape
+from zoneinfo import ZoneInfo
 
 from markdown_it import MarkdownIt
 from weasyprint import CSS, HTML
 
 from app.models import Lecture
 
-markdown = MarkdownIt("commonmark", {"html": False}).enable("table")
+MOSCOW = ZoneInfo("Europe/Moscow")
+
+markdown_renderer = MarkdownIt("commonmark", {"html": False}).enable("table")
 
 STYLE = CSS(
     string="""
@@ -137,7 +140,7 @@ def format_duration(total_seconds: float) -> str:
 
 def lecture_html(lecture: Lecture, base_url: str) -> str:
     lecture_url = f"{base_url}/lectures/{lecture.id}"
-    meta = [lecture.created_at.strftime("%d.%m.%Y")]
+    meta = [lecture.created_at.astimezone(MOSCOW).strftime("%d.%m.%Y")]
     if lecture.duration_sec:
         meta.append(format_duration(lecture.duration_sec))
     meta.append(f'<a href="{escape(lecture_url)}">Открыть в Lecturo</a>')
@@ -159,7 +162,7 @@ def lecture_html(lecture: Lecture, base_url: str) -> str:
     if lecture.summary is not None and lecture.summary.content_md.strip():
         parts.append(
             f'<h2>Конспект</h2><div class="summary">'
-            f"{markdown.render(lecture.summary.content_md)}</div>"
+            f"{markdown_renderer.render(lecture.summary.content_md)}</div>"
         )
 
     return (

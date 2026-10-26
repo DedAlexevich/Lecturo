@@ -118,7 +118,7 @@ def test_lecture_html_escapes_content():
         id=uuid.uuid4(),
         title="<b>Лекция</b>",
         source_type=SourceType.upload,
-        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        created_at=datetime(2026, 3, 1, 22, 30, tzinfo=UTC),
         chapters=[],
         summary=Summary(content_md='<img src="http://10.0.0.1/x">\n\n<script>alert(1)</script>'),
     )
@@ -128,7 +128,7 @@ def test_lecture_html_escapes_content():
     assert "<b>Лекция</b>" not in html
     assert "<script>" not in html
     assert "<img" not in html
-    assert "01.03.2026" in html
+    assert "02.03.2026" in html
 
 
 def test_format_timecode():
