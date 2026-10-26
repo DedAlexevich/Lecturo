@@ -51,6 +51,10 @@ def lecture_files(lecture_id: uuid.UUID, paths: list[str | None]) -> set[Path]:
         storage_dir / "videos" / f"{lecture_id}.mp4",
     }
     files.update(Path(path) for path in paths if path)
+    for folder in ("audio", "tmp"):
+        directory = storage_dir / folder
+        if directory.is_dir():
+            files.update(directory.glob(f"{lecture_id}.*"))
     return files
 
 

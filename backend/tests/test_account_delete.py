@@ -74,6 +74,8 @@ async def add_lecture(user: User, storage: Path) -> tuple[Lecture, list[Path]]:
             storage / "videos" / f"{lecture.id}.mp4",
             storage / "uploads" / f"{user.id.hex}abcd",
             storage / "uploads" / f"{user.id.hex}abcd.info",
+            storage / "tmp" / f"{lecture.id}.mp4",
+            storage / "audio" / f"{lecture.id}.webm.part",
         ]
         for file in files:
             file.parent.mkdir(parents=True, exist_ok=True)
@@ -159,7 +161,7 @@ async def test_delete_with_telegram_login(client, account, storage, bot_token):
         assert await session.get(User, account.id) is None
 
 
-async def test_telegram_login_of_another_account_rejected(client, account, bot_token):
+async def test_telegram_login_of_another_account_rejected(client, account, storage, bot_token):
     payload = signed(
         bot_token, id=account.telegram_test_id + 1, first_name="Иван", auth_date=int(time.time())
     )
@@ -168,7 +170,7 @@ async def test_telegram_login_of_another_account_rejected(client, account, bot_t
     assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
 
 
-async def test_delete_with_init_data(client, account, bot_token):
+async def test_delete_with_init_data(client, account, storage, bot_token):
     body = {"telegram_init_data": init_data(bot_token, **webapp_fields(account.telegram_test_id))}
     response = await client.post(URL, json=body, headers=headers(account))
     assert response.status_code == 204
