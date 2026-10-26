@@ -1,0 +1,23 @@
+{$SITE_ADDRESS}
+
+encode gzip
+
+handle /api/* {
+	reverse_proxy api:8000
+}
+
+handle /files/* {
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy tusd:8080
+}
+
+handle_path /media/* {
+	root * /srv/storage/videos
+	file_server
+}
+
+handle {
+	reverse_proxy frontend:80
+}
