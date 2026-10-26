@@ -50,6 +50,10 @@ export function useCourses() {
   });
 }
 
+function isUnavailable(error: Error | null) {
+  return error instanceof ApiError && (error.status === 501 || (error.status >= 400 && error.status < 500));
+}
+
 export function useProgress(lectures: Lecture[]) {
   const active = lectures.filter((lecture) => isActive(lecture.status));
   const results = useQueries({
@@ -57,7 +61,7 @@ export function useProgress(lectures: Lecture[]) {
       queryOptions({
         queryKey: ["lectures", lecture.id, "status"],
         retry: false,
-        refetchInterval: (query) => (query.state.status === "error" ? false : pollInterval),
+        refetchInterval: (query) => (isUnavailable(query.state.error) ? false : pollInterval),
         queryFn: async () => {
           const { data, error, response } = await api.GET("/api/v1/lectures/{lecture_id}/status", {
             params: { path: { lecture_id: lecture.id } },
