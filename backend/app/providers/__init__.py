@@ -1,5 +1,6 @@
 from app.core.config import Settings, get_settings
 from app.providers.base import LLM, Embeddings, Segment, SpeechToText
+from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleLLM
 from app.providers.stub import StubEmbeddings, StubLLM, StubSpeechToText
 from app.providers.yandex import YandexSpeechToText
 
@@ -29,6 +30,8 @@ def get_llm(settings: Settings | None = None) -> LLM:
     match settings.llm_provider:
         case "stub":
             return StubLLM()
+        case "openai":
+            return OpenAICompatibleLLM(settings)
     raise ValueError(f"Неизвестный LLM_PROVIDER: {settings.llm_provider}")
 
 
@@ -37,4 +40,6 @@ def get_embeddings(settings: Settings | None = None) -> Embeddings:
     match settings.embeddings_provider:
         case "stub":
             return StubEmbeddings()
+        case "openai":
+            return OpenAICompatibleEmbeddings(settings)
     raise ValueError(f"Неизвестный EMBEDDINGS_PROVIDER: {settings.embeddings_provider}")

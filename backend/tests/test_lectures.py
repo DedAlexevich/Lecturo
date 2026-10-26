@@ -1,7 +1,11 @@
 import uuid
 
-from app.core.db import SessionLocal
+import pytest
+
+from app.api import lectures as lectures_api
+from app.core.db import SessionLocal, engine
 from app.models import Chapter, Lecture, SourceType, Summary, TranscriptSegment
+from app.pipeline.download import LinkError, LinkInfo
 
 
 async def test_lectures_require_auth(client):
@@ -39,3 +43,89 @@ async def test_lecture_detail(client, user, auth_headers):
 async def test_foreign_lecture_hidden(client, auth_headers):
     response = await client.get(f"/api/v1/lectures/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
+
+
+@pytest.fixture
+def link_info(monkeypatch):
+    found = {"info": LinkInfo(title="Лекция 5", duration=3000.0, embed_url=None)}
+    enqueued = []
+
+    async def fake_inspect(url):
+        found["connections_during_network"] = engine.pool.checkedout()
+        if isinstance(found["info"], LinkError):
+            raise found["info"]
+        return found["info"]
+
+    async def fake_enqueue(lecture_id):
+        enqueued.append(lecture_id)
+
+    monkeypatch.setattr(lectures_api, "inspect_link", fake_inspect)
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", fake_enqueue)
+    found["enqueued"] = enqueued
+    return found
+
+
+async def test_add_link_creates_queued_lecture(client, auth_headers, link_info):
+    link_info["info"] = LinkInfo(
+        title="Лекция 5",
+        duration=3000.0,
+        embed_url="https://vkvideo.ru/video_ext.php?oid=-1&id=2",
+    )
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "Лекция 5"
+    assert body["source_type"] == "link"
+    assert body["source_url"] == "https://vkvideo.ru/video-1_2"
+    assert body["embed_url"] == "https://vkvideo.ru/video_ext.php?oid=-1&id=2"
+    assert body["duration_sec"] == 3000.0
+    assert body["status"] == "queued"
+    assert link_info["enqueued"] == [uuid.UUID(body["id"])]
+    assert link_info["connections_during_network"] == 0
+
+
+async def test_add_link_rejects_long_video(client, auth_headers, link_info):
+    link_info["info"] = LinkError("Видео длиннее 4 часов")
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://rutube.ru/video/0123456789abcdef0123456789abcdef/"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Видео длиннее 4 часов"
+    assert link_info["enqueued"] == []
+
+
+async def test_add_link_puts_lecture_into_course(client, auth_headers, link_info):
+    course = await client.post("/api/v1/courses", json={"title": "Физика"}, headers=auth_headers)
+    course_id = course.json()["id"]
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://disk.yandex.ru/i/AbCdEf", "title": "Своё", "course_id": course_id},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "Своё"
+    lectures = await client.get(f"/api/v1/courses/{course_id}/lectures", headers=auth_headers)
+    assert [item["id"] for item in lectures.json()] == [response.json()["id"]]
+
+
+async def test_add_link_to_foreign_course(client, auth_headers, link_info):
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2", "course_id": str(uuid.uuid4())},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert link_info["enqueued"] == []

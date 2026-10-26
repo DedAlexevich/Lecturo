@@ -7,10 +7,11 @@ from sqlalchemy import update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
-from app.pipeline import stages
+from app.pipeline import download, stages
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 
 HANDLERS: dict[StepName, StepHandler] = {
+    StepName.download: download.download,
     StepName.transcribe: stages.transcribe,
     StepName.summarize: stages.summarize,
     StepName.embed: stages.embed,
@@ -18,7 +19,7 @@ HANDLERS: dict[StepName, StepHandler] = {
 
 PLANS: dict[SourceType, list[StepName]] = {
     SourceType.upload: [StepName.transcribe, StepName.summarize, StepName.embed],
-    SourceType.link: [StepName.transcribe, StepName.summarize, StepName.embed],
+    SourceType.link: [StepName.download, StepName.transcribe, StepName.summarize, StepName.embed],
     SourceType.local: [StepName.embed],
 }
 
