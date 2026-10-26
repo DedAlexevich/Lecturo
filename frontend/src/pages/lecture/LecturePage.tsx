@@ -4,6 +4,8 @@ import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
+import { EmbedPlayer } from "./players/EmbedPlayer";
+import { resolveEmbed } from "./players/embed";
 import { VideoPlayer } from "./players/VideoPlayer";
 import { usePlayer } from "./players/player";
 import { formatDuration, parseStartTime } from "./time";
@@ -154,6 +156,8 @@ export function LecturePage() {
 
   const data = lecture.data;
   const videoUrl = data.video_url ?? null;
+  const embed = videoUrl ? null : resolveEmbed(data.embed_url);
+  const hasPlayer = videoUrl !== null || embed !== null;
 
   return (
     <div className="lecture">
@@ -166,6 +170,15 @@ export function LecturePage() {
         <div className="lecture__media">
           {videoUrl ? (
             <VideoPlayer key={videoUrl} src={videoUrl} title={data.title} {...bind} />
+          ) : embed ? (
+            <EmbedPlayer
+              key={data.embed_url}
+              embed={embed}
+              title={data.title}
+              start={startAt ?? 0}
+              sourceUrl={data.source_url}
+              {...bind}
+            />
           ) : (
             <NoVideo lecture={data} />
           )}
@@ -180,8 +193,8 @@ export function LecturePage() {
           {segments.length > 0 ? (
             <Transcript
               segments={segments}
-              currentTime={videoUrl ? currentTime : null}
-              onSelect={videoUrl ? playFrom : undefined}
+              currentTime={hasPlayer ? currentTime : null}
+              onSelect={hasPlayer ? playFrom : undefined}
             />
           ) : (
             <TranscriptEmpty status={data.status} />
