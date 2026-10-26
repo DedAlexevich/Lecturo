@@ -32,16 +32,16 @@ function Navigation({ className }: { className: string }) {
   );
 }
 
-function UserMenu() {
+function UserBlock() {
   const { data: me } = useMe();
 
   return (
-    <>
+    <div className={styles.user}>
       {me && <span className={styles.userName}>{me.display_name}</span>}
       <button type="button" className={styles.textButton} onClick={signOut}>
         Выйти
       </button>
-    </>
+    </div>
   );
 }
 
@@ -77,27 +77,37 @@ export function Layout() {
   const onLoginPage = useLocation().pathname === "/login";
 
   return (
-    <div className={signedIn ? `${styles.shell} ${styles.withBottomNav}` : styles.shell}>
-      <header className={styles.header}>
-        <div className={styles.bar}>
+    <div className={signedIn ? `${styles.shell} ${styles.shellSigned}` : styles.shell}>
+      {signedIn && (
+        <aside className={styles.sidebar}>
           <Link to="/" className={styles.logo}>
             <Logo />
           </Link>
-          {signedIn && <Navigation className={styles.topNav} />}
-          <div className={styles.user}>
-            {signedIn && <UserMenu />}
-            {!signedIn && !onLoginPage && (
-              <Link to="/login" className={styles.textButton}>
-                Войти
-              </Link>
-            )}
-          </div>
-        </div>
-      </header>
-      <main className={styles.main}>
-        <Outlet />
-      </main>
-      <LegalFooter />
+          <Navigation className={styles.sideNav} />
+          <UserBlock />
+        </aside>
+      )}
+      <div className={styles.column}>
+        <header className={styles.header}>
+          <Link to="/" className={styles.logo}>
+            <Logo />
+          </Link>
+          {signedIn && (
+            <button type="button" className={styles.textButton} onClick={signOut}>
+              Выйти
+            </button>
+          )}
+          {!signedIn && !onLoginPage && (
+            <Link to="/login" className={styles.textButton}>
+              Войти
+            </Link>
+          )}
+        </header>
+        <main className={styles.main}>
+          <Outlet />
+        </main>
+        <LegalFooter />
+      </div>
       {signedIn && <Navigation className={styles.bottomNav} />}
       {signedIn && <AddLectureDialog />}
       <CookieNotice />
