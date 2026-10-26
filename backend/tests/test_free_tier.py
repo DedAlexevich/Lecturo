@@ -1,7 +1,13 @@
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from app.core.config import Settings
 from app.core.db import SessionLocal
+from app.core.deps import RequireSubscription
 from app.models import Subscription, User
 from app.services import quota
 
@@ -44,3 +50,39 @@ async def test_future_subscription_is_not_active_yet(user):
 
     assert await check(user) == (False, 3)
     assert await check(user, now=NOW + timedelta(days=2)) == (True, 30)
+
+
+@pytest.fixture
+async def guarded_client() -> AsyncIterator[AsyncClient]:
+    guarded_app = FastAPI()
+
+    @guarded_app.get("/guarded")
+    async def guarded(user: RequireSubscription) -> dict[str, str]:
+        return {"user_id": str(user.id)}
+
+    transport = ASGITransport(app=guarded_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+async def test_require_subscription_rejects_free_user(guarded_client, user, auth_headers):
+    response = await guarded_client.get("/guarded", headers=auth_headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "subscription_required"
+
+
+async def test_require_subscription_allows_subscriber(guarded_client, user, auth_headers):
+    now = datetime.now(UTC)
+    await add_subscription(user, now - timedelta(days=1), now + timedelta(days=29))
+
+    response = await guarded_client.get("/guarded", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"user_id": str(user.id)}
+
+
+async def test_require_subscription_needs_login(guarded_client):
+    response = await guarded_client.get("/guarded")
+
+    assert response.status_code == 401
