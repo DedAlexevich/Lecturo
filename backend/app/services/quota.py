@@ -7,7 +7,17 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.models import HourPackage, PaymentKind, Subscription, UsageEntry, UsageSource, User
+from app.models import (
+    HourPackage,
+    Lecture,
+    LectureStatus,
+    PaymentKind,
+    SourceType,
+    Subscription,
+    UsageEntry,
+    UsageSource,
+    User,
+)
 from app.schemas.billing import ProductOut
 
 WEEK = timedelta(days=7)
@@ -188,6 +198,109 @@ async def refund_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> int:
         await session.delete(entry)
     await session.flush()
     return sum(entry.seconds for entry in entries)
+
+
+async def can_process(
+    session: AsyncSession,
+    user: User,
+    seconds: float,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> bool:
+    quota = await get_quota(session, user, now, settings)
+    return math.ceil(seconds) <= quota.available_sec
+
+
+async def admit_lecture(
+    session: AsyncSession,
+    lecture: Lecture,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> bool:
+    if lecture.source_type == SourceType.local:
+        return True
+    if await charge_lecture(
+        session, lecture.owner_id, lecture.id, lecture.duration_sec, now, settings
+    ):
+        return True
+    lecture.status = LectureStatus.waiting_quota
+    await session.flush()
+    return False
+
+
+async def list_waiting(session: AsyncSession, user_id: uuid.UUID) -> list[Lecture]:
+    rows = await session.scalars(
+        select(Lecture)
+        .where(Lecture.owner_id == user_id, Lecture.status == LectureStatus.waiting_quota)
+        .order_by(Lecture.created_at, Lecture.id)
+    )
+    return list(rows.all())
+
+
+class QueuePlanError(Exception):
+    pass
+
+
+class LectureNotWaiting(QueuePlanError):
+    pass
+
+
+class PlanExceedsQuota(QueuePlanError):
+    pass
+
+
+async def plan_queue(
+    session: AsyncSession,
+    user: User,
+    lecture_ids: list[uuid.UUID],
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> list[Lecture]:
+    if len(set(lecture_ids)) != len(lecture_ids):
+        raise QueuePlanError("Лекции в плане не должны повторяться")
+    now = now or datetime.now(UTC)
+    await session.get(User, user.id, with_for_update=True, populate_existing=True)
+    rows = await session.scalars(
+        select(Lecture)
+        .where(Lecture.id.in_(lecture_ids), Lecture.owner_id == user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    lectures = {lecture.id: lecture for lecture in rows}
+    planned = [lectures.get(lecture_id) for lecture_id in lecture_ids]
+    if any(lecture is None or lecture.status != LectureStatus.waiting_quota for lecture in planned):
+        raise LectureNotWaiting("Часть лекций не ожидает лимита, обновите список")
+    needed = sum(math.ceil(lecture.duration_sec) for lecture in planned)
+    if not await can_process(session, user, needed, now, settings):
+        quota = await get_quota(session, user, now, settings)
+        raise PlanExceedsQuota(
+            f"Выбранные лекции длятся {format_duration(needed)}, "
+            f"а осталось {format_duration(quota.available_sec)}. Уберите часть лекций из плана"
+        )
+    for lecture in planned:
+        await charge_lecture(session, user.id, lecture.id, lecture.duration_sec, now, settings)
+        lecture.status = LectureStatus.queued
+    await session.flush()
+    return planned
+
+
+async def return_to_waiting(session: AsyncSession, lectures: list[Lecture]) -> None:
+    for lecture in lectures:
+        await refund_lecture(session, lecture.id)
+        lecture.status = LectureStatus.waiting_quota
+    await session.flush()
+
+
+def format_duration(seconds: int) -> str:
+    hours, rest = divmod(seconds, 3600)
+    minutes = math.ceil(rest / 60)
+    if minutes == 60:
+        hours, minutes = hours + 1, 0
+    if hours and minutes:
+        return f"{hours} ч {minutes} мин"
+    if hours:
+        return f"{hours} ч"
+    return f"{minutes} мин"
 
 
 def list_products(settings: Settings | None = None) -> list[ProductOut]:
