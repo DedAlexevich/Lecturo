@@ -276,3 +276,9 @@ async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
     assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
     assert reported[-1] == 1.0
+
+
+def test_link_requests_have_timeouts_and_limited_retries():
+    assert download.BASE_OPTIONS["socket_timeout"] == 30
+    assert download.BASE_OPTIONS["retries"] == 3
+    assert download.BASE_OPTIONS["fragment_retries"] == 3

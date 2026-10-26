@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from app.api import lectures as lectures_api
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, engine
 from app.models import Chapter, Lecture, SourceType, Summary, TranscriptSegment
 from app.pipeline.download import LinkError, LinkInfo
 
@@ -51,6 +51,7 @@ def link_info(monkeypatch):
     enqueued = []
 
     async def fake_inspect(url):
+        found["connections_during_network"] = engine.pool.checkedout()
         if isinstance(found["info"], LinkError):
             raise found["info"]
         return found["info"]
@@ -86,6 +87,7 @@ async def test_add_link_creates_queued_lecture(client, auth_headers, link_info):
     assert body["duration_sec"] == 3000.0
     assert body["status"] == "queued"
     assert link_info["enqueued"] == [uuid.UUID(body["id"])]
+    assert link_info["connections_during_network"] == 0
 
 
 async def test_add_link_rejects_long_video(client, auth_headers, link_info):

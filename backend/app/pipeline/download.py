@@ -43,6 +43,10 @@ BASE_OPTIONS: dict[str, Any] = {
     "noplaylist": True,
     "noprogress": True,
     "format": "bestaudio/best",
+    "socket_timeout": 30,
+    "retries": 3,
+    "fragment_retries": 3,
+    "extractor_retries": 2,
 }
 
 

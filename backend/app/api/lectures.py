@@ -60,13 +60,14 @@ async def get_lecture(
 
 @router.post("/link", status_code=status.HTTP_201_CREATED)
 async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> LectureOut:
-    if body.course_id is not None:
-        await get_own_course(session, body.course_id, user)
+    await session.commit()
     url = str(body.url)
     try:
         link = await inspect_link(url)
     except LinkError as error:
         raise HTTPException(422, str(error)) from error
+    if body.course_id is not None:
+        await get_own_course(session, body.course_id, user)
 
     lecture = Lecture(
         owner_id=user.id,
