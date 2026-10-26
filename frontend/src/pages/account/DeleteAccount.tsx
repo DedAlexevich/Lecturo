@@ -7,6 +7,7 @@ import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import styles from "./SettingsSection.module.css";
+import { miniAppInitData } from "./miniApp";
 import { settingsError, useDeleteAccount, type TelegramUser } from "./settings";
 
 export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
@@ -44,6 +45,8 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
     [mutate, finish],
   );
 
+  const confirmMiniApp = () => mutate({ telegram_init_data: miniAppInitData }, { onSuccess: finish });
+
   const failure = remove.isError ? settingsError(remove.error, "Подтверждение не прошло") : undefined;
 
   return (
@@ -62,6 +65,11 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
             <Button variant="secondary" onClick={close}>
               Отмена
             </Button>
+            {!hasPassword && miniAppInitData && (
+              <Button variant="danger" loading={remove.isPending} onClick={confirmMiniApp}>
+                Удалить навсегда
+              </Button>
+            )}
             {hasPassword && (
               <Button type="submit" form={formId} variant="danger" loading={remove.isPending}>
                 Удалить навсегда
@@ -91,7 +99,10 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
               </Field>
             </form>
           )}
-          {open && !hasPassword && (
+          {open && !hasPassword && miniAppInitData && (
+            <p>Подтверждение придёт из Telegram автоматически: нажмите «Удалить навсегда».</p>
+          )}
+          {open && !hasPassword && !miniAppInitData && (
             <div className={styles.confirmTelegram}>
               <p>Для подтверждения нажмите кнопку Telegram: аккаунт удалится сразу после входа.</p>
               {telegramEnabled ? (
