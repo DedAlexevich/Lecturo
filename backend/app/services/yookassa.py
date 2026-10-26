@@ -1,14 +1,29 @@
+import logging
+import re
 import uuid
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.models import Payment, User
+from app.models import (
+    HourPackage,
+    Payment,
+    PaymentKind,
+    PaymentStatus,
+    Subscription,
+    User,
+)
 from app.schemas.billing import PaymentOut, ProductOut
+from app.services.quota import list_products
+
+YOOKASSA_ID = re.compile(r"[\w-]{1,64}")
+logger = logging.getLogger(__name__)
 
 
 class YooKassaError(RuntimeError):
@@ -33,6 +48,10 @@ class IdempotenceKeyConflict(PaymentError):
     pass
 
 
+class NotificationError(ValueError):
+    pass
+
+
 class YooKassaClient:
     def __init__(
         self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None
@@ -48,16 +67,12 @@ class YooKassaClient:
         self.auth = (settings.yookassa_shop_id, settings.yookassa_secret_key)
         self.transport = transport
 
-    async def create_payment(self, idempotence_key: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         async with httpx.AsyncClient(
             timeout=30, auth=self.auth, transport=self.transport
         ) as client:
             try:
-                response = await client.post(
-                    f"{self.api_url}/payments",
-                    json=body,
-                    headers={"Idempotence-Key": idempotence_key},
-                )
+                response = await client.request(method, f"{self.api_url}{path}", **kwargs)
             except httpx.HTTPError as error:
                 raise YooKassaError(f"ЮKassa недоступна: {error}") from error
         if response.is_error:
@@ -66,6 +81,14 @@ class YooKassaClient:
                 response.status_code,
             )
         return response.json()
+
+    async def create_payment(self, idempotence_key: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self.request(
+            "POST", "/payments", json=body, headers={"Idempotence-Key": idempotence_key}
+        )
+
+    async def get_payment(self, yookassa_id: str) -> dict[str, Any]:
+        return await self.request("GET", f"/payments/{yookassa_id}")
 
 
 def format_amount(kopecks: int) -> dict[str, str]:
@@ -187,3 +210,133 @@ async def list_payments(session: AsyncSession, user_id: uuid.UUID) -> list[Payme
         .order_by(Payment.created_at.desc(), Payment.id)
     )
     return list(result.all())
+
+
+def notification_payment_id(body: dict[str, Any]) -> str:
+    payment_object = body.get("object")
+    yookassa_id = payment_object.get("id") if isinstance(payment_object, dict) else None
+    if not isinstance(yookassa_id, str) or not YOOKASSA_ID.fullmatch(yookassa_id):
+        raise NotificationError("В уведомлении нет id платежа")
+    return yookassa_id
+
+
+def parse_amount(amount: Any) -> int | None:
+    if not isinstance(amount, dict) or amount.get("currency") != "RUB":
+        return None
+    try:
+        kopecks = Decimal(str(amount.get("value"))) * 100
+    except InvalidOperation:
+        return None
+    if not kopecks.is_finite() or kopecks != kopecks.to_integral_value():
+        return None
+    return int(kopecks)
+
+
+def parse_time(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value) if isinstance(value, str) else None
+    except ValueError:
+        return None
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+async def grant_subscription(
+    session: AsyncSession, payment: Payment, now: datetime, settings: Settings
+) -> Subscription:
+    await session.get(User, payment.user_id, with_for_update=True)
+    current_end = await session.scalar(
+        select(func.max(Subscription.ends_at)).where(
+            Subscription.user_id == payment.user_id, Subscription.ends_at > now
+        )
+    )
+    starts_at = current_end or now
+    subscription = Subscription(
+        user_id=payment.user_id,
+        payment_id=payment.id,
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(days=settings.subscription_days),
+    )
+    session.add(subscription)
+    return subscription
+
+
+def grant_package(session: AsyncSession, payment: Payment, settings: Settings) -> HourPackage:
+    product = next(
+        (p for p in list_products(settings) if p.code == payment.product_code and p.seconds),
+        None,
+    )
+    if product is None:
+        raise PaymentError(f"Нет пакета часов {payment.product_code}")
+    package = HourPackage(
+        user_id=payment.user_id,
+        payment_id=payment.id,
+        seconds_total=product.seconds,
+        seconds_left=product.seconds,
+    )
+    session.add(package)
+    return package
+
+
+async def apply_succeeded(
+    session: AsyncSession,
+    payment: Payment,
+    remote: dict[str, Any],
+    now: datetime,
+    settings: Settings,
+) -> None:
+    if parse_amount(remote.get("amount")) != payment.amount_kopecks:
+        logger.error("Сумма платежа %s не совпадает с ЮKassa, начисление отменено", payment.id)
+        payment.status = PaymentStatus.canceled
+        payment.raw = remote
+        return
+    if payment.kind == PaymentKind.subscription:
+        await grant_subscription(session, payment, now, settings)
+    else:
+        grant_package(session, payment, settings)
+    payment.status = PaymentStatus.succeeded
+    payment.paid_at = parse_time(remote.get("captured_at")) or now
+    payment.raw = remote
+
+
+async def has_pending_payment(session: AsyncSession, yookassa_id: str) -> bool:
+    return await session.scalar(
+        select(
+            exists().where(
+                Payment.yookassa_id == yookassa_id, Payment.status == PaymentStatus.pending
+            )
+        )
+    )
+
+
+async def process_notification(
+    session: AsyncSession,
+    client: YooKassaClient,
+    yookassa_id: str,
+    settings: Settings,
+    now: datetime | None = None,
+) -> Payment | None:
+    remote = await client.get_payment(yookassa_id)
+    if remote.get("id") != yookassa_id:
+        raise NotificationError("ЮKassa вернула другой платёж")
+    payment = await session.scalar(
+        select(Payment).where(Payment.yookassa_id == yookassa_id).with_for_update()
+    )
+    if payment is None:
+        logger.warning("Уведомление о неизвестном платеже %s", yookassa_id)
+        return None
+    if (remote.get("metadata") or {}).get("payment_id") != str(payment.id):
+        logger.warning("Платёж %s в ЮKassa привязан к другой записи", yookassa_id)
+        return None
+    if payment.status != PaymentStatus.pending:
+        return payment
+
+    status = remote.get("status")
+    if status == PaymentStatus.succeeded:
+        await apply_succeeded(session, payment, remote, now or datetime.now(UTC), settings)
+    elif status == PaymentStatus.canceled:
+        payment.status = PaymentStatus.canceled
+        payment.raw = remote
+    await session.commit()
+    return payment
