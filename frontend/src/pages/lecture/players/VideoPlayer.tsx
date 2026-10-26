@@ -7,6 +7,8 @@ import "./VideoPlayer.css";
 const RATES = [1, 1.25, 1.5, 1.75, 2];
 const STEP_SECONDS = 5;
 
+type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+
 type VideoPlayerProps = PlayerProps & {
   src: string;
   title: string;
@@ -80,9 +82,19 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
     setRate(value);
   };
 
+  const canFullscreen = document.fullscreenEnabled || "webkitEnterFullscreen" in HTMLVideoElement.prototype;
+
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void rootRef.current?.requestFullscreen?.();
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    const root = rootRef.current;
+    if (document.fullscreenEnabled && root) {
+      void root.requestFullscreen().catch(() => undefined);
+      return;
+    }
+    (video() as WebkitVideo | null)?.webkitEnterFullscreen?.();
   };
 
   const onLoadedMetadata = () => {
@@ -216,14 +228,16 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
           >
             <Icon path={muted ? icons.muted : icons.volume} />
           </button>
-          <button
-            type="button"
-            className="video-player__button"
-            onClick={toggleFullscreen}
-            aria-label={fullscreen ? "Выйти из полноэкранного режима" : "Во весь экран"}
-          >
-            <Icon path={fullscreen ? icons.exitFullscreen : icons.enterFullscreen} />
-          </button>
+          {canFullscreen && (
+            <button
+              type="button"
+              className="video-player__button"
+              onClick={toggleFullscreen}
+              aria-label={fullscreen ? "Выйти из полноэкранного режима" : "Во весь экран"}
+            >
+              <Icon path={fullscreen ? icons.exitFullscreen : icons.enterFullscreen} />
+            </button>
+          )}
         </div>
       </div>
     </div>
