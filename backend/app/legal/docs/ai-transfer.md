@@ -39,14 +39,14 @@
 
 | Провайдер | Сервис | Страна обработки |
 |---|---|---|
-| [юрлицо Yandex Cloud] | Yandex SpeechKit и Yandex Object Storage | Российская Федерация |
-| [юрлицо SaluteSpeech] | SaluteSpeech | Российская Федерация |
+| ООО «Яндекс.Облако» | Yandex SpeechKit и Yandex Object Storage | Российская Федерация |
+| ПАО Сбербанк | SaluteSpeech | Российская Федерация |
 
 4.2. Языковая модель:
 
 | Провайдер | Сервис | Страна обработки |
 |---|---|---|
-| [юрлицо DeepSeek] | DeepSeek API | [страна DeepSeek] |
+| DeepSeek [юрлицо DeepSeek] | DeepSeek API | Китайская Народная Республика |
 
 4.3. Поиск по лекциям (векторное представление текста):
 
