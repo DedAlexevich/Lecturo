@@ -1,7 +1,9 @@
 from fastapi import APIRouter, status
+from fastapi.exceptions import RequestValidationError
 
-from app.core.deps import CurrentUser
+from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
+from app.core.security import create_access_token
 from app.schemas.user import (
     EmailIn,
     LoginIn,
@@ -11,18 +13,31 @@ from app.schemas.user import (
     TokenIn,
     TokenOut,
 )
+from app.services.auth import authenticate, register_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterIn) -> TokenOut:
-    not_ready()
+async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
+    if not body.accept_terms:
+        raise RequestValidationError(
+            [
+                {
+                    "loc": ("body", "accept_terms"),
+                    "msg": "Нужно принять условия использования",
+                    "type": "value_error",
+                }
+            ]
+        )
+    user = await register_user(session, body.email, body.password, body.display_name)
+    return TokenOut(access_token=create_access_token(user.id))
 
 
 @router.post("/login")
-async def login(body: LoginIn) -> TokenOut:
-    not_ready()
+async def login(body: LoginIn, session: SessionDep) -> TokenOut:
+    user = await authenticate(session, body.email, body.password)
+    return TokenOut(access_token=create_access_token(user.id))
 
 
 @router.post("/telegram")
