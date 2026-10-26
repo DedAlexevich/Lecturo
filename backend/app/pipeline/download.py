@@ -14,11 +14,10 @@ from yt_dlp.utils import YoutubeDLError
 
 from app.core.config import get_settings
 from app.models import Lecture
+from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
 from app.pipeline.runner import Report
 
-MAX_DURATION_SEC = 4 * 3600
 PROGRESS_INTERVAL_SEC = 2.0
-PROBE_TIMEOUT_SEC = 60.0
 
 YANDEX_DISK_HOSTS = {
     "disk.yandex.ru",
