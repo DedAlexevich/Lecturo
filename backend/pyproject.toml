@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "email-validator>=2.2",
     "pyjwt>=2.10",
+    "argon2-cffi>=23.1",
     "arq>=0.26",
     "redis>=5.2",
     "httpx>=0.28",
