@@ -353,6 +353,10 @@
     padding: 0;
   }
 
+  .course-filter__note .home__text-action {
+    min-height: var(--tap-target);
+  }
+
   .course-filter__placeholder {
     min-height: var(--tap-target);
     padding: 0;
