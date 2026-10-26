@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Lecture, SearchChunk, TranscriptSegment, User
 from app.pipeline.runner import Report
 from app.providers import get_embeddings, get_speech_to_text
+from app.services.consent import AI_TRANSFER_REQUIRED
 from app.services.quota import QuotaExceeded, charge_lecture
 
 CHUNK_SECONDS = 60.0
-AI_TRANSFER_REQUIRED = "Нет согласия на передачу данных на серверную обработку"
 
 
 class ConsentMissing(Exception):
