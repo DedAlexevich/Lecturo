@@ -151,7 +151,10 @@ export function useTusUpload(userId: string | undefined) {
 
   useEffect(() => {
     if (!active) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [active]);
