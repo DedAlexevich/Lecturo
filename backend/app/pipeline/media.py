@@ -122,12 +122,23 @@ async def run_ffmpeg(args: list[str], duration: float | None, report: Report, er
         raise MediaError(error)
 
 
+async def encode(
+    args: list[str], target: Path, duration: float | None, report: Report, error: str
+) -> None:
+    tmp_dir = get_settings().storage_dir / "tmp"
+    await asyncio.to_thread(tmp_dir.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+    partial = tmp_dir / target.name
+    try:
+        await run_ffmpeg([*args, str(partial)], duration, report, error)
+        await asyncio.to_thread(partial.replace, target)
+    finally:
+        await asyncio.to_thread(partial.unlink, missing_ok=True)
+
+
 async def extract_audio(session: AsyncSession, lecture: Lecture, report: Report) -> None:
-    audio_dir = get_settings().storage_dir / "audio"
-    await asyncio.to_thread(audio_dir.mkdir, parents=True, exist_ok=True)
-    target = audio_dir / f"{lecture.id}.opus"
-    partial = target.with_name(f"{target.name}.part")
-    await run_ffmpeg(
+    target = get_settings().storage_dir / "audio" / f"{lecture.id}.opus"
+    await encode(
         [
             "-i",
             str(original_path(lecture.id)),
@@ -143,13 +154,12 @@ async def extract_audio(session: AsyncSession, lecture: Lecture, report: Report)
             "32k",
             "-f",
             "opus",
-            str(partial),
         ],
+        target,
         lecture.duration_sec,
         report,
         "Не удалось извлечь звук из записи",
     )
-    await asyncio.to_thread(partial.replace, target)
     lecture.audio_path = str(target)
     lecture.duration_sec = await probe_duration(target)
 
@@ -158,11 +168,8 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
     settings = get_settings()
     original = original_path(lecture.id)
     if await has_video(original):
-        video_dir = settings.storage_dir / "videos"
-        await asyncio.to_thread(video_dir.mkdir, parents=True, exist_ok=True)
-        target = video_dir / f"{lecture.id}.mp4"
-        partial = target.with_name(f"{target.name}.part")
-        await run_ffmpeg(
+        target = settings.storage_dir / "videos" / f"{lecture.id}.mp4"
+        await encode(
             [
                 "-i",
                 str(original),
@@ -188,13 +195,12 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
                 "+faststart",
                 "-f",
                 "mp4",
-                str(partial),
             ],
+            target,
             lecture.duration_sec,
             report,
             "Не удалось пережать видео",
         )
-        await asyncio.to_thread(partial.replace, target)
         lecture.video_path = str(target)
         lecture.video_expires_at = datetime.now(UTC) + timedelta(
             days=settings.free_video_retention_days

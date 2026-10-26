@@ -142,6 +142,8 @@ async def test_upload_gets_compressed_audio_and_video(
     assert lecture.audio_path == str(audio)
     assert lecture.video_path == str(video)
     assert not media.original_path(lecture.id).exists()
+    assert list((storage / "videos").iterdir()) == [video]
+    assert not list((storage / "tmp").iterdir())
     assert lecture.duration_sec == pytest.approx(2.0, abs=0.2)
     expected_expiry = datetime.now(UTC) + timedelta(days=get_settings().free_video_retention_days)
     assert abs(lecture.video_expires_at - expected_expiry) < timedelta(minutes=1)
@@ -200,6 +202,7 @@ async def test_broken_original_fails_audio_step(user, storage, tmp_path):
     assert StepName.video not in steps
     assert media.original_path(lecture.id).exists()
     assert not list((storage / "audio").iterdir())
+    assert not list((storage / "tmp").iterdir())
 
 
 async def test_ffmpeg_progress_is_reported(sample_video, tmp_path, monkeypatch):
