@@ -22,6 +22,12 @@ export function SocialLogin() {
   const [personalData, setPersonalData] = useState(false);
   const { mutate } = login;
 
+  const closeDialog = useCallback(() => {
+    setPending(undefined);
+    setTerms(false);
+    setPersonalData(false);
+  }, []);
+
   const submit = useCallback(
     (user: TelegramUser, consents: Consents) =>
       mutate(
@@ -33,24 +39,18 @@ export function SocialLogin() {
               setPending(user);
               return;
             }
-            setPending(undefined);
+            closeDialog();
             toast.show(messageOf(error), "error");
           },
         },
       ),
-    [mutate, navigate, location.state, toast],
+    [mutate, navigate, location.state, toast, closeDialog],
   );
 
   const handleAuth = useCallback(
     (user: TelegramUser) => submit(user, { accept_terms: false, accept_personal_data: false }),
     [submit],
   );
-
-  function closeDialog() {
-    setPending(undefined);
-    setTerms(false);
-    setPersonalData(false);
-  }
 
   if (!telegramEnabled) return null;
 
