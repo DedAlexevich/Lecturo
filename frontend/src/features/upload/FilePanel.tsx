@@ -6,6 +6,8 @@ import { MAX_FILE_BYTES, type UploadState } from "./useTusUpload";
 
 type FilePanelProps = {
   state: UploadState;
+  file: File | null;
+  onPick: (file: File) => void;
   ready: boolean;
   courseField: ReactNode;
   onStart: (file: File) => void;
@@ -28,7 +30,7 @@ const statusText: Partial<Record<UploadState["phase"], string>> = {
   finishing: "Файл загружен, проверяем запись",
 };
 
-function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<FilePanelProps, "ready" | "courseField" | "onStart">) {
+function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<FilePanelProps, "ready" | "courseField" | "onStart" | "file" | "onPick">) {
   const percent = state.total > 0 ? (state.sent / state.total) * 100 : 0;
   const finishing = state.phase === "finishing";
   const message = state.phase === "failed" ? state.error : statusText[state.phase];
@@ -63,8 +65,7 @@ function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<Fi
 }
 
 export function FilePanel(props: FilePanelProps) {
-  const { state, ready, courseField, onStart, onClose } = props;
-  const [file, setFile] = useState<File | null>(null);
+  const { state, file, ready, courseField, onStart, onPick, onClose } = props;
   const [dragging, setDragging] = useState(false);
   const hintId = useId();
   const problem = file ? problemOf(file) : null;
@@ -72,7 +73,7 @@ export function FilePanel(props: FilePanelProps) {
   if (state.phase !== "idle" && state.phase !== "done") return <UploadProgress {...props} />;
 
   const pick = (picked: File | undefined) => {
-    if (picked) setFile(picked);
+    if (picked) onPick(picked);
   };
 
   const onDrop = (event: DragEvent<HTMLLabelElement>) => {
@@ -121,7 +122,7 @@ export function FilePanel(props: FilePanelProps) {
       <p className="add-lecture__note" id={hintId}>
         Видео или аудио до 2 ГБ и до 4 часов. Если связь оборвётся, загрузка продолжится с того же места.
       </p>
-      {(problem ?? state.error) && (
+      {(problem ?? (file ? null : state.error)) && (
         <p className="add-lecture__error" role="alert">
           {problem ?? state.error}
         </p>

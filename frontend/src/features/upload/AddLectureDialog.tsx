@@ -20,7 +20,7 @@ export function AddLectureDialog() {
   const [tab, setTab] = useState("file");
   const [courseId, setCourseId] = useState("");
   const [linkKey, setLinkKey] = useState(0);
-  const [fileKey, setFileKey] = useState(0);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
   const { data: me } = useMe();
   const courses = useCourseOptions(open);
   const upload = useTusUpload(me?.id);
@@ -59,13 +59,15 @@ export function AddLectureDialog() {
     toast.show(`Запись «${file?.name ?? ""}» загружена, начинаем обработку`, "success");
     refreshLists();
     reset();
-    setFileKey((key) => key + 1);
     if (open) close();
   }, [phase, file, open, close, refreshLists, reset, toast]);
 
   const startUpload = (picked: File) => {
     const course = selectedCourse || null;
-    requireConsent(() => upload.start(picked, course));
+    requireConsent(() => {
+      upload.start(picked, course);
+      setPickedFile(null);
+    });
   };
 
   const submitLink = (url: string) => {
@@ -110,8 +112,9 @@ export function AddLectureDialog() {
                 label: "Файл",
                 panel: (
                   <FilePanel
-                    key={fileKey}
                     state={upload.state}
+                    file={pickedFile}
+                    onPick={setPickedFile}
                     ready={me !== undefined}
                     courseField={courseField(false)}
                     onStart={startUpload}
