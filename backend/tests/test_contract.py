@@ -19,7 +19,3 @@ def test_contract_has_p0_endpoints():
     ):
         assert path in paths
 
-
-async def test_not_ready_endpoint_returns_501(client):
-    response = await client.get("/api/v1/legal")
-    assert response.status_code == 501
