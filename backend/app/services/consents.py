@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
 
-from app.api.legal import read_document
 from app.models import User
+from app.services.legal import read_document
 
 CONSENT_REQUIRED = (
     "Для создания аккаунта нужно принять пользовательское соглашение "

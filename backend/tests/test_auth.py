@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy import delete, select
 
-from app.api.legal import read_document
 from app.core.db import SessionLocal
 from app.models import User
+from app.services.legal import read_document
 
 
 @pytest.fixture

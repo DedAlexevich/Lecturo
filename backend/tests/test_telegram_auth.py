@@ -7,10 +7,10 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy import delete, select
 
-from app.api.legal import read_document
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import AuthIdentity, AuthProvider, User
+from app.services.legal import read_document
 
 BOT_TOKEN = "123456:test-bot-token"
 CONSENTS = {"accept_terms": True, "accept_personal_data": True}
