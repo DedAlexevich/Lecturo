@@ -3,6 +3,7 @@ import { LoginPage } from "../pages/auth/LoginPage";
 import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
+import { HomePage } from "../pages/home/HomePage";
 import { UiPage } from "../ui/UiPage";
 import { EmptyPage } from "./EmptyPage";
 
@@ -19,7 +20,7 @@ export const publicRoutes: RouteObject[] = [
 ];
 
 export const privateRoutes: RouteObject[] = [
-  { path: "/", element: <EmptyPage title="Лекции" /> },
+  { path: "/", element: <HomePage /> },
   { path: "/lectures/:id", element: <EmptyPage title="Лекция" /> },
   { path: "/courses/:id", element: <EmptyPage title="Курс" /> },
   { path: "/account", element: <EmptyPage title="Кабинет" /> },
