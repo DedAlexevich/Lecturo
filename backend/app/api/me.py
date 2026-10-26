@@ -13,7 +13,7 @@ async def get_me(user: CurrentUser) -> UserOut:
     not_ready()
 
 
-@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(body: AccountDeleteIn, user: CurrentUser) -> None:
     not_ready()
 
@@ -30,4 +30,9 @@ async def link_email(body: EmailIdentityIn, user: CurrentUser) -> UserOut:
 
 @router.delete("/identities/{provider}")
 async def unlink_identity(provider: AuthProvider, user: CurrentUser) -> UserOut:
+    not_ready()
+
+
+@router.post("/consents/ai-transfer")
+async def accept_ai_transfer(user: CurrentUser) -> UserOut:
     not_ready()

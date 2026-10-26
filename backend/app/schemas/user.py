@@ -34,6 +34,7 @@ class UserOut(Schema):
     email: str | None
     email_verified: bool
     display_name: str
+    ai_transfer_accepted_at: datetime | None
     identities: list[IdentityOut]
 
 
@@ -71,3 +72,5 @@ class EmailIdentityIn(Schema):
 
 class AccountDeleteIn(Schema):
     password: str | None = None
+    telegram: TelegramLoginIn | None = None
+    telegram_init_data: str | None = None
