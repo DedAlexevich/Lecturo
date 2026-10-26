@@ -67,6 +67,6 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
     redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     try:
-        await redis.enqueue_job("process_lecture", str(lecture_id))
+        await redis.enqueue_job("process_lecture", str(lecture_id), _job_id=f"lecture:{lecture_id}")
     finally:
         await redis.aclose()
