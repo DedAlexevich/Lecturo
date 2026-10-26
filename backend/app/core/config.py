@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     embeddings_base_url: str = ""
     embeddings_api_key: str = ""
     embeddings_model: str = ""
-    embeddings_dimensions: int = 1024
 
     smtp_host: str = ""
     smtp_port: int = 587

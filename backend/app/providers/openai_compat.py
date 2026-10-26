@@ -6,6 +6,8 @@ import httpx
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
 
+MAX_RETRY_DELAY_SECONDS = 60.0
+
 
 class OpenAICompatibleError(RuntimeError):
     pass
@@ -53,17 +55,21 @@ class OpenAICompatibleClient:
                     raise OpenAICompatibleError(
                         f"{path}: API ответил {response.status_code}: {response.text[:500]}"
                     )
-                return response.json()
+                try:
+                    return response.json()
+                except ValueError as error:
+                    raise OpenAICompatibleError(f"{path}: ответ API не в формате JSON") from error
         raise OpenAICompatibleError(f"{path}: не было ни одной попытки запроса")
 
     def _delay(self, attempt: int, response: httpx.Response | None) -> float:
         retry_after = response.headers.get("retry-after", "") if response else ""
-        if retry_after.isdigit():
-            return float(retry_after)
-        return self.retry_delay * 2 ** (attempt - 1)
+        delay = (
+            float(retry_after) if retry_after.isdigit() else self.retry_delay * 2 ** (attempt - 1)
+        )
+        return min(delay, MAX_RETRY_DELAY_SECONDS)
 
 
-def require(settings: dict[str, str], provider: str) -> None:
+def require_settings(settings: dict[str, str], provider: str) -> None:
     missing = [name for name, value in settings.items() if not value]
     if missing:
         raise ValueError(f"Не заданы настройки {provider}: {', '.join(missing)}")
@@ -71,9 +77,13 @@ def require(settings: dict[str, str], provider: str) -> None:
 
 class OpenAICompatibleLLM:
     def __init__(
-        self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None, **options
+        self,
+        settings: Settings,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+        **options: Any,
     ) -> None:
-        require(
+        require_settings(
             {
                 "LLM_BASE_URL": settings.llm_base_url,
                 "LLM_API_KEY": settings.llm_api_key,
@@ -113,9 +123,9 @@ class OpenAICompatibleEmbeddings:
         *,
         batch_size: int = 64,
         transport: httpx.AsyncBaseTransport | None = None,
-        **options,
+        **options: Any,
     ) -> None:
-        require(
+        require_settings(
             {
                 "EMBEDDINGS_BASE_URL": settings.embeddings_base_url,
                 "EMBEDDINGS_API_KEY": settings.embeddings_api_key,
@@ -123,11 +133,6 @@ class OpenAICompatibleEmbeddings:
             },
             "эмбеддингов",
         )
-        if settings.embeddings_dimensions != EMBEDDING_DIM:
-            raise ValueError(
-                f"EMBEDDINGS_DIMENSIONS={settings.embeddings_dimensions}, "
-                f"а база хранит векторы размерности {EMBEDDING_DIM}"
-            )
         self.dimension = EMBEDDING_DIM
         self.model = settings.embeddings_model
         self.batch_size = batch_size
@@ -146,12 +151,15 @@ class OpenAICompatibleEmbeddings:
 
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         response = await self.client.post("/embeddings", {"model": self.model, "input": texts})
-        items = sorted(response.get("data", []), key=lambda item: item["index"])
-        if len(items) != len(texts):
+        try:
+            items = sorted(response["data"], key=lambda item: item["index"])
+            vectors = [item["embedding"] for item in items]
+        except (KeyError, TypeError) as error:
+            raise OpenAICompatibleError("/embeddings: в ответе нет векторов") from error
+        if len(vectors) != len(texts):
             raise OpenAICompatibleError(
-                f"/embeddings: отправлено {len(texts)} текстов, получено {len(items)} векторов"
+                f"/embeddings: отправлено {len(texts)} текстов, получено {len(vectors)} векторов"
             )
-        vectors = [item["embedding"] for item in items]
         for vector in vectors:
             if len(vector) != self.dimension:
                 raise OpenAICompatibleError(
