@@ -4,11 +4,14 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import delete, select, update
 
+from app.api.auth import issue_and_send_password_reset
 from app.core.config import get_settings
 from app.core.db import SessionLocal
+from app.main import app
 from app.models import AuthToken, User
 from app.services.mail import send_verification_mail
 from tests.test_auth import register_body
@@ -230,3 +233,83 @@ async def test_verify_email_rate_limited(client, email, mails):
     ]
     assert statuses == [204, 204, 204, 429]
     assert len(mails) == 3
+
+
+async def test_stranger_cannot_exhaust_owner_reset_limit(client, email, mails):
+    await register(client, email)
+    transport = ASGITransport(app=app, client=("203.0.113.7", 1234))
+    async with AsyncClient(transport=transport, base_url="http://test") as stranger:
+        statuses = [
+            (
+                await stranger.post(f"{API}/password-reset/request", json={"email": email})
+            ).status_code
+            for _ in range(4)
+        ]
+    assert statuses == [204, 204, 204, 429]
+
+    response = await client.post(f"{API}/password-reset/request", json={"email": email})
+
+    assert response.status_code == 204
+    assert len(mails) == 4
+
+
+async def test_rejected_by_ip_does_not_consume_address_limit(client, email, mails, monkeypatch):
+    monkeypatch.setenv("AUTH_MAIL_IP_RATE_LIMIT", "1")
+    get_settings.cache_clear()
+    try:
+        first = await client.post(f"{API}/password-reset/request", json={"email": email})
+        second = await client.post(f"{API}/password-reset/request", json={"email": email})
+    finally:
+        get_settings.cache_clear()
+    redis = Redis.from_url(get_settings().redis_url)
+    counters = [int(await redis.get(key)) for key in await redis.keys("rate:auth-mail:subject:*")]
+    await redis.aclose()
+
+    assert (first.status_code, second.status_code) == (204, 429)
+    assert counters == [1]
+
+
+async def test_mail_delivery_failure_is_logged(caplog, monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.invalid")
+    get_settings.cache_clear()
+
+    def broken(message):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("app.services.mail.deliver", broken)
+    try:
+        with caplog.at_level("ERROR", logger="app.services.mail"):
+            await send_verification_mail("a@example.org", "abc")
+    finally:
+        get_settings.cache_clear()
+
+    assert "Не удалось отправить письмо" in caplog.text
+
+
+async def test_reset_task_failure_is_logged(client, email, caplog, monkeypatch):
+    await register(client, email)
+
+    async def broken(to, token):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("app.api.auth.send_password_reset_mail", broken)
+
+    with caplog.at_level("ERROR", logger="app.api.auth"):
+        await issue_and_send_password_reset(email)
+
+    assert "Не удалось выдать и отправить ссылку сброса пароля" in caplog.text
+
+
+async def test_address_total_limit_caps_requests_from_many_ips(email, mails, monkeypatch):
+    monkeypatch.setenv("AUTH_MAIL_ADDRESS_RATE_LIMIT", "4")
+    get_settings.cache_clear()
+    statuses = []
+    try:
+        for i in range(6):
+            transport = ASGITransport(app=app, client=(f"203.0.113.{i}", 1234))
+            async with AsyncClient(transport=transport, base_url="http://test") as other:
+                response = await other.post(f"{API}/password-reset/request", json={"email": email})
+                statuses.append(response.status_code)
+    finally:
+        get_settings.cache_clear()
+    assert statuses == [204, 204, 204, 204, 429, 429]
