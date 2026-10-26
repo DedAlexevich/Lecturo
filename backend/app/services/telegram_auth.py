@@ -38,13 +38,13 @@ def verify_login_widget(data: TelegramLoginIn) -> None:
 
 
 def verify_webapp_init_data(init_data: str) -> dict:
+    secret = hmac.new(b"WebAppData", bot_token().encode(), hashlib.sha256).digest()
     pairs = parse_qsl(init_data, keep_blank_values=True)
     fields = dict(pairs)
     received_hash = fields.pop("hash", None)
     if not received_hash or len(fields) + 1 != len(pairs):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная подпись Telegram")
     check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
-    secret = hmac.new(b"WebAppData", bot_token().encode(), hashlib.sha256).digest()
     expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, received_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная подпись Telegram")

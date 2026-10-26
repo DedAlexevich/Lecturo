@@ -156,3 +156,6 @@ async def test_login_disabled_without_bot_token(client, monkeypatch, telegram_id
         URL, json={"init_data": init_data("", **webapp_fields(telegram_id))}
     )
     assert response.status_code == 503
+
+    response = await client.post(URL, json={"init_data": "user=%7B%7D"})
+    assert response.status_code == 503
