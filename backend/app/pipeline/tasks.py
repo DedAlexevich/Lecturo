@@ -7,7 +7,7 @@ from sqlalchemy import update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
-from app.pipeline import download, media, stages
+from app.pipeline import download, media, stages, summarize
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 
 HANDLERS: dict[StepName, StepHandler] = {
@@ -15,7 +15,7 @@ HANDLERS: dict[StepName, StepHandler] = {
     StepName.audio: media.extract_audio,
     StepName.video: media.transcode_video,
     StepName.transcribe: stages.transcribe,
-    StepName.summarize: stages.summarize,
+    StepName.summarize: summarize.summarize,
     StepName.embed: stages.embed,
 }
 

@@ -3,9 +3,9 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Chapter, Lecture, SearchChunk, Summary, TranscriptSegment
+from app.models import Lecture, SearchChunk, TranscriptSegment
 from app.pipeline.runner import Report
-from app.providers import get_embeddings, get_llm, get_speech_to_text
+from app.providers import get_embeddings, get_speech_to_text
 from app.services.quota import QuotaExceeded, charge_lecture
 
 CHUNK_SECONDS = 60.0
@@ -26,26 +26,6 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
         lecture.duration_sec = segments[-1].end
     if not await charge_lecture(session, lecture.owner_id, lecture.id, lecture.duration_sec or 0.0):
         raise QuotaExceeded("Не хватает лимита на обработку лекции")
-
-
-async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> None:
-    segments = await load_segments(session, lecture)
-    text = " ".join(s.text for s in segments)
-    content = await get_llm().complete("Составь конспект лекции.", text)
-    await session.execute(delete(Chapter).where(Chapter.lecture_id == lecture.id))
-    await session.execute(delete(Summary).where(Summary.lecture_id == lecture.id))
-    session.add(Summary(lecture_id=lecture.id, content_md=content))
-    if segments:
-        session.add(
-            Chapter(
-                lecture_id=lecture.id,
-                idx=0,
-                start=segments[0].start,
-                end=segments[-1].end,
-                title=lecture.title,
-                summary=content,
-            )
-        )
 
 
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
