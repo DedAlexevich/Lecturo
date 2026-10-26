@@ -2,11 +2,11 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
-from app.models import AuthTokenKind, User
+from app.models import AuthToken, AuthTokenKind, User
 from app.schemas.user import (
     EmailIn,
     LoginIn,
@@ -93,5 +93,8 @@ async def confirm_password_reset(body: PasswordResetIn, session: SessionDep) -> 
     user_id = await consume_token(session, body.token, AuthTokenKind.reset_password)
     await session.execute(
         update(User).where(User.id == user_id).values(password_hash=hash_password(body.password))
+    )
+    await session.execute(
+        delete(AuthToken).where(AuthToken.user_id == user_id, AuthToken.used_at.is_(None))
     )
     await session.commit()
