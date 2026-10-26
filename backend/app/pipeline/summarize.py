@@ -15,6 +15,7 @@ from app.providers import LLM, get_llm
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 PART_SECONDS = 15 * 60.0
 TITLE_MAX_LENGTH = 300
+MAP_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,15 @@ def parse_topics(items: Any) -> list[Topic]:
 
 
 async def digest_part(llm: LLM, part: list[TranscriptSegment]) -> PartDigest:
-    data = parse_json(await llm.complete(load_prompt("map"), format_part(part), json_mode=True))
+    data: dict[str, Any] = {}
+    for _ in range(MAP_ATTEMPTS):
+        try:
+            data = parse_json(
+                await llm.complete(load_prompt("map"), format_part(part), json_mode=True)
+            )
+        except ValueError:
+            continue
+        break
     return PartDigest(
         start=part[0].start,
         end=part[-1].end,

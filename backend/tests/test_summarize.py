@@ -190,3 +190,45 @@ async def test_failed_reduce_keeps_previous_chapters(user, monkeypatch):
     chapters, summary = await saved(lecture.id)
     assert [(c.title, c.start, c.end) for c in chapters] == before
     assert summary.content_md == "## Итог"
+
+
+class BrokenMapLLM(ScriptedLLM):
+    def __init__(self, broken_answers: int) -> None:
+        super().__init__()
+        self.broken_answers = broken_answers
+        self.map_calls = 0
+
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        if system == summarize.load_prompt("map") and user.startswith("[900]"):
+            self.map_calls += 1
+            if self.map_calls <= self.broken_answers:
+                return "не JSON"
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+@pytest.mark.parametrize(
+    ("broken_answers", "calls", "summary"), [(1, 2, "Часть с 900"), (2, 2, "")]
+)
+async def test_broken_map_answer_is_retried_once(broken_answers, calls, summary):
+    llm = BrokenMapLLM(broken_answers)
+    part = minute_segments(30)[15:]
+
+    digest = await summarize.digest_part(llm, part)
+
+    assert llm.map_calls == calls
+    assert digest.summary == summary
+    assert (digest.start, digest.end) == (900, 1799)
+
+
+async def test_broken_reduce_answer_fails_step(user, monkeypatch):
+    class BrokenReduceLLM(ScriptedLLM):
+        async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+            if system == summarize.load_prompt("reduce"):
+                return "не JSON"
+            return await super().complete(system, user, json_mode=json_mode)
+
+    monkeypatch.setattr(summarize, "get_llm", BrokenReduceLLM)
+    lecture = await create_transcribed_lecture(user, 20)
+
+    with pytest.raises(ValueError, match="не в формате JSON"):
+        await run_summarize(lecture.id)
