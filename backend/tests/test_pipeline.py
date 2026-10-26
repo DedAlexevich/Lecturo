@@ -194,3 +194,36 @@ async def test_second_retry_is_rejected(user, client, auth_headers, monkeypatch)
     second = await client.post(url, headers=auth_headers)
     assert first.status_code == 200
     assert second.status_code == 409
+
+
+async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch):
+    async with SessionLocal() as session:
+        lecture = Lecture(
+            owner_id=user.id,
+            title="Лекция по ссылке",
+            source_type=SourceType.link,
+            source_url="https://vkvideo.ru/video-1_2",
+        )
+        session.add(lecture)
+        await session.commit()
+    order = []
+
+    async def fake_download(session, lecture, report):
+        order.append(StepName.download)
+        lecture.audio_path = f"/data/storage/audio/{lecture.id}.opus"
+
+    original = tasks.HANDLERS[StepName.transcribe]
+
+    async def tracked_transcribe(session, lecture, report):
+        order.append(StepName.transcribe)
+        await original(session, lecture, report)
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.download, fake_download)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, tracked_transcribe)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    loaded = await load(lecture.id)
+    assert order == [StepName.download, StepName.transcribe]
+    assert loaded.audio_path == f"/data/storage/audio/{lecture.id}.opus"
+    assert steps_by_name(loaded)[StepName.download].status == StepStatus.done
