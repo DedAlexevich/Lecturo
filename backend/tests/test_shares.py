@@ -5,7 +5,7 @@ import pytest
 
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
-from app.models import Chapter, Lecture, SourceType, Summary, TranscriptSegment, User
+from app.models import Chapter, Lecture, LectureStatus, SourceType, Summary, TranscriptSegment, User
 
 
 @pytest.fixture
@@ -17,11 +17,16 @@ async def verified_user(user):
     return user
 
 
-async def create_lecture(owner_id: uuid.UUID, title: str = "Пределы") -> uuid.UUID:
+async def create_lecture(
+    owner_id: uuid.UUID,
+    title: str = "Пределы",
+    lecture_status: LectureStatus = LectureStatus.ready,
+) -> uuid.UUID:
     async with SessionLocal() as session:
         lecture = Lecture(
             owner_id=owner_id,
             title=title,
+            status=lecture_status,
             source_type=SourceType.upload,
             processed_locally=True,
             video_path="/data/video.mp4",
@@ -165,3 +170,35 @@ async def test_revoked_course_share_is_404(client, verified_user, auth_headers):
     revoked = await client.delete(f"/api/v1/shares/{share['token']}", headers=auth_headers)
     assert revoked.status_code == 204
     assert (await client.get(f"/api/v1/public/{share['token']}")).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "lecture_status",
+    [
+        LectureStatus.queued,
+        LectureStatus.waiting_quota,
+        LectureStatus.processing,
+        LectureStatus.failed,
+    ],
+)
+async def test_cannot_share_unready_lecture(client, verified_user, auth_headers, lecture_status):
+    lecture_id = await create_lecture(verified_user.id, lecture_status=lecture_status)
+    response = await create_share(client, auth_headers, lecture_id=str(lecture_id))
+    assert response.status_code == 409
+
+
+async def test_public_course_hides_unready_lectures(client, verified_user, auth_headers):
+    ready = await create_lecture(verified_user.id, "Пределы")
+    failed = await create_lecture(verified_user.id, "Ряды", LectureStatus.failed)
+    course = (
+        await client.post("/api/v1/courses", json={"title": "Матан"}, headers=auth_headers)
+    ).json()
+    for lecture_id in (ready, failed):
+        await client.post(
+            f"/api/v1/courses/{course['id']}/lectures",
+            json={"lecture_id": str(lecture_id)},
+            headers=auth_headers,
+        )
+    share = (await create_share(client, auth_headers, course_id=course["id"])).json()
+    public = await client.get(f"/api/v1/public/{share['token']}")
+    assert [item["title"] for item in public.json()["course"]["lectures"]] == ["Пределы"]
