@@ -80,6 +80,10 @@ export function useUnlink() {
   );
 }
 
+export function useRevokeAiTransfer() {
+  return useMeMutation(async () => unwrap(await api.DELETE("/api/v1/me/consents/ai-transfer")));
+}
+
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: async (body: components["schemas"]["AccountDeleteIn"]) =>

@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { useMe } from "../../app/useMe";
+import { AiTransferConsent } from "./AiTransferConsent";
 import { DeleteAccount } from "./DeleteAccount";
 import { IdentitiesList } from "./IdentitiesList";
 import { NameForm } from "./NameForm";
@@ -33,6 +34,9 @@ export function SettingsSection() {
               <PasswordForm />
             </SettingsRow>
           )}
+          <SettingsRow title="Передача данных ИИ" note="Согласие на серверную обработку">
+            <AiTransferConsent me={me} />
+          </SettingsRow>
           <SettingsRow title="Удаление аккаунта" note="Действие нельзя отменить">
             <DeleteAccount hasPassword={hasPassword} />
           </SettingsRow>
