@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Lecture, LectureStatus, ProcessingStep, StepName, StepStatus
 from app.pipeline.events import publish_status
+from app.services.quota import QuotaExceeded
 
 Report = Callable[[float], Awaitable[None]]
 StepHandler = Callable[[AsyncSession, Lecture, Report], Awaitable[None]]
@@ -54,6 +55,16 @@ async def run_step(
         await session.rollback()
         await session.refresh(step)
         await session.refresh(lecture)
+        if isinstance(error, QuotaExceeded):
+            step.status = StepStatus.pending
+            step.error = str(error)
+            step.progress = 0.0
+            step.attempts -= 1
+            step.started_at = None
+            lecture.status = LectureStatus.waiting_quota
+            await session.commit()
+            await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
+            raise
         step.status = StepStatus.failed
         step.error = str(error) or type(error).__name__
         step.finished_at = datetime.now(UTC)

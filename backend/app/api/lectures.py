@@ -28,6 +28,7 @@ from app.schemas.lecture import (
     LinkIn,
     QuizOut,
 )
+from app.services import quota
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -99,8 +100,12 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
     await session.flush()
     if body.course_id is not None:
         await add_to_course(session, body.course_id, lecture.id)
+    waiting = await quota.hold_if_over_quota(session, user, lecture)
     await session.commit()
     await session.refresh(lecture)
+    if waiting:
+        await publish_status(lecture.id, user.id, lecture.status)
+        return LectureOut.model_validate(lecture)
 
     try:
         await enqueue_lecture(lecture.id)

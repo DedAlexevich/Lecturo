@@ -10,6 +10,7 @@ from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepN
 from app.pipeline import download, media, stages, summarize
 from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
+from app.services import quota
 
 HANDLERS: dict[StepName, StepHandler] = {
     StepName.download: download.download,
@@ -37,7 +38,10 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         return await run_plan(lecture_uuid)
+    except quota.QuotaExceeded:
+        return LectureStatus.waiting_quota
     except StepFailed:
+        await refund(lecture_uuid)
         return LectureStatus.failed
     except BaseException as error:
         await mark_failed(lecture_uuid, str(error) or type(error).__name__)
@@ -76,9 +80,17 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
             .values(status=LectureStatus.failed)
             .returning(Lecture.owner_id)
         )
+        if owner_id is not None:
+            await quota.refund_failed_lecture(session, lecture_id)
         await session.commit()
     if owner_id is not None:
         await publish_status(lecture_id, owner_id, LectureStatus.failed, error)
+
+
+async def refund(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await quota.refund_failed_lecture(session, lecture_id)
+        await session.commit()
 
 
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
