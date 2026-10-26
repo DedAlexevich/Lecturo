@@ -35,3 +35,39 @@ class UserOut(Schema):
     email_verified: bool
     display_name: str
     identities: list[IdentityOut]
+
+
+class TelegramLoginIn(Schema):
+    id: int
+    first_name: str
+    last_name: str | None = None
+    username: str | None = None
+    photo_url: str | None = None
+    auth_date: int
+    hash: str
+
+
+class TelegramWebAppIn(Schema):
+    init_data: str
+
+
+class EmailIn(Schema):
+    email: EmailStr
+
+
+class TokenIn(Schema):
+    token: str
+
+
+class PasswordResetIn(Schema):
+    token: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+class EmailIdentityIn(Schema):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+
+class AccountDeleteIn(Schema):
+    password: str | None = None

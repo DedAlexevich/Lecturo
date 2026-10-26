@@ -86,3 +86,14 @@ class LocalResultIn(Schema):
     segments: list[SegmentOut]
     chapters: list[ChapterOut] = []
     summary_md: str | None = None
+
+
+class LectureUpdate(Schema):
+    title: str = Field(min_length=1, max_length=300)
+
+
+class LectureStatusOut(Schema):
+    id: uuid.UUID
+    status: LectureStatus
+    queue_position: int | None
+    steps: list[StepOut]

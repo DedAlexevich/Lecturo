@@ -39,3 +39,15 @@ class PaymentOut(Schema):
 
 class QueuePlanIn(Schema):
     lecture_ids: list[uuid.UUID]
+
+
+class WaitingLectureOut(Schema):
+    id: uuid.UUID
+    title: str
+    duration_sec: float | None
+
+
+class WaitingOut(Schema):
+    lectures: list[WaitingLectureOut]
+    available_sec: int
+    resets_at: datetime

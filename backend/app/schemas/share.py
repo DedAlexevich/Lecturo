@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from app.schemas.common import Schema
+from app.schemas.lecture import ChapterOut, LectureOut, SegmentOut, SummaryOut
 
 
 class ShareIn(Schema):
@@ -20,3 +21,27 @@ class ShareOut(Schema):
 
 class ComplaintIn(Schema):
     reason: str
+
+
+class PublicLectureOut(Schema):
+    id: uuid.UUID
+    title: str
+    embed_url: str | None
+    video_url: str | None
+    duration_sec: float | None
+    processed_locally: bool
+    segments: list[SegmentOut]
+    chapters: list[ChapterOut]
+    summary: SummaryOut | None
+
+
+class PublicCourseOut(Schema):
+    id: uuid.UUID
+    title: str
+    description: str
+    lectures: list[LectureOut]
+
+
+class PublicShareOut(Schema):
+    lecture: PublicLectureOut | None = None
+    course: PublicCourseOut | None = None
