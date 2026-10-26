@@ -1,11 +1,8 @@
 import { useEffect, useRef } from "react";
+import type { components } from "../../api/schema";
 import { findActiveSegment, formatTimecode } from "./time";
 
-export type TranscriptSegment = {
-  start: number;
-  end: number;
-  text: string;
-};
+export type TranscriptSegment = components["schemas"]["SegmentOut"];
 
 type TranscriptProps = {
   segments: TranscriptSegment[];

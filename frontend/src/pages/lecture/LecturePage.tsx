@@ -34,7 +34,6 @@ function LectureMeta({ lecture }: { lecture: Lecture }) {
 
 function NoVideo({ lecture }: { lecture: Lecture }) {
   const expiresAt = lecture.video_expires_at ? new Date(lecture.video_expires_at) : null;
-  const expired = expiresAt !== null && expiresAt < new Date();
   const external = lecture.embed_url !== null || lecture.source_url !== null;
 
   let title = "Видео недоступно";
@@ -45,7 +44,7 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   } else if (external) {
     title = "Видео на сайте источника";
     description = "Запись хранится на площадке, откуда её добавили.";
-  } else if (expiresAt && expired) {
+  } else if (expiresAt !== null && expiresAt < new Date()) {
     title = "Срок хранения видео истёк";
     description = `Видео удалено ${dateFormat.format(expiresAt)}. Расшифровка остаётся на странице.`;
   }
