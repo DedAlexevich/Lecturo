@@ -14,6 +14,7 @@ from app.schemas.user import (
     TokenOut,
 )
 from app.services.auth import authenticate, register_user
+from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,8 +42,11 @@ async def login(body: LoginIn, session: SessionDep) -> TokenOut:
 
 
 @router.post("/telegram")
-async def login_telegram(body: TelegramLoginIn) -> TokenOut:
-    not_ready()
+async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut:
+    verify_login_widget(body)
+    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
+    user = await get_or_create_telegram_user(session, body.id, profile)
+    return TokenOut(access_token=create_access_token(user.id))
 
 
 @router.post("/verify-email/request", status_code=status.HTTP_204_NO_CONTENT)
