@@ -61,7 +61,7 @@ async def public_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> Public
             selectinload(Lecture.summary),
         )
     )
-    if lecture is None:
+    if lecture is None or lecture.status != LectureStatus.ready:
         raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_NOT_FOUND)
     return PublicLectureOut(
         id=lecture.id,

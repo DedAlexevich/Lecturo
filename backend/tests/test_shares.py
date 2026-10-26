@@ -202,3 +202,13 @@ async def test_public_course_hides_unready_lectures(client, verified_user, auth_
     share = (await create_share(client, auth_headers, course_id=course["id"])).json()
     public = await client.get(f"/api/v1/public/{share['token']}")
     assert [item["title"] for item in public.json()["course"]["lectures"]] == ["Пределы"]
+
+
+async def test_public_lecture_hidden_after_leaving_ready(client, verified_user, auth_headers):
+    lecture_id = await create_lecture(verified_user.id)
+    share = (await create_share(client, auth_headers, lecture_id=str(lecture_id))).json()
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        lecture.status = LectureStatus.processing
+        await session.commit()
+    assert (await client.get(f"/api/v1/public/{share['token']}")).status_code == 404
