@@ -38,6 +38,8 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         return await run_plan(lecture_uuid)
+    except quota.QuotaExceeded:
+        return LectureStatus.waiting_quota
     except StepFailed:
         await refund(lecture_uuid)
         return LectureStatus.failed
@@ -51,9 +53,6 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
         lecture = await session.get(Lecture, lecture_id)
         if lecture is None:
             return "missing"
-        if not await quota.admit_lecture(session, lecture):
-            await session.commit()
-            return lecture.status
         lecture.status = LectureStatus.processing
         await session.commit()
         await publish_status(lecture.id, lecture.owner_id, lecture.status)
@@ -81,16 +80,17 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
             .values(status=LectureStatus.failed)
             .returning(Lecture.owner_id)
         )
-        await quota.refund_lecture(session, lecture_id)
+        if owner_id is not None:
+            await quota.refund_lecture(session, lecture_id)
         await session.commit()
+    if owner_id is not None:
+        await publish_status(lecture_id, owner_id, LectureStatus.failed, error)
 
 
 async def refund(lecture_id: uuid.UUID) -> None:
     async with SessionLocal() as session:
         await quota.refund_lecture(session, lecture_id)
         await session.commit()
-    if owner_id is not None:
-        await publish_status(lecture_id, owner_id, LectureStatus.failed, error)
 
 
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:

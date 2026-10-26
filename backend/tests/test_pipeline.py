@@ -377,7 +377,6 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
             title="Лекция по ссылке",
             source_type=SourceType.link,
             source_url="https://vkvideo.ru/video-1_2",
-            duration_sec=60.0,
         )
         session.add(lecture)
         await session.commit()
@@ -491,17 +490,18 @@ async def test_transcribe_charges_lecture_duration(user, sample_video):
     assert await charged_seconds(lecture.id) == math.ceil(loaded.duration_sec)
 
 
-async def test_transcribe_fails_without_quota(user, sample_audio, monkeypatch):
+async def test_transcribe_waits_for_quota(user, sample_audio, monkeypatch):
     monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
     lecture = await create_lecture(user, sample_audio)
 
-    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.waiting_quota
 
-    failed = await load(lecture.id)
-    step = steps_by_name(failed)[StepName.transcribe]
-    assert step.status == StepStatus.failed
+    waiting = await load(lecture.id)
+    step = steps_by_name(waiting)[StepName.transcribe]
+    assert waiting.status == LectureStatus.waiting_quota
+    assert step.status == StepStatus.pending
     assert step.error == "Не хватает лимита на обработку лекции"
-    assert StepName.summarize not in steps_by_name(failed)
+    assert StepName.summarize not in steps_by_name(waiting)
     assert await count(TranscriptSegment, lecture.id) == 0
     assert await charged_seconds(lecture.id) == 0
 
