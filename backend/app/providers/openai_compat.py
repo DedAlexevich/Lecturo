@@ -132,7 +132,10 @@ class OpenAICompatibleEmbeddings:
         self.model = settings.embeddings_model
         self.batch_size = batch_size
         self.client = OpenAICompatibleClient(
-            settings.embeddings_base_url, settings.embeddings_api_key, transport=transport, **options
+            settings.embeddings_base_url,
+            settings.embeddings_api_key,
+            transport=transport,
+            **options,
         )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
