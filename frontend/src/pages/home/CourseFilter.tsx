@@ -1,0 +1,58 @@
+import { useEffect, useRef } from "react";
+import { Link } from "react-router";
+import type { Course } from "./queries";
+
+type CourseFilterProps = {
+  courses: Course[] | undefined;
+  selected: string | null;
+  failed: boolean;
+  onRetry: () => void;
+};
+
+export function CourseFilter({ courses, selected, failed, onRetry }: CourseFilterProps) {
+  const listRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selected, courses]);
+
+  return (
+    <nav className="course-filter" aria-labelledby="course-filter-title">
+      <h2 id="course-filter-title" className="course-filter__title">
+        Курсы
+      </h2>
+      {courses && courses.length > 0 && (
+        <ul ref={listRef} className="course-filter__list">
+          <li>
+            <Link to="/" className="course-filter__item" aria-current={selected === null ? "page" : undefined}>
+              <span className="course-filter__name">Все лекции</span>
+            </Link>
+          </li>
+          {courses?.map((course) => (
+            <li key={course.id}>
+              <Link
+                to={`/?course=${course.id}`}
+                className="course-filter__item"
+                aria-current={selected === course.id ? "page" : undefined}
+              >
+                <span className="course-filter__name">{course.title}</span>
+                <span className="course-filter__count">{course.lecture_count}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {failed && (
+        <p className="course-filter__note">
+          Курсы не загрузились.{" "}
+          <button type="button" className="home__text-action" onClick={onRetry}>
+            Повторить
+          </button>
+        </p>
+      )}
+      {courses?.length === 0 && (
+        <p className="course-filter__note">Курсов пока нет. Курс собирает лекции одного предмета в папку.</p>
+      )}
+    </nav>
+  );
+}
