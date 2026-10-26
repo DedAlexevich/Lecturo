@@ -14,7 +14,7 @@
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
   font-size: var(--text-sm);
 }
@@ -23,7 +23,7 @@
   flex: 1 1 18rem;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .cookie-notice {
     bottom: calc(var(--bar-height) + var(--space-3) + env(safe-area-inset-bottom));
   }
