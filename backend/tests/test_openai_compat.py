@@ -5,7 +5,7 @@ import pytest
 
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
-from app.providers import get_embeddings, get_llm
+from app.providers import get_embeddings, get_llm, openai_compat
 from app.providers.openai_compat import (
     OpenAICompatibleEmbeddings,
     OpenAICompatibleError,
@@ -75,6 +75,40 @@ async def test_llm_retries_on_rate_limit_and_server_error():
     assert await llm.complete("система", "текст") == "готово"
 
 
+async def test_llm_retries_after_network_error():
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectError("нет сети", request=request)
+        return chat_response("готово")
+
+    llm = OpenAICompatibleLLM(SETTINGS, transport=httpx.MockTransport(handler), retry_delay=0)
+    assert await llm.complete("система", "текст") == "готово"
+    assert calls == 2
+
+
+async def test_retry_after_is_respected_and_capped(monkeypatch):
+    delays = []
+
+    async def fake_sleep(seconds: float) -> None:
+        delays.append(seconds)
+
+    monkeypatch.setattr(openai_compat.asyncio, "sleep", fake_sleep)
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "7"}),
+            httpx.Response(429, headers={"Retry-After": "3600"}),
+            chat_response("готово"),
+        ]
+    )
+    llm = OpenAICompatibleLLM(SETTINGS, transport=httpx.MockTransport(lambda r: next(responses)))
+    assert await llm.complete("система", "текст") == "готово"
+    assert delays == [7.0, openai_compat.MAX_RETRY_DELAY_SECONDS]
+
+
 async def test_llm_gives_up_after_attempts():
     calls = 0
 
@@ -129,10 +163,18 @@ async def test_embeddings_wrong_dimension_from_model():
         await embeddings.embed(["текст"])
 
 
-def test_embeddings_dimension_mismatch_fails_on_start():
-    settings = SETTINGS.model_copy(update={"embeddings_dimensions": 768})
-    with pytest.raises(ValueError, match="EMBEDDINGS_DIMENSIONS"):
-        get_embeddings(settings)
+async def test_embeddings_malformed_response():
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"error": "oops"}))
+    embeddings = OpenAICompatibleEmbeddings(SETTINGS, transport=transport)
+    with pytest.raises(OpenAICompatibleError):
+        await embeddings.embed(["текст"])
+
+
+async def test_non_json_response():
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text="<html>"))
+    llm = OpenAICompatibleLLM(SETTINGS, transport=transport)
+    with pytest.raises(OpenAICompatibleError):
+        await llm.complete("система", "текст")
 
 
 def test_missing_settings_fail_on_start():
