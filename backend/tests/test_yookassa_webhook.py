@@ -220,10 +220,12 @@ async def test_amount_mismatch_grants_nothing(client, user, fake):
     payment = await make_payment(user, "hours_10")
     fake.set_remote(payment, "succeeded", value="1.00")
 
-    response = await client.post(WEBHOOK, json=notification(payment))
+    first = await client.post(WEBHOOK, json=notification(payment))
+    second = await client.post(WEBHOOK, json=notification(payment))
 
-    assert response.status_code == 422
-    assert (await load_payment(payment)).status == PaymentStatus.pending
+    assert first.status_code == second.status_code == 200
+    assert len(fake.requests) == 1
+    assert (await load_payment(payment)).status == PaymentStatus.canceled
     assert await packages_of(user) == []
 
 

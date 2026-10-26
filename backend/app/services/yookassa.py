@@ -282,7 +282,10 @@ async def apply_succeeded(
     settings: Settings,
 ) -> None:
     if parse_amount(remote.get("amount")) != payment.amount_kopecks:
-        raise PaymentError(f"Сумма платежа {payment.id} не совпадает с ЮKassa")
+        logger.error("Сумма платежа %s не совпадает с ЮKassa, начисление отменено", payment.id)
+        payment.status = PaymentStatus.canceled
+        payment.raw = remote
+        return
     if payment.kind == PaymentKind.subscription:
         await grant_subscription(session, payment, now, settings)
     else:
