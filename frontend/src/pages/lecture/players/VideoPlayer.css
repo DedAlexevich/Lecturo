@@ -23,7 +23,7 @@
 .video-player__screen {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: #000;
+  background: var(--color-video-bg);
 }
 
 .video-player__video {
@@ -40,13 +40,13 @@
   display: grid;
   place-items: center;
   padding: var(--space-5);
-  color: #f4f1ea;
+  color: var(--color-on-video);
   text-align: center;
   pointer-events: none;
 }
 
 .video-player__overlay--error {
-  background: #000;
+  background: var(--color-video-bg);
 }
 
 .video-player__controls {
