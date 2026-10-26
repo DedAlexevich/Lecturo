@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Chapter, Lecture, SearchChunk, Summary, TranscriptSegment
 from app.pipeline.runner import Report
 from app.providers import get_embeddings, get_llm, get_speech_to_text
+from app.services.quota import QuotaExceeded, charge_lecture
 
 CHUNK_SECONDS = 60.0
 
@@ -23,6 +24,8 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
     )
     if lecture.duration_sec is None and segments:
         lecture.duration_sec = segments[-1].end
+    if not await charge_lecture(session, lecture.owner_id, lecture.id, lecture.duration_sec or 0.0):
+        raise QuotaExceeded("Не хватает лимита на обработку лекции")
 
 
 async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> None:

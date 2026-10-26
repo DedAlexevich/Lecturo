@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import shutil
 import subprocess
 from datetime import UTC, datetime, timedelta
@@ -22,9 +23,11 @@ from app.models import (
     StepStatus,
     Summary,
     TranscriptSegment,
+    UsageEntry,
 )
-from app.pipeline import media, tasks
+from app.pipeline import media, stages, tasks
 from app.pipeline.stages import split_into_chunks
+from app.providers.stub import STUB_PHRASES
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -422,3 +425,92 @@ async def test_cancelled_ffmpeg_is_killed(sample_video, storage, monkeypatch):
         await encoding
     assert not target.exists()
     assert not list((storage / "tmp").iterdir())
+
+
+async def load_segments(lecture_id) -> list[TranscriptSegment]:
+    async with SessionLocal() as session:
+        rows = await session.scalars(
+            select(TranscriptSegment)
+            .where(TranscriptSegment.lecture_id == lecture_id)
+            .order_by(TranscriptSegment.idx)
+        )
+        return list(rows)
+
+
+async def run_transcribe(lecture_id) -> None:
+    async def report(progress):
+        pass
+
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        await stages.transcribe(session, lecture, report)
+        await session.commit()
+
+
+async def charged_seconds(lecture_id) -> int:
+    async with SessionLocal() as session:
+        return await session.scalar(
+            select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
+                UsageEntry.lecture_id == lecture_id
+            )
+        )
+
+
+async def test_transcribe_saves_stub_segments_in_order(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+
+    await run_transcribe(lecture.id)
+
+    segments = await load_segments(lecture.id)
+    assert [s.idx for s in segments] == list(range(len(STUB_PHRASES)))
+    assert [s.text for s in segments] == STUB_PHRASES
+    assert all(s.start < s.end for s in segments)
+    assert [s.start for s in segments] == sorted(s.start for s in segments)
+
+
+async def test_repeated_transcribe_replaces_segments(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+
+    await run_transcribe(lecture.id)
+    await run_transcribe(lecture.id)
+
+    segments = await load_segments(lecture.id)
+    assert [s.idx for s in segments] == list(range(len(STUB_PHRASES)))
+    assert await charged_seconds(lecture.id) == 2
+
+
+async def test_transcribe_charges_lecture_duration(user, sample_video):
+    lecture = await create_lecture(user, sample_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    loaded = await load(lecture.id)
+    assert await charged_seconds(lecture.id) == math.ceil(loaded.duration_sec)
+
+
+async def test_transcribe_fails_without_quota(user, sample_audio, monkeypatch):
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
+    lecture = await create_lecture(user, sample_audio)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    failed = await load(lecture.id)
+    step = steps_by_name(failed)[StepName.transcribe]
+    assert step.status == StepStatus.failed
+    assert step.error == "Не хватает лимита на обработку лекции"
+    assert StepName.summarize not in steps_by_name(failed)
+    assert await count(TranscriptSegment, lecture.id) == 0
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.duration_sec = None
+        await session.commit()
+
+    await run_transcribe(lecture.id)
+
+    assert (await load(lecture.id)).duration_sec == 59.5
+    assert await charged_seconds(lecture.id) == 60
