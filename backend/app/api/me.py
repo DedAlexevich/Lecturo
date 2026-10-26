@@ -39,6 +39,13 @@ async def update_me(body: ProfileUpdateIn, user: CurrentUser, session: SessionDe
 async def change_my_password(
     body: PasswordChangeIn, user: CurrentUser, session: SessionDep
 ) -> None:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:password-change:{user.id}",
+        settings.password_change_rate_limit,
+        settings.password_change_rate_window_seconds,
+    )
     await change_password(session, user, body.current_password, body.new_password)
 
 

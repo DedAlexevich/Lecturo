@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     auth_mail_rate_window_seconds: int = 3600
     account_delete_rate_limit: int = 5
     account_delete_rate_window_seconds: int = 3600
+    password_change_rate_limit: int = 10
+    password_change_rate_window_seconds: int = 3600
 
 
 @lru_cache

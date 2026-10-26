@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy import delete, select
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.models import AuthToken, AuthTokenKind, User
@@ -133,3 +134,14 @@ async def test_change_password_revokes_reset_tokens(client, account):
             )
         ).all()
     assert not active
+
+
+async def test_change_password_rate_limited(client, account, monkeypatch):
+    monkeypatch.setattr(get_settings(), "password_change_rate_limit", 2)
+    monkeypatch.setattr(get_settings(), "password_change_rate_window_seconds", 60)
+    payload = {"current_password": "не-тот-пароль", "new_password": NEW_PASSWORD}
+    codes = []
+    for _ in range(3):
+        response = await client.post("/api/v1/me/password", json=payload, headers=headers(account))
+        codes.append(response.status_code)
+    assert codes == [403, 403, 429]
