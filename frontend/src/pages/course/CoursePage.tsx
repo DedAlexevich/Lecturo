@@ -145,7 +145,7 @@ export function CoursePage() {
             removingId={removeLecture.isPending ? removeLecture.variables : undefined}
             onRemove={(lecture) =>
               removeLecture.mutate(lecture.id, {
-                onSuccess: () => toast.show(`«${lecture.title}» убрана из курса`),
+                onSuccess: () => toast.show(`«${lecture.title}» убрана из курса`, "success"),
                 onError: () => toast.show("Не получилось убрать лекцию из курса", "error"),
               })
             }

@@ -130,7 +130,7 @@ export function AddLecturesDialog({ courseTitle, inCourse, pending, failed, onSu
         {body}
         {failed && (
           <p className="course-form__error" role="alert">
-            Не все лекции добавились. Попробуйте ещё раз.
+            Не получилось добавить лекции. Попробуйте ещё раз.
           </p>
         )}
       </form>

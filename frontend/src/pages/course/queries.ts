@@ -99,7 +99,12 @@ export function useRemoveLecture(courseId: string) {
       const { error, response } = await api.DELETE("/api/v1/courses/{course_id}/lectures/{lecture_id}", {
         params: { path: { course_id: courseId, lecture_id: lectureId } },
       });
-      if (!response.ok && response.status !== 404) throw new ApiError(response.status, error);
+      if (response.ok) return;
+      if (response.status === 404) {
+        const course = await api.GET("/api/v1/courses/{course_id}", { params: { path: { course_id: courseId } } });
+        if (course.data !== undefined) return;
+      }
+      throw new ApiError(response.status, error);
     },
     onSettled: refresh,
   });
