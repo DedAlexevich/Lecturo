@@ -13,6 +13,7 @@ from app.models import AuthIdentity, AuthProvider, User
 from app.schemas.user import TelegramLoginIn
 
 AUTH_MAX_AGE_SECONDS = 24 * 60 * 60
+CLOCK_SKEW_SECONDS = 5 * 60
 
 
 def bot_token() -> str:
@@ -29,7 +30,8 @@ def verify_login_widget(data: TelegramLoginIn) -> None:
     expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, data.hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверная подпись Telegram")
-    if time.time() - data.auth_date > AUTH_MAX_AGE_SECONDS:
+    age = time.time() - data.auth_date
+    if age > AUTH_MAX_AGE_SECONDS or age < -CLOCK_SKEW_SECONDS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Данные входа Telegram устарели")
 
 

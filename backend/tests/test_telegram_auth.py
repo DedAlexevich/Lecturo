@@ -92,6 +92,14 @@ async def test_expired_auth_date_rejected(client, bot_token, telegram_id):
     assert response.status_code == 401
 
 
+async def test_future_auth_date_rejected(client, bot_token, telegram_id):
+    payload = signed(
+        bot_token, id=telegram_id, first_name="Иван", auth_date=int(time.time()) + 3600
+    )
+    response = await client.post("/api/v1/auth/telegram", json=payload)
+    assert response.status_code == 401
+
+
 async def test_login_disabled_without_bot_token(client, monkeypatch, telegram_id):
     monkeypatch.setattr(get_settings(), "telegram_bot_token", "")
     payload = signed("", id=telegram_id, first_name="Иван", auth_date=int(time.time()))
