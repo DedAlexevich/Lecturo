@@ -103,22 +103,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 720px) {
-  .panel {
-    padding: var(--space-4);
-  }
-
-  .quota {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-5);
-  }
-
-  .fact {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-1);
-  }
-}
-
 .sectionHead {
   display: grid;
   gap: var(--space-1);
@@ -260,4 +244,20 @@
 
 .statusCanceled {
   color: var(--color-text-muted);
+}
+
+@media (max-width: 720px) {
+  .panel {
+    padding: var(--space-4);
+  }
+
+  .quota {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
 }
