@@ -3,6 +3,9 @@ import uuid
 
 from arq import create_pool
 from arq.connections import RedisSettings
+from arq.constants import abort_jobs_ss
+from arq.jobs import Job, JobStatus
+from arq.utils import timestamp_ms
 from sqlalchemy import select, update
 
 from app.core.config import get_settings
@@ -104,9 +107,29 @@ async def refund(lecture_id: uuid.UUID) -> None:
         await session.commit()
 
 
+def lecture_job_id(lecture_id: uuid.UUID) -> str:
+    return f"lecture:{lecture_id}"
+
+
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
     redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     try:
-        await redis.enqueue_job("process_lecture", str(lecture_id), _job_id=f"lecture:{lecture_id}")
+        await redis.enqueue_job(
+            "process_lecture", str(lecture_id), _job_id=lecture_job_id(lecture_id)
+        )
+    finally:
+        await redis.aclose()
+
+
+async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
+    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    redis_settings.conn_retries = 0
+    redis = await create_pool(redis_settings)
+    try:
+        job = Job(lecture_job_id(lecture_id), redis)
+        if await job.status() not in (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress):
+            return False
+        await redis.zadd(abort_jobs_ss, {job.job_id: timestamp_ms()})
+        return True
     finally:
         await redis.aclose()
