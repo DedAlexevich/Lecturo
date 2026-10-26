@@ -24,11 +24,21 @@ const statusMessages: Record<number, string> = {
   401: "Сессия истекла. Войдите заново и выберите файл ещё раз",
   403: "Эту загрузку начали под другим аккаунтом",
   404: "Загрузка на сервере не найдена. Выберите файл заново",
+  422: "Не получилось прочитать запись. Выберите другой файл",
   413: "Файл больше 2 ГБ",
 };
 
+function responseOf(error: Error | DetailedError) {
+  return "originalResponse" in error ? error.originalResponse : null;
+}
+
+function isRejected(error: Error | DetailedError) {
+  const status = responseOf(error)?.getStatus() ?? 0;
+  return status >= 400 && status < 500 && status !== 409 && status !== 423;
+}
+
 function messageOf(error: Error | DetailedError) {
-  const response = "originalResponse" in error ? error.originalResponse : null;
+  const response = responseOf(error);
   if (!response) return "Связь с сервером прервалась. Загрузка продолжится с того же места";
   const status = response.getStatus();
   const detail = detailOf(parseBody(response.getBody()));
@@ -84,12 +94,19 @@ export function useTusUpload(userId: string | undefined) {
             phase: sent >= total ? "finishing" : state.phase === "paused" ? "paused" : "uploading",
           })),
         onSuccess: () => update(upload, (state) => ({ ...state, phase: "done", error: null })),
-        onError: (error) =>
+        onError: (error) => {
+          if (current.current !== upload) return;
+          if (isRejected(error)) {
+            current.current = null;
+            setState({ ...idle, error: messageOf(error) });
+            return;
+          }
           update(upload, (state) => ({
             ...state,
             phase: navigator.onLine ? "failed" : "offline",
             error: navigator.onLine ? messageOf(error) : null,
-          })),
+          }));
+        },
       });
       current.current = upload;
       setState({ phase: "uploading", file, sent: 0, total: file.size, error: null });

@@ -121,9 +121,9 @@ export function FilePanel(props: FilePanelProps) {
       <p className="add-lecture__note" id={hintId}>
         Видео или аудио до 2 ГБ и до 4 часов. Если связь оборвётся, загрузка продолжится с того же места.
       </p>
-      {problem && (
+      {(problem ?? state.error) && (
         <p className="add-lecture__error" role="alert">
-          {problem}
+          {problem ?? state.error}
         </p>
       )}
       {courseField}
