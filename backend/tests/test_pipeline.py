@@ -501,3 +501,16 @@ async def test_transcribe_fails_without_quota(user, sample_audio, monkeypatch):
     assert StepName.summarize not in steps_by_name(failed)
     assert await count(TranscriptSegment, lecture.id) == 0
     assert await charged_seconds(lecture.id) == 0
+
+
+async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.duration_sec = None
+        await session.commit()
+
+    await run_transcribe(lecture.id)
+
+    assert (await load(lecture.id)).duration_sec == 59.5
+    assert await charged_seconds(lecture.id) == 60
