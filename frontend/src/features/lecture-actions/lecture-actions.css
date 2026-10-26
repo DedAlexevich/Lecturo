@@ -1,0 +1,69 @@
+.lecture-actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.lecture-actions__trigger {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.lecture-actions__panel {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  right: 0;
+  display: grid;
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+}
+
+.lecture-actions__panel .button {
+  justify-content: flex-start;
+  min-height: 44px;
+}
+
+.lecture-actions__delete,
+.lecture-actions__error {
+  color: var(--color-danger);
+}
+
+.lecture-actions__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.lecture-actions__description {
+  overflow-wrap: anywhere;
+}
+
+.lecture__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.lecture__title-row .lecture__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lecture-row__aside {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+@media (max-width: 40rem) {
+  .lecture-row__aside {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: 0;
+  }
+}
