@@ -254,7 +254,8 @@ export interface paths {
         put?: never;
         /** Accept Ai Transfer */
         post: operations["accept_ai_transfer_api_v1_me_consents_ai_transfer_post"];
-        delete?: never;
+        /** Revoke Ai Transfer */
+        delete: operations["revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1919,6 +1920,26 @@ export interface operations {
         };
     };
     accept_ai_transfer_api_v1_me_consents_ai_transfer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete: {
         parameters: {
             query?: never;
             header?: never;

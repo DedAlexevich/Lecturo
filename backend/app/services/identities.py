@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AuthIdentity, AuthProvider, User
 from app.schemas.user import EmailIdentityIn, IdentityOut, UserOut
 from app.services.auth import hash_password, normalize_email
+from app.services.consents import ai_transfer_given, current_ai_transfer_revision
 
 TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому аккаунту"
 EMAIL_TAKEN = "Этот email уже используется"
@@ -20,7 +21,9 @@ async def user_out(session: AsyncSession, user: User) -> UserOut:
         email=user.email,
         email_verified=user.email_verified_at is not None,
         display_name=user.display_name,
-        ai_transfer_accepted_at=user.ai_transfer_accepted_at,
+        ai_transfer_accepted_at=user.ai_transfer_accepted_at
+        if ai_transfer_given(user.ai_transfer_accepted_at, user.ai_transfer_revision)
+        else None,
         identities=[IdentityOut.model_validate(identity) for identity in user.identities],
     )
 
@@ -107,6 +110,13 @@ async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvi
 
 
 async def accept_ai_transfer(session: AsyncSession, user: User) -> None:
-    if user.ai_transfer_accepted_at is None:
+    if not ai_transfer_given(user.ai_transfer_accepted_at, user.ai_transfer_revision):
         user.ai_transfer_accepted_at = datetime.now(UTC)
+        user.ai_transfer_revision = current_ai_transfer_revision()
         await session.commit()
+
+
+async def revoke_ai_transfer(session: AsyncSession, user: User) -> None:
+    user.ai_transfer_accepted_at = None
+    user.ai_transfer_revision = None
+    await session.commit()

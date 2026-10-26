@@ -30,6 +30,7 @@ class User(UUIDPk, CreatedAt, Base):
     display_name: Mapped[str] = mapped_column(String(120), default="")
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     ai_transfer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ai_transfer_revision: Mapped[date | None] = mapped_column(Date)
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terms_revision: Mapped[date | None] = mapped_column(Date)
     personal_data_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

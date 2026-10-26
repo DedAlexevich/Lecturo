@@ -88,3 +88,9 @@ async def unlink_identity(
 async def accept_ai_transfer(user: CurrentUser, session: SessionDep) -> UserOut:
     await identities.accept_ai_transfer(session, user)
     return await identities.user_out(session, user)
+
+
+@router.delete("/consents/ai-transfer")
+async def revoke_ai_transfer(user: CurrentUser, session: SessionDep) -> UserOut:
+    await identities.revoke_ai_transfer(session, user)
+    return await identities.user_out(session, user)

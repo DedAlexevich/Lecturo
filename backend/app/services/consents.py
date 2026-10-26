@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from functools import cache
 
 from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +33,17 @@ def require_signup_consents(accept_terms: bool, accept_personal_data: bool) -> N
 def require_telegram_signup_consents(accept_terms: bool, accept_personal_data: bool) -> None:
     if not (accept_terms and accept_personal_data):
         raise HTTPException(status.HTTP_403_FORBIDDEN, CONSENT_REQUIRED)
+
+
+@cache
+def current_ai_transfer_revision() -> date:
+    return read_document("ai-transfer").revision_date
+
+
+def ai_transfer_given(accepted_at: datetime | None, revision: date | None) -> bool:
+    if accepted_at is None or revision is None:
+        return False
+    return revision >= current_ai_transfer_revision()
 
 
 def record_signup_consents(user: User) -> None:

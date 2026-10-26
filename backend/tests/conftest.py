@@ -9,6 +9,7 @@ from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
 from app.models import Payment, User
+from app.services.legal import read_document
 
 
 @pytest.fixture
@@ -20,7 +21,11 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 async def user() -> AsyncIterator[User]:
     async with SessionLocal() as session:
-        user = User(display_name="Тест", ai_transfer_accepted_at=datetime.now(UTC))
+        user = User(
+            display_name="Тест",
+            ai_transfer_accepted_at=datetime.now(UTC),
+            ai_transfer_revision=read_document("ai-transfer").revision_date,
+        )
         session.add(user)
         await session.commit()
         yield user
