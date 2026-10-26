@@ -4,7 +4,18 @@ import pytest
 
 from app.api import lectures as lectures_api
 from app.core.db import SessionLocal, engine
-from app.models import Chapter, Lecture, SourceType, Summary, TranscriptSegment
+from app.models import (
+    Chapter,
+    Lecture,
+    LectureStatus,
+    ProcessingStep,
+    SourceType,
+    StepName,
+    StepStatus,
+    Summary,
+    TranscriptSegment,
+    User,
+)
 from app.pipeline.download import LinkError, LinkInfo
 
 
@@ -43,6 +54,54 @@ async def test_lecture_detail(client, user, auth_headers):
 async def test_foreign_lecture_hidden(client, auth_headers):
     response = await client.get(f"/api/v1/lectures/{uuid.uuid4()}", headers=auth_headers)
     assert response.status_code == 404
+
+
+async def test_lecture_status(client, user, auth_headers):
+    async with SessionLocal() as session:
+        lecture = Lecture(
+            owner_id=user.id,
+            title="Физика",
+            source_type=SourceType.upload,
+            status=LectureStatus.processing,
+        )
+        session.add(lecture)
+        await session.flush()
+        session.add(
+            ProcessingStep(
+                lecture_id=lecture.id,
+                step=StepName.audio,
+                status=StepStatus.running,
+                progress=0.4,
+                attempts=1,
+            )
+        )
+        await session.commit()
+
+    response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": str(lecture.id),
+        "status": "processing",
+        "queue_position": None,
+        "steps": [{"step": "audio", "status": "running", "progress": 0.4, "error": None}],
+    }
+
+
+async def test_foreign_lecture_status_hidden(client, auth_headers):
+    async with SessionLocal() as session:
+        stranger = User(display_name="Чужой")
+        session.add(stranger)
+        await session.flush()
+        lecture = Lecture(owner_id=stranger.id, title="Чужая", source_type=SourceType.upload)
+        session.add(lecture)
+        await session.commit()
+
+    response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
+    assert response.status_code == 404
+
+    async with SessionLocal() as session:
+        await session.delete(await session.get(User, stranger.id))
+        await session.commit()
 
 
 @pytest.fixture
