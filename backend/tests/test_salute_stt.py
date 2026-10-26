@@ -284,6 +284,7 @@ async def test_transcribe_rejects_unknown_language(tmp_path: Path):
         await provider.transcribe(audio, "xx")
     assert requests == []
 
+
 def test_ca_bundle_is_added_to_system_certificates():
     system = SaluteSpeechToText(salute_settings())._ssl_context().cert_store_stats()["x509_ca"]
     settings = Settings(
@@ -293,3 +294,19 @@ def test_ca_bundle_is_added_to_system_certificates():
     assert with_bundle > 0
     assert with_bundle >= system
 
+
+async def test_repeated_unauthorized_is_reported(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    oauth_calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == OAUTH_URL:
+            oauth_calls.append(request)
+            return token_response()
+        return httpx.Response(401, text="scope denied")
+
+    provider = SaluteSpeechToText(salute_settings(), transport=httpx.MockTransport(handler))
+    with pytest.raises(SaluteSpeechError, match="после обновления токена: scope denied"):
+        await provider.transcribe(audio)
+    assert len(oauth_calls) == 2

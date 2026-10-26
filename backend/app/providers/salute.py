@@ -27,7 +27,7 @@ class SaluteSpeechError(RuntimeError):
     pass
 
 
-def parse_seconds(value: str | float) -> float:
+def parse_seconds(value: str | int | float) -> float:
     if isinstance(value, int | float):
         return float(value)
     return float(value.removesuffix("s"))
@@ -149,12 +149,13 @@ class SaluteSpeechToText:
                 "/task:get",
                 "проверка задачи распознавания",
                 params={"id": task_id},
-                tolerate_unavailable=True,
+                check=False,
             )
         except httpx.TransportError:
             return {}
-        if response is None:
+        if response.status_code == 429 or response.is_server_error:
             return {}
+        self._raise_for_status(response, "проверка задачи распознавания")
         return self._result(response, "проверка задачи распознавания")
 
     async def _download(
@@ -182,26 +183,38 @@ class SaluteSpeechToText:
         path: str,
         action: str,
         *,
-        tolerate_unavailable: bool = False,
+        check: bool = True,
         headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> Any:
-        for attempt in (1, 2):
-            token = await self._access_token(client)
-            response = await client.request(
-                method,
-                f"{API_URL}{path}",
-                headers={**(headers or {}), "Authorization": f"Bearer {token}"},
-                **kwargs,
-            )
-            if response.status_code == 401 and attempt == 1:
-                self._token = ""
-                continue
-            if tolerate_unavailable and (response.status_code == 429 or response.is_server_error):
-                return None
+    ) -> httpx.Response:
+        response = await self._send(client, method, path, headers, **kwargs)
+        if response.status_code == 401:
+            self._token = ""
+            response = await self._send(client, method, path, headers, **kwargs)
+            if response.status_code == 401:
+                raise SaluteSpeechError(
+                    f"SaluteSpeech: {action} отклонена после обновления токена: "
+                    f"{response.text[:500]}"
+                )
+        if check:
             self._raise_for_status(response, action)
-            return response
-        raise SaluteSpeechError(f"SaluteSpeech: {action} отклонена после обновления токена")
+        return response
+
+    async def _send(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        token = await self._access_token(client)
+        return await client.request(
+            method,
+            f"{API_URL}{path}",
+            headers={**(headers or {}), "Authorization": f"Bearer {token}"},
+            **kwargs,
+        )
 
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         if self._token and time.time() < self._token_expires_at - TOKEN_REFRESH_MARGIN_SECONDS:
