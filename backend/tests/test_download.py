@@ -37,7 +37,11 @@ DISK_URL = "https://disk.yandex.ru/i/AbCdEf"
             "https://vkvideo.ru/video_ext.php?oid=-12345&id=456239017",
         ),
         (
-            "https://vk.com/video_ext.php?oid=-1&id=2&hash=abc",
+            "https://vk.com/video_ext.php?oid=-1&id=2&hash=abc&hd=2",
+            "https://vkvideo.ru/video_ext.php?oid=-1&id=2&hash=abc",
+        ),
+        (
+            "https://vk.com/video_ext.php?oid=-1&id=2",
             "https://vkvideo.ru/video_ext.php?oid=-1&id=2",
         ),
         ("https://youtube.com/watch?v=short", None),

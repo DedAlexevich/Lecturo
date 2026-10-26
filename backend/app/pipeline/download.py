@@ -89,12 +89,14 @@ def build_embed_url(url: str) -> str | None:
         return embed
     if host in VK_HOSTS:
         if parsed.path == "/video_ext.php" and "oid" in query and "id" in query:
-            owner_id, video_id = query["oid"][0], query["id"][0]
+            params = {"oid": query["oid"][0], "id": query["id"][0]}
+            if "hash" in query:
+                params["hash"] = query["hash"][0]
         elif match := VK_VIDEO.search(query.get("z", [""])[0]) or VK_VIDEO.search(parsed.path):
-            owner_id, video_id = match.groups()
+            params = dict(zip(("oid", "id"), match.groups(), strict=True))
         else:
             return None
-        return "https://vkvideo.ru/video_ext.php?" + urlencode({"oid": owner_id, "id": video_id})
+        return "https://vkvideo.ru/video_ext.php?" + urlencode(params)
     return None
 
 
