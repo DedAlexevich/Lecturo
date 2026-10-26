@@ -1,5 +1,7 @@
+import math
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -135,6 +137,14 @@ async def test_not_enough_quota_charges_nothing(user):
     result = await read_quota(user)
     assert result.weekly_used_sec == 0
     assert await packages_left(package_ids) == [600]
+
+
+@pytest.mark.parametrize("seconds", [-1, math.nan])
+async def test_invalid_duration_is_rejected(user, seconds):
+    await prepare(user)
+    lecture = await new_lecture(user)
+    with pytest.raises(ValueError):
+        await charge(user, lecture, seconds)
 
 
 async def test_repeated_charge_is_not_counted_twice(user):
