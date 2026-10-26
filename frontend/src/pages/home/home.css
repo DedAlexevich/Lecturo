@@ -90,6 +90,7 @@
 
 .course-filter__list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   margin: 0;
   padding: 0;
@@ -122,6 +123,16 @@
 .course-filter__item:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
+}
+
+.course-filter__new {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
 }
 
 .course-filter__name {
@@ -322,6 +333,11 @@
     white-space: nowrap;
   }
 
+  .course-filter__new {
+    width: auto;
+    border: 1px dashed var(--color-border-strong);
+  }
+
   .course-filter__item[aria-current="page"] {
     border-color: var(--color-text);
     background: var(--color-text);
@@ -335,6 +351,10 @@
 
   .course-filter__note {
     padding: 0;
+  }
+
+  .course-filter__note .home__text-action {
+    min-height: var(--tap-target);
   }
 
   .course-filter__placeholder {
