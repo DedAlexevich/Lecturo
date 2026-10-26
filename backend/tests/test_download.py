@@ -1,6 +1,7 @@
 import functools
 import uuid
 import wave
+from pathlib import Path
 
 import httpx
 import pytest
@@ -282,3 +283,33 @@ def test_link_requests_have_timeouts_and_limited_retries():
     assert download.BASE_OPTIONS["socket_timeout"] == 30
     assert download.BASE_OPTIONS["retries"] == 3
     assert download.BASE_OPTIONS["fragment_retries"] == 3
+
+
+class FakeYoutubeDL:
+    def __init__(self, options, creates_file):
+        self.options = options
+        self.creates_file = creates_file
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def download(self, urls):
+        if self.creates_file:
+            Path(self.options["outtmpl"].replace("%(ext)s", "opus")).write_bytes(b"opus")
+
+
+@pytest.mark.parametrize("creates_file", [True, False])
+def test_fetch_audio_requires_downloaded_file(monkeypatch, tmp_path, creates_file):
+    monkeypatch.setattr(download, "YoutubeDL", lambda options: FakeYoutubeDL(options, creates_file))
+    target = tmp_path / "lecture"
+
+    if creates_file:
+        assert download.fetch_audio("https://vkvideo.ru/video-1_2", target, {}) == (
+            tmp_path / "lecture.opus"
+        )
+    else:
+        with pytest.raises(RuntimeError, match="не скачалось"):
+            download.fetch_audio("https://vkvideo.ru/video-1_2", target, {})

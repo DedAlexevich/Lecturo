@@ -206,7 +206,10 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
     }
     with YoutubeDL(options) as ydl:
         ydl.download([url])
-    return target.with_suffix(".opus")
+    audio_path = target.with_suffix(".opus")
+    if not audio_path.is_file():
+        raise RuntimeError("Аудио не скачалось")
+    return audio_path
 
 
 async def download(session: AsyncSession, lecture: Lecture, report: Report) -> None:
