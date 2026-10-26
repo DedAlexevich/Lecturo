@@ -6,7 +6,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
-from app.models import Lecture
+from app.models import Lecture, LectureStatus, StepStatus
+from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -70,8 +71,27 @@ async def get_status(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusO
 
 
 @router.post("/{lecture_id}/retry")
-async def retry(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusOut:
-    not_ready()
+async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> LectureStatusOut:
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .options(selectinload(Lecture.steps))
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    if lecture.status != LectureStatus.failed:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Перезапустить можно только упавшую обработку"
+        )
+    for step in lecture.steps:
+        if step.status == StepStatus.failed:
+            step.status = StepStatus.pending
+            step.progress = 0.0
+            step.error = None
+    lecture.status = LectureStatus.queued
+    await session.commit()
+    await enqueue_lecture(lecture.id)
+    return LectureStatusOut.model_validate(lecture)
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)
