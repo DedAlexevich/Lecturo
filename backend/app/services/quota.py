@@ -100,6 +100,8 @@ async def charge_lecture(
     now: datetime | None = None,
     settings: Settings | None = None,
 ) -> bool:
+    if not duration_sec >= 0:
+        raise ValueError("duration_sec must be a non-negative number")
     now = now or datetime.now(UTC)
     user = await session.get(User, user_id, with_for_update=True, populate_existing=True)
     if await is_charged(session, lecture_id):
@@ -148,17 +150,25 @@ async def charge_lecture(
 
 
 async def refund_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> int:
-    entries = (
-        await session.scalars(
-            select(UsageEntry)
-            .where(UsageEntry.lecture_id == lecture_id, UsageEntry.source.in_(CHARGED_SOURCES))
+    charged = (UsageEntry.lecture_id == lecture_id, UsageEntry.source.in_(CHARGED_SOURCES))
+    user_id = await session.scalar(select(UsageEntry.user_id).where(*charged).limit(1))
+    if user_id is None:
+        return 0
+    await session.get(User, user_id, with_for_update=True)
+    entries = (await session.scalars(select(UsageEntry).where(*charged).with_for_update())).all()
+    package_ids = [entry.package_id for entry in entries if entry.package_id is not None]
+    packages = {
+        package.id: package
+        for package in await session.scalars(
+            select(HourPackage)
+            .where(HourPackage.id.in_(package_ids))
+            .order_by(HourPackage.created_at, HourPackage.id)
             .with_for_update()
         )
-    ).all()
+    }
     for entry in entries:
         if entry.package_id is not None:
-            package = await session.get(HourPackage, entry.package_id, with_for_update=True)
-            package.seconds_left += entry.seconds
+            packages[entry.package_id].seconds_left += entry.seconds
         await session.delete(entry)
     await session.flush()
     return sum(entry.seconds for entry in entries)
