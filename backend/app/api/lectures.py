@@ -5,8 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, SessionDep
+from app.core.errors import not_ready
 from app.models import Lecture
-from app.schemas.lecture import LectureDetail, LectureOut
+from app.schemas.lecture import (
+    LectureDetail,
+    LectureOut,
+    LectureStatusOut,
+    LectureUpdate,
+    LinkIn,
+    QuizOut,
+)
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -37,3 +45,40 @@ async def get_lecture(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
     video_url = f"/media/{lecture.id}.mp4" if lecture.video_path else None
     return LectureDetail.model_validate(lecture).model_copy(update={"video_url": video_url})
+
+
+@router.post("/link", status_code=status.HTTP_201_CREATED)
+async def add_link(body: LinkIn, user: CurrentUser) -> LectureOut:
+    not_ready()
+
+
+@router.patch("/{lecture_id}")
+async def update_lecture(
+    lecture_id: uuid.UUID, body: LectureUpdate, user: CurrentUser
+) -> LectureOut:
+    not_ready()
+
+
+@router.delete("/{lecture_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser) -> None:
+    not_ready()
+
+
+@router.get("/{lecture_id}/status")
+async def get_status(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusOut:
+    not_ready()
+
+
+@router.post("/{lecture_id}/retry")
+async def retry(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusOut:
+    not_ready()
+
+
+@router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)
+async def create_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> None:
+    not_ready()
+
+
+@router.get("/{lecture_id}/quiz")
+async def get_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> QuizOut:
+    not_ready()

@@ -21,3 +21,8 @@ class CourseOut(Schema):
 
 class CourseLectureIn(Schema):
     lecture_id: uuid.UUID
+
+
+class CourseUpdate(Schema):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None

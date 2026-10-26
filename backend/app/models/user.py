@@ -29,6 +29,7 @@ class User(UUIDPk, CreatedAt, Base):
     password_hash: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(120), default="")
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    ai_transfer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     quota_week_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
