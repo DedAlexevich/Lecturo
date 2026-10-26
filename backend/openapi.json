@@ -163,6 +163,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
           }
         },
         "security": [
@@ -226,6 +232,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
           },
           "422": {
             "description": "Validation Error",
