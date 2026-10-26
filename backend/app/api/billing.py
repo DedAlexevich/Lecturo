@@ -4,16 +4,18 @@ from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import not_ready
+from app.pipeline.tasks import enqueue_lecture
 from app.schemas.billing import (
     PaymentIn,
     PaymentOut,
     ProductOut,
     QueuePlanIn,
     QuotaOut,
+    WaitingLectureOut,
     WaitingOut,
 )
 from app.services import quota, yookassa
@@ -129,11 +131,43 @@ async def yookassa_webhook(
     return {"status": "ok"}
 
 
+async def waiting_out(session: SessionDep, user: CurrentUser) -> WaitingOut:
+    lectures = await quota.list_waiting(session, user.id)
+    result = await quota.get_quota(session, user)
+    return WaitingOut(
+        lectures=[WaitingLectureOut.model_validate(lecture) for lecture in lectures],
+        available_sec=result.available_sec,
+        resets_at=result.resets_at,
+    )
+
+
 @router.get("/waiting")
-async def get_waiting(user: CurrentUser) -> WaitingOut:
-    not_ready()
+async def get_waiting(user: CurrentUser, session: SessionDep) -> WaitingOut:
+    result = await waiting_out(session, user)
+    await session.commit()
+    return result
 
 
 @router.post("/queue-plan")
-async def apply_queue_plan(body: QueuePlanIn, user: CurrentUser) -> WaitingOut:
-    not_ready()
+async def apply_queue_plan(body: QueuePlanIn, user: CurrentUser, session: SessionDep) -> WaitingOut:
+    try:
+        planned = await quota.plan_queue(session, user, body.lecture_ids)
+    except (quota.PlanExceedsQuota, quota.LectureNotWaiting) as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except quota.QueuePlanError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    await session.commit()
+
+    for index, lecture in enumerate(planned):
+        try:
+            await enqueue_lecture(lecture.id)
+        except (OSError, RedisError) as error:
+            await quota.return_to_waiting(session, planned[index:])
+            await session.commit()
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
+            ) from error
+
+    result = await waiting_out(session, user)
+    await session.commit()
+    return result
