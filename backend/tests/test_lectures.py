@@ -338,7 +338,10 @@ async def test_missing_lecture_returns_404(client, auth_headers, cancelled):
     assert (await client.delete(url, headers=auth_headers)).status_code == 404
 
 
-async def test_delete_removes_files_and_records(client, user, auth_headers, cancelled, tmp_path):
+async def test_delete_removes_files_and_records(
+    client, user, auth_headers, cancelled, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "storage_dir", tmp_path)
     video = tmp_path / "video.mp4"
     audio = tmp_path / "audio.ogg"
     video.write_bytes(b"v")
@@ -346,6 +349,12 @@ async def test_delete_removes_files_and_records(client, user, auth_headers, canc
     lecture = await create_own_lecture(
         user, status=LectureStatus.ready, video_path=str(video), audio_path=str(audio)
     )
+    (tmp_path / "originals").mkdir()
+    original = tmp_path / "originals" / str(lecture.id)
+    original.write_bytes(b"o")
+    (tmp_path / "tmp").mkdir()
+    partial = tmp_path / "tmp" / f"{lecture.id}.part"
+    partial.write_bytes(b"p")
     async with SessionLocal() as session:
         session.add_all(
             [
@@ -367,6 +376,8 @@ async def test_delete_removes_files_and_records(client, user, auth_headers, canc
     assert cancelled == [lecture.id]
     assert not video.exists()
     assert not audio.exists()
+    assert not original.exists()
+    assert not partial.exists()
 
     async with SessionLocal() as session:
         assert await session.get(Lecture, lecture.id) is None

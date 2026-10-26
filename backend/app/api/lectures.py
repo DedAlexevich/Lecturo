@@ -1,6 +1,5 @@
 import asyncio
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
 from redis.exceptions import RedisError
@@ -31,6 +30,7 @@ from app.schemas.lecture import (
     QuizOut,
 )
 from app.services import quota
+from app.services.account import lecture_files, remove_files
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -148,7 +148,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     )
     if not started and lecture.status in (LectureStatus.queued, LectureStatus.waiting_quota):
         await quota.refund_lecture(session, lecture_id)
-    files = [Path(path) for path in (lecture.video_path, lecture.audio_path) if path]
+    files = lecture_files(lecture_id, [lecture.video_path, lecture.audio_path])
     await session.execute(delete(Lecture).where(Lecture.id == lecture_id))
     await session.commit()
 
@@ -156,8 +156,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
         await cancel_lecture_job(lecture_id)
     except (OSError, RedisError):
         pass
-    for path in files:
-        await asyncio.to_thread(path.unlink, missing_ok=True)
+    await asyncio.to_thread(remove_files, files)
 
 
 @router.get("/{lecture_id}/status")
