@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -87,21 +88,25 @@ async def test_lecture_status(client, user, auth_headers):
     }
 
 
-async def test_foreign_lecture_status_hidden(client, auth_headers):
+@pytest.fixture
+async def stranger() -> AsyncIterator[User]:
     async with SessionLocal() as session:
         stranger = User(display_name="Чужой")
         session.add(stranger)
-        await session.flush()
+        await session.commit()
+        yield stranger
+        await session.delete(stranger)
+        await session.commit()
+
+
+async def test_foreign_lecture_status_hidden(client, auth_headers, stranger):
+    async with SessionLocal() as session:
         lecture = Lecture(owner_id=stranger.id, title="Чужая", source_type=SourceType.upload)
         session.add(lecture)
         await session.commit()
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
     assert response.status_code == 404
-
-    async with SessionLocal() as session:
-        await session.delete(await session.get(User, stranger.id))
-        await session.commit()
 
 
 @pytest.fixture
