@@ -106,6 +106,8 @@ async def yookassa_webhook(
         yookassa_id = yookassa.notification_payment_id(body)
     except yookassa.NotificationError as error:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
+    if not await yookassa.has_pending_payment(session, yookassa_id):
+        return {"status": "ok"}
     try:
         client = yookassa_factory()
     except ValueError as error:

@@ -152,8 +152,35 @@ async def test_repeated_notification_does_not_grant_twice(client, user, fake):
     second = await client.post(WEBHOOK, json=notification(payment))
 
     assert first.status_code == second.status_code == 200
+    assert len(fake.requests) == 1
     [package] = await packages_of(user)
     assert package.seconds_total == 10 * 3600
+
+
+async def test_notification_for_payment_missing_in_db_skips_yookassa(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    body = notification(payment)
+    body["object"]["id"] = f"yk-{uuid.uuid4()}"
+
+    response = await client.post(WEBHOOK, json=body)
+
+    assert response.status_code == 200
+    assert fake.requests == []
+    assert await packages_of(user) == []
+
+
+async def test_webhook_unavailable_without_credentials(client, user):
+    payment = await make_payment(user, "hours_5")
+    app.dependency_overrides[get_yookassa_factory] = lambda: (
+        lambda: yookassa.YooKassaClient(Settings(yookassa_shop_id=""))
+    )
+    try:
+        response = await client.post(WEBHOOK, json=notification(payment))
+    finally:
+        app.dependency_overrides.pop(get_yookassa_factory, None)
+
+    assert response.status_code == 503
+    assert (await load_payment(payment)).status == PaymentStatus.pending
 
 
 async def test_forged_notification_grants_nothing(client, user, fake):
@@ -167,7 +194,7 @@ async def test_forged_notification_grants_nothing(client, user, fake):
     assert await packages_of(user) == []
 
 
-async def test_notification_for_unknown_payment_is_rejected(client, user, fake):
+async def test_notification_for_payment_missing_in_yookassa_is_rejected(client, user, fake):
     payment = await make_payment(user, "hours_5")
 
     response = await client.post(WEBHOOK, json=notification(payment))

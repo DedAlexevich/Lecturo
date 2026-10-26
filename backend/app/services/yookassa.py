@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -290,6 +290,16 @@ async def apply_succeeded(
     payment.status = PaymentStatus.succeeded
     payment.paid_at = parse_time(remote.get("captured_at")) or now
     payment.raw = remote
+
+
+async def has_pending_payment(session: AsyncSession, yookassa_id: str) -> bool:
+    return await session.scalar(
+        select(
+            exists().where(
+                Payment.yookassa_id == yookassa_id, Payment.status == PaymentStatus.pending
+            )
+        )
+    )
 
 
 async def process_notification(
