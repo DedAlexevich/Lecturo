@@ -158,6 +158,24 @@ async def test_resolve_yandex_disk_rejects_closed_link():
         await download.resolve_yandex_disk(DISK_URL, transport)
 
 
+def no_network(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("нет сети", request=request)
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        no_network,
+        lambda request: httpx.Response(200, text="не json"),
+        lambda request: httpx.Response(200, json={"type": "file", "media_type": "video"}),
+    ],
+    ids=["connect-error", "bad-json", "missing-field"],
+)
+async def test_resolve_yandex_disk_turns_api_failures_into_link_error(handler):
+    with pytest.raises(LinkError, match="Яндекс Диск не ответил"):
+        await download.resolve_yandex_disk(DISK_URL, httpx.MockTransport(handler))
+
+
 async def test_inspect_link_for_yandex_disk(public_host, monkeypatch):
     transport = disk_transport({"type": "file", "media_type": "video", "name": "Лекция 3.mp4"}, [])
     monkeypatch.setattr(

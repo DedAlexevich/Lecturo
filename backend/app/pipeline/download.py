@@ -108,17 +108,20 @@ async def ensure_public_host(url: str) -> None:
 async def resolve_yandex_disk(
     url: str, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[str, str]:
-    async with httpx.AsyncClient(timeout=30, transport=transport) as client:
-        resource = await client.get(YANDEX_DISK_API, params={"public_key": url})
-        if resource.status_code != httpx.codes.OK:
-            raise LinkError("Файл на Яндекс Диске не найден или закрыт")
-        meta = resource.json()
-        if meta.get("type") != "file" or meta.get("media_type") not in {"video", "audio"}:
-            raise LinkError("Ссылка Яндекс Диска должна вести на видео или аудиофайл")
-        download = await client.get(f"{YANDEX_DISK_API}/download", params={"public_key": url})
-        if download.status_code != httpx.codes.OK:
-            raise LinkError("Яндекс Диск не отдал ссылку на скачивание")
-        return meta["name"], download.json()["href"]
+    try:
+        async with httpx.AsyncClient(timeout=30, transport=transport) as client:
+            resource = await client.get(YANDEX_DISK_API, params={"public_key": url})
+            if resource.status_code != httpx.codes.OK:
+                raise LinkError("Файл на Яндекс Диске не найден или закрыт")
+            meta = resource.json()
+            if meta.get("type") != "file" or meta.get("media_type") not in {"video", "audio"}:
+                raise LinkError("Ссылка Яндекс Диска должна вести на видео или аудиофайл")
+            download = await client.get(f"{YANDEX_DISK_API}/download", params={"public_key": url})
+            if download.status_code != httpx.codes.OK:
+                raise LinkError("Яндекс Диск не отдал ссылку на скачивание")
+            return meta["name"], download.json()["href"]
+    except (httpx.HTTPError, ValueError, KeyError, AttributeError) as error:
+        raise LinkError("Яндекс Диск не ответил, попробуйте позже") from error
 
 
 def extract_info(url: str) -> dict[str, Any]:
