@@ -14,11 +14,7 @@ logger = logging.getLogger(__name__)
 async def connect(database_url: str) -> asyncpg.Pool | None:
     if not database_url:
         return None
-    try:
-        return await asyncpg.create_pool(database_url, min_size=1, max_size=2)
-    except (asyncpg.PostgresError, OSError):
-        logger.exception("база данных недоступна, chat_id сохраняться не будет")
-        return None
+    return await asyncpg.create_pool(database_url, min_size=1, max_size=2)
 
 
 async def run() -> None:
@@ -26,7 +22,6 @@ async def run() -> None:
     if not settings.token:
         logger.warning("TELEGRAM_BOT_TOKEN не задан, бот не запущен")
         await asyncio.Event().wait()
-        return
     pool = await connect(settings.database_url)
     bot = Bot(settings.token)
     dispatcher = Dispatcher()
