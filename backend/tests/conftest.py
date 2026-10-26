@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -19,7 +20,7 @@ async def client() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 async def user() -> AsyncIterator[User]:
     async with SessionLocal() as session:
-        user = User(display_name="Тест")
+        user = User(display_name="Тест", ai_transfer_accepted_at=datetime.now(UTC))
         session.add(user)
         await session.commit()
         yield user
