@@ -7,7 +7,8 @@ type ValidationDetail = { loc: (string | number)[]; msg: string };
 const fieldMessages: Record<string, Record<string, string>> = {
   email: { default: "Проверьте адрес почты" },
   password: { default: "Пароль должен быть от 8 до 128 символов" },
-  accept_terms: { default: "Нужно принять условия" },
+  accept_terms: { default: "Нужно принять пользовательское соглашение" },
+  accept_personal_data: { default: "Нужно дать согласие на обработку персональных данных" },
 };
 
 function detailOf(body: unknown): unknown {
@@ -31,6 +32,7 @@ export function messageOf(error: unknown): string {
   const detail = detailOf(error.body);
   switch (error.status) {
     case 401:
+    case 403:
     case 409:
       return typeof detail === "string" ? detail : "Не получилось, попробуйте ещё раз";
     case 503:

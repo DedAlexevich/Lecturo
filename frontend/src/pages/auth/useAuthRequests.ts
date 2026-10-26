@@ -28,7 +28,7 @@ export function useRegister() {
 
 export function useTelegramLogin() {
   return useMutation({
-    mutationFn: async (body: TelegramUser) => unwrap(await api.POST("/api/v1/auth/telegram", { body })),
+    mutationFn: async (body: components["schemas"]["TelegramSignupIn"]) => unwrap(await api.POST("/api/v1/auth/telegram", { body })),
     onSuccess: (tokens) => signIn(tokens.access_token),
   });
 }

@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,10 @@ class User(UUIDPk, CreatedAt, Base):
     display_name: Mapped[str] = mapped_column(String(120), default="")
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     ai_transfer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_revision: Mapped[date | None] = mapped_column(Date)
+    personal_data_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    personal_data_revision: Mapped[date | None] = mapped_column(Date)
     quota_week_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -123,7 +123,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TelegramLoginIn"
+                "$ref": "#/components/schemas/TelegramSignupIn"
               }
             }
           },
@@ -139,6 +139,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
           },
           "422": {
             "description": "Validation Error",
@@ -625,6 +628,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
           },
           "422": {
             "description": "Validation Error",
@@ -3531,13 +3537,18 @@
           "accept_terms": {
             "type": "boolean",
             "title": "Accept Terms"
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data"
           }
         },
         "type": "object",
         "required": [
           "email",
           "password",
-          "accept_terms"
+          "accept_terms",
+          "accept_personal_data"
         ],
         "title": "RegisterIn"
       },
@@ -3835,11 +3846,92 @@
         ],
         "title": "TelegramLoginIn"
       },
+      "TelegramSignupIn": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "auth_date": {
+            "type": "integer",
+            "title": "Auth Date"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "auth_date",
+          "hash"
+        ],
+        "title": "TelegramSignupIn"
+      },
       "TelegramWebAppIn": {
         "properties": {
           "init_data": {
             "type": "string",
             "title": "Init Data"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
           }
         },
         "type": "object",
