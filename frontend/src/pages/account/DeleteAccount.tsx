@@ -7,7 +7,7 @@ import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import styles from "./SettingsSection.module.css";
-import { miniAppInitData } from "./miniApp";
+import { getMiniAppInitData } from "./miniApp";
 import { settingsError, useDeleteAccount, type TelegramUser } from "./settings";
 
 export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
@@ -45,7 +45,9 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
     [mutate, finish],
   );
 
-  const confirmMiniApp = () => mutate({ telegram_init_data: miniAppInitData }, { onSuccess: finish });
+  const confirmMiniApp = () => mutate({ telegram_init_data: getMiniAppInitData() }, { onSuccess: finish });
+
+  const inMiniApp = Boolean(getMiniAppInitData());
 
   const failure = remove.isError ? settingsError(remove.error, "Подтверждение не прошло") : undefined;
 
@@ -65,7 +67,7 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
             <Button variant="secondary" onClick={close}>
               Отмена
             </Button>
-            {!hasPassword && miniAppInitData && (
+            {!hasPassword && inMiniApp && (
               <Button variant="danger" loading={remove.isPending} onClick={confirmMiniApp}>
                 Удалить навсегда
               </Button>
@@ -99,10 +101,10 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
               </Field>
             </form>
           )}
-          {open && !hasPassword && miniAppInitData && (
+          {open && !hasPassword && inMiniApp && (
             <p>Подтверждение придёт из Telegram автоматически: нажмите «Удалить навсегда».</p>
           )}
-          {open && !hasPassword && !miniAppInitData && (
+          {open && !hasPassword && !inMiniApp && (
             <div className={styles.confirmTelegram}>
               <p>Для подтверждения нажмите кнопку Telegram: аккаунт удалится сразу после входа.</p>
               {telegramEnabled ? (

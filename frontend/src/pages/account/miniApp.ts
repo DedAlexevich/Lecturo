@@ -4,11 +4,8 @@ declare global {
   }
 }
 
-function readInitData() {
-  const fromWebApp = window.Telegram?.WebApp?.initData;
-  if (fromWebApp) return fromWebApp;
-  const fromHash = new URLSearchParams(window.location.hash.slice(1)).get("tgWebAppData");
-  return fromHash ?? "";
-}
+const initDataFromHash = new URLSearchParams(window.location.hash.slice(1)).get("tgWebAppData") ?? "";
 
-export const miniAppInitData = readInitData();
+export function getMiniAppInitData() {
+  return window.Telegram?.WebApp?.initData || initDataFromHash;
+}
