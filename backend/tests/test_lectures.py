@@ -2,6 +2,7 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from sqlalchemy import select
 
 from app.api import lectures as lectures_api
 from app.core.db import SessionLocal, engine
@@ -193,3 +194,31 @@ async def test_add_link_to_foreign_course(client, auth_headers, link_info):
 
     assert response.status_code == 404
     assert link_info["enqueued"] == []
+
+
+async def test_add_link_publishes_failed_when_queue_is_down(
+    client, user, auth_headers, link_info, monkeypatch
+):
+    published = []
+
+    async def queue_down(lecture_id):
+        raise ConnectionRefusedError
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, user_id, status, error))
+
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", queue_down)
+    monkeypatch.setattr(lectures_api, "publish_status", fake_publish)
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 503
+    async with SessionLocal() as session:
+        lecture = await session.scalar(select(Lecture).where(Lecture.owner_id == user.id))
+    assert lecture.status == LectureStatus.failed
+    assert published == [
+        (lecture.id, user.id, LectureStatus.failed, "Очередь недоступна, попробуйте позже")
+    ]
