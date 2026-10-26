@@ -8,3 +8,8 @@ export function RequireAuth() {
   if (token === null) return <Navigate to="/login" replace state={{ from: location }} />;
   return <Outlet />;
 }
+
+export function GuestOnly() {
+  const token = useToken();
+  return token === null ? <Outlet /> : <Navigate to="/" replace />;
+}

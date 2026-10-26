@@ -1,8 +1,11 @@
 import type { RouteObject } from "react-router";
 import { EmptyPage } from "./EmptyPage";
 
-export const publicRoutes: RouteObject[] = [
+export const guestRoutes: RouteObject[] = [
   { path: "/login", element: <EmptyPage title="Вход" /> },
+];
+
+export const publicRoutes: RouteObject[] = [
   { path: "/legal/:slug", element: <EmptyPage title="Документ" /> },
 ];
 

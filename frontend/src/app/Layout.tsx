@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, NavLink, Outlet } from "react-router";
+import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
 import { ApiError } from "./queryClient";
 import styles from "./Layout.module.css";
@@ -69,6 +69,7 @@ function LegalFooter() {
 
 export function Layout() {
   const signedIn = useToken() !== null;
+  const onLoginPage = useLocation().pathname === "/login";
 
   return (
     <div className={signedIn ? `${styles.shell} ${styles.withBottomNav}` : styles.shell}>
@@ -79,9 +80,8 @@ export function Layout() {
           </Link>
           {signedIn && <Navigation className={styles.topNav} />}
           <div className={styles.user}>
-            {signedIn ? (
-              <UserMenu />
-            ) : (
+            {signedIn && <UserMenu />}
+            {!signedIn && !onLoginPage && (
               <Link to="/login" className={styles.textButton}>
                 Войти
               </Link>
