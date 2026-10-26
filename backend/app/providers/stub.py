@@ -1,0 +1,44 @@
+import hashlib
+import json
+import math
+from pathlib import Path
+
+from app.models import EMBEDDING_DIM
+from app.providers.base import Segment
+
+STUB_PHRASES = [
+    "Сегодня разберём основные понятия курса.",
+    "Начнём с определения и простого примера.",
+    "Обратите внимание на граничные случаи.",
+    "Теперь перейдём к доказательству.",
+    "Это часто спрашивают на экзамене.",
+    "Подведём итоги лекции.",
+]
+
+
+class StubSpeechToText:
+    async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]:
+        return [
+            Segment(start=i * 10.0, end=i * 10.0 + 9.5, text=phrase)
+            for i, phrase in enumerate(STUB_PHRASES)
+        ]
+
+
+class StubLLM:
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        if json_mode:
+            return json.dumps({"text": user[:200]}, ensure_ascii=False)
+        return f"Кратко: {user[:200]}"
+
+
+class StubEmbeddings:
+    dimension = EMBEDDING_DIM
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    def _vector(self, text: str) -> list[float]:
+        seed = hashlib.sha256(text.encode()).digest()
+        raw = [seed[i % len(seed)] - 127.5 + i % 7 for i in range(self.dimension)]
+        norm = math.sqrt(sum(x * x for x in raw))
+        return [x / norm for x in raw]
