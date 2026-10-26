@@ -176,6 +176,7 @@ export function LecturePage() {
               embed={embed}
               title={data.title}
               start={startAt ?? 0}
+              currentTime={currentTime}
               sourceUrl={data.source_url}
               {...bind}
             />
