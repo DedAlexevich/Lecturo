@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import time
@@ -115,9 +116,10 @@ class YandexSpeechToText:
 
     async def _delete(self, client: httpx.AsyncClient, key: str) -> None:
         payload_hash = hashlib.sha256(b"").hexdigest()
-        await client.delete(
-            self._object_url(key), headers=self._storage_headers("DELETE", key, payload_hash)
-        )
+        with contextlib.suppress(httpx.HTTPError):
+            await client.delete(
+                self._object_url(key), headers=self._storage_headers("DELETE", key, payload_hash)
+            )
 
     async def _start(
         self, client: httpx.AsyncClient, key: str, encoding: str, language: str

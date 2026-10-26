@@ -120,3 +120,41 @@ async def test_transcribe_rejects_unsupported_format():
     provider = YandexSpeechToText(yandex_settings())
     with pytest.raises(ValueError, match="lecture.wav"):
         await provider.transcribe(Path("lecture.wav"))
+
+
+async def test_transcribe_keeps_result_when_cleanup_fails(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE":
+            raise httpx.ConnectError("storage unavailable", request=request)
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            return httpx.Response(200, json={"id": "op3", "done": False})
+        return httpx.Response(200, json=saved_operation())
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    segments = await provider.transcribe(audio)
+    assert len(segments) == 3
+
+
+async def test_transcribe_error_not_replaced_by_cleanup_error(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE":
+            return httpx.Response(500)
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        return httpx.Response(400, text="invalid config")
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(YandexSpeechKitError, match="invalid config"):
+        await provider.transcribe(audio)
