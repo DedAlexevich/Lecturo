@@ -4,6 +4,7 @@ import { LegalPage } from "../pages/legal/LegalPage";
 import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
+import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
 import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
@@ -23,7 +24,7 @@ export const publicRoutes: RouteObject[] = [
 
 export const privateRoutes: RouteObject[] = [
   { path: "/", element: <HomePage /> },
-  { path: "/lectures/:id", element: <EmptyPage title="Лекция" /> },
+  { path: "/lectures/:id", element: <LecturePage /> },
   { path: "/courses/:id", element: <EmptyPage title="Курс" /> },
   { path: "/account", element: <AccountPage /> },
 ];
