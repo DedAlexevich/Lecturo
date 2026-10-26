@@ -94,11 +94,14 @@ class YandexSpeechToText:
         encoding = AUDIO_ENCODINGS.get(suffix)
         if encoding is None:
             raise ValueError(f"Формат аудио не поддерживается SpeechKit: {audio_path.name}")
+        language_code = LANGUAGE_CODES.get(language)
+        if language_code is None:
+            raise ValueError(f"Язык не поддерживается SpeechKit: {language}")
         key = f"stt/{uuid.uuid4().hex}{suffix}"
         async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
             await self._upload(client, audio_path, key)
             try:
-                operation_id = await self._start(client, key, encoding, language)
+                operation_id = await self._start(client, key, encoding, language_code)
                 response = await self._wait(client, operation_id)
             finally:
                 await self._delete(client, key)
@@ -122,12 +125,12 @@ class YandexSpeechToText:
             )
 
     async def _start(
-        self, client: httpx.AsyncClient, key: str, encoding: str, language: str
+        self, client: httpx.AsyncClient, key: str, encoding: str, language_code: str
     ) -> str:
         body: dict[str, Any] = {
             "config": {
                 "specification": {
-                    "languageCode": LANGUAGE_CODES.get(language, language),
+                    "languageCode": language_code,
                     "model": "general",
                     "audioEncoding": encoding,
                     "literature_text": True,

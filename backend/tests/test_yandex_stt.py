@@ -218,3 +218,18 @@ async def test_wait_fails_on_client_error(tmp_path: Path):
     )
     with pytest.raises(YandexSpeechKitError, match="permission denied"):
         await provider.transcribe(audio)
+
+
+async def test_transcribe_rejects_unknown_language(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200)
+
+    provider = YandexSpeechToText(yandex_settings(), transport=httpx.MockTransport(handler))
+    with pytest.raises(ValueError, match="xx"):
+        await provider.transcribe(audio, "xx")
+    assert requests == []
