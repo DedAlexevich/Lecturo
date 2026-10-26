@@ -161,6 +161,33 @@ async def test_pre_finish_creates_lecture(client, user, auth_headers, storage, e
     assert len(await user_lectures(user.id)) == 1
 
 
+async def test_pre_finish_publishes_failed_when_queue_is_down(
+    client, user, auth_headers, storage, monkeypatch
+):
+    published = []
+
+    async def queue_down(lecture_id):
+        raise ConnectionRefusedError
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, user_id, status, error))
+
+    monkeypatch.setattr(uploads_api, "enqueue_lecture", queue_down)
+    monkeypatch.setattr(uploads_api, "publish_status", fake_publish)
+    upload_id = user.id.hex + "e" * 32
+    put_upload(storage, upload_id, sample_audio(storage))
+
+    request = hook("pre-finish", auth_headers, ID=upload_id, MetaData={"filename": "a.mp4"})
+    response = await client.post(HOOKS_URL, json=request)
+
+    assert response.json()["HTTPResponse"]["StatusCode"] == 503
+    [lecture] = await user_lectures(user.id)
+    assert lecture.status == LectureStatus.failed
+    assert published == [
+        (lecture.id, user.id, LectureStatus.failed, "Очередь недоступна, попробуйте позже")
+    ]
+
+
 async def test_pre_finish_rejects_text_file(client, user, auth_headers, storage, enqueued):
     upload_id = user.id.hex + "b" * 32
     fake_video = storage / "fake.mp4"
