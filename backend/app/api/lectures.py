@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 from redis.exceptions import RedisError
 from sqlalchemy import func, insert, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.courses import get_own_course
@@ -28,6 +29,19 @@ from app.schemas.lecture import (
 )
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
+
+
+async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
+    next_position = (
+        select(func.coalesce(func.max(course_lectures.c.position) + 1, 0))
+        .where(course_lectures.c.course_id == course_id)
+        .scalar_subquery()
+    )
+    await session.execute(
+        insert(course_lectures).values(
+            course_id=course_id, lecture_id=lecture_id, position=next_position
+        )
+    )
 
 
 @router.get("")
@@ -81,16 +95,7 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
     session.add(lecture)
     await session.flush()
     if body.course_id is not None:
-        next_position = (
-            select(func.coalesce(func.max(course_lectures.c.position) + 1, 0))
-            .where(course_lectures.c.course_id == body.course_id)
-            .scalar_subquery()
-        )
-        await session.execute(
-            insert(course_lectures).values(
-                course_id=body.course_id, lecture_id=lecture.id, position=next_position
-            )
-        )
+        await add_to_course(session, body.course_id, lecture.id)
     await session.commit()
     await session.refresh(lecture)
 
