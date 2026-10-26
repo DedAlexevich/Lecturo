@@ -2708,7 +2708,9 @@ export interface operations {
     create_payment_api_v1_billing_payments_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "Idempotence-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
