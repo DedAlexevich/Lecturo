@@ -72,7 +72,7 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
         )
         owner_id = await session.scalar(
             update(Lecture)
-            .where(Lecture.id == lecture_id)
+            .where(Lecture.id == lecture_id, Lecture.status != LectureStatus.ready)
             .values(status=LectureStatus.failed)
             .returning(Lecture.owner_id)
         )

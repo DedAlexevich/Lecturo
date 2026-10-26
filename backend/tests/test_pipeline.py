@@ -586,3 +586,18 @@ async def test_unavailable_redis_does_not_break_pipeline(user, sample_audio, mon
     monkeypatch.setattr(get_settings(), "redis_url", "redis://127.0.0.1:1/0")
     lecture = await create_lecture(user, sample_audio)
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+
+async def test_interrupted_ready_event_keeps_lecture_ready(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    publish = events.publish_status
+
+    async def cancelled_on_ready(lecture_id, user_id, status, error=None):
+        if status == LectureStatus.ready:
+            raise asyncio.CancelledError
+        await publish(lecture_id, user_id, status, error)
+
+    monkeypatch.setattr(tasks, "publish_status", cancelled_on_ready)
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert (await load(lecture.id)).status == LectureStatus.ready
