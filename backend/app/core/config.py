@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
+    yookassa_api_url: str = "https://api.yookassa.ru/v3"
+    yookassa_receipt: bool = False
 
     free_weekly_seconds: int = 2 * 3600
     subscription_weekly_seconds: int = 10 * 3600
