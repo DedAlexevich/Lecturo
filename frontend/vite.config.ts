@@ -48,6 +48,9 @@ export default defineConfig({
     }),
   ],
   worker: { format: "es" },
+  optimizeDeps: {
+    exclude: ["@ffmpeg/ffmpeg"],
+  },
   server: {
     proxy: {
       "/api": "http://localhost:8000",
