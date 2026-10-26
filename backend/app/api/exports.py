@@ -1,14 +1,17 @@
+import asyncio
 import uuid
 from collections.abc import Callable, Iterable
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import not_ready
 from app.models import Lecture, User
+from app.services.pdf import lecture_html, render_pdf
 from app.services.subtitles import Segment, build_cues, content_disposition, to_srt, to_vtt
 
 router = APIRouter(prefix="/lectures/{lecture_id}", tags=["exports"])
@@ -51,5 +54,24 @@ async def export_vtt(lecture_id: uuid.UUID, user: CurrentUser, session: SessionD
 
 
 @router.get("/export.pdf", response_class=Response)
-async def export_pdf(lecture_id: uuid.UUID, user: CurrentUser) -> Response:
-    not_ready()
+async def export_pdf(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .options(selectinload(Lecture.chapters), selectinload(Lecture.summary))
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    if lecture.summary is None and not lecture.chapters:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Конспект ещё не готов")
+
+    html = lecture_html(lecture, get_settings().public_url.rstrip("/"))
+    content = await asyncio.to_thread(render_pdf, html)
+    filename = quote(f"{lecture.title}.pdf", safe="")
+    return Response(
+        content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"lecture.pdf\"; filename*=UTF-8''{filename}"
+        },
+    )
