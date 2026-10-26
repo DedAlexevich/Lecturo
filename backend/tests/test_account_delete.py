@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
 from app.core.config import get_settings
@@ -20,6 +21,7 @@ from app.models import (
     SourceType,
     User,
 )
+from app.pipeline import tasks
 from app.services.auth import hash_password
 from tests.test_telegram_auth import BOT_TOKEN, signed
 from tests.test_telegram_webapp import init_data, webapp_fields
@@ -184,3 +186,57 @@ async def test_forged_init_data_rejected(client, account, bot_token):
     response = await client.post(URL, json=body, headers=headers(account))
     assert response.status_code == 401
     assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
+
+
+async def test_rate_limit_blocks_repeated_attempts(client, account, monkeypatch):
+    monkeypatch.setattr(get_settings(), "account_delete_rate_limit", 2)
+    wrong = {"password": "не-тот-пароль"}
+
+    statuses = [
+        (await client.post(URL, json=wrong, headers=headers(account))).status_code for _ in range(3)
+    ]
+    assert statuses == [403, 403, 429]
+
+    response = await client.post(URL, json={"password": PASSWORD}, headers=headers(account))
+    assert response.status_code == 429
+    async with SessionLocal() as session:
+        assert await session.get(User, account.id) is not None
+
+    redis = Redis.from_url(get_settings().redis_url)
+    try:
+        await redis.delete(f"rate:account-delete:{account.id}")
+    finally:
+        await redis.aclose()
+
+
+async def test_file_error_does_not_stop_deletion(client, account, storage, monkeypatch):
+    _, files = await add_lecture(account, storage)
+    failing = files[0]
+    original = Path.unlink
+
+    def unlink(self, missing_ok=False):
+        if self == failing:
+            raise PermissionError("denied")
+        original(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    response = await client.post(URL, json={"password": PASSWORD}, headers=headers(account))
+    assert response.status_code == 204
+
+    assert failing.exists()
+    assert not any(file.exists() for file in files[1:])
+    async with SessionLocal() as session:
+        assert await session.get(User, account.id) is None
+
+
+async def test_worker_removes_files_of_deleted_account(client, account, storage):
+    lecture, files = await add_lecture(account, storage)
+    response = await client.post(URL, json={"password": PASSWORD}, headers=headers(account))
+    assert response.status_code == 204
+    for file in files[:3]:
+        file.write_bytes(b"late")
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == "missing"
+
+    assert not any(file.exists() for file in files[:3])

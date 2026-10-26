@@ -19,6 +19,17 @@ async def is_rate_limited(redis_url: str, key: str, limit: int, window_seconds: 
     return count > limit
 
 
+async def enforce_rate_limit(redis_url: str, key: str, limit: int, window_seconds: int) -> None:
+    try:
+        limited = await is_rate_limited(redis_url, key, limit, window_seconds)
+    except (OSError, RedisError) as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Сервис временно недоступен, попробуйте позже"
+        ) from error
+    if limited:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов")
+
+
 async def enforce_mail_rate_limit(request: Request, subject: str) -> None:
     settings = get_settings()
     digest = hashlib.sha256(subject.encode()).hexdigest()

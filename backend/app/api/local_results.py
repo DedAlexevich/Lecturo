@@ -19,7 +19,7 @@ from app.models import (
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import LectureOut, LocalResultIn
 from app.services.local_validation import LocalResultInvalid, validate_local_result
-from app.services.rate_limit import is_rate_limited
+from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter(prefix="/local-results", tags=["local-results"])
 
@@ -32,19 +32,12 @@ async def submit_local_result(
 ) -> LectureOut:
     settings = get_settings()
 
-    try:
-        limited = await is_rate_limited(
-            settings.redis_url,
-            f"rate:local-results:{user.id}",
-            settings.local_results_rate_limit,
-            settings.local_results_rate_window_seconds,
-        )
-    except (OSError, RedisError) as error:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Сервис временно недоступен, попробуйте позже"
-        ) from error
-    if limited:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов")
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:local-results:{user.id}",
+        settings.local_results_rate_limit,
+        settings.local_results_rate_window_seconds,
+    )
 
     try:
         validate_local_result(body, settings)
