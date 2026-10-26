@@ -1,31 +1,23 @@
 from fastapi import APIRouter, status
 
 from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import not_ready
 from app.models import AuthProvider
 from app.schemas.user import (
     AccountDeleteIn,
     EmailIdentityIn,
-    IdentityOut,
     TelegramLoginIn,
     UserOut,
 )
+from app.services import identities
 from app.services.account import confirm_deletion, delete_account
+from app.services.telegram_auth import verify_login_widget
 
 router = APIRouter(prefix="/me", tags=["me"])
 
 
 @router.get("")
 async def get_me(user: CurrentUser, session: SessionDep) -> UserOut:
-    await session.refresh(user, ["identities"])
-    return UserOut(
-        id=user.id,
-        email=user.email,
-        email_verified=user.email_verified_at is not None,
-        display_name=user.display_name,
-        ai_transfer_accepted_at=user.ai_transfer_accepted_at,
-        identities=[IdentityOut.model_validate(identity) for identity in user.identities],
-    )
+    return await identities.user_out(session, user)
 
 
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
@@ -35,20 +27,28 @@ async def delete_me(body: AccountDeleteIn, user: CurrentUser, session: SessionDe
 
 
 @router.post("/identities/telegram")
-async def link_telegram(body: TelegramLoginIn, user: CurrentUser) -> UserOut:
-    not_ready()
+async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: SessionDep) -> UserOut:
+    verify_login_widget(body)
+    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
+    await identities.link_telegram(session, user, body.id, profile)
+    return await identities.user_out(session, user)
 
 
 @router.post("/identities/email")
-async def link_email(body: EmailIdentityIn, user: CurrentUser) -> UserOut:
-    not_ready()
+async def link_email(body: EmailIdentityIn, user: CurrentUser, session: SessionDep) -> UserOut:
+    await identities.link_email(session, user, body)
+    return await identities.user_out(session, user)
 
 
 @router.delete("/identities/{provider}")
-async def unlink_identity(provider: AuthProvider, user: CurrentUser) -> UserOut:
-    not_ready()
+async def unlink_identity(
+    provider: AuthProvider, user: CurrentUser, session: SessionDep
+) -> UserOut:
+    await identities.unlink_identity(session, user, provider)
+    return await identities.user_out(session, user)
 
 
 @router.post("/consents/ai-transfer")
-async def accept_ai_transfer(user: CurrentUser) -> UserOut:
-    not_ready()
+async def accept_ai_transfer(user: CurrentUser, session: SessionDep) -> UserOut:
+    await identities.accept_ai_transfer(session, user)
+    return await identities.user_out(session, user)

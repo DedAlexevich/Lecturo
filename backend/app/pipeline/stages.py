@@ -3,15 +3,29 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Lecture, SearchChunk, TranscriptSegment
+from app.models import Lecture, SearchChunk, TranscriptSegment, User
 from app.pipeline.runner import Report
 from app.providers import get_embeddings, get_speech_to_text
 from app.services.quota import QuotaExceeded, charge_lecture
 
 CHUNK_SECONDS = 60.0
+AI_TRANSFER_REQUIRED = "Нет согласия на передачу данных на серверную обработку"
+
+
+class ConsentMissing(Exception):
+    pass
+
+
+async def require_ai_transfer(session: AsyncSession, lecture: Lecture) -> None:
+    accepted_at = await session.scalar(
+        select(User.ai_transfer_accepted_at).where(User.id == lecture.owner_id)
+    )
+    if accepted_at is None:
+        raise ConsentMissing(AI_TRANSFER_REQUIRED)
 
 
 async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) -> None:
+    await require_ai_transfer(session, lecture)
     segments = await get_speech_to_text().transcribe(
         Path(lecture.audio_path or ""), lecture.language
     )
