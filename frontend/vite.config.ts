@@ -28,6 +28,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,mjs,css,html,svg,png,ico,woff2}"],
+        globIgnores: ["**/ffmpeg-core-*"],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/files\//, /^\/media\//],
@@ -48,6 +49,9 @@ export default defineConfig({
     }),
   ],
   worker: { format: "es" },
+  optimizeDeps: {
+    exclude: ["@ffmpeg/ffmpeg"],
+  },
   server: {
     proxy: {
       "/api": "http://localhost:8000",
