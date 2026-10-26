@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
+from app.pipeline.events import publish_status
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.billing import (
     PaymentIn,
@@ -157,13 +158,18 @@ async def apply_queue_plan(body: QueuePlanIn, user: CurrentUser, session: Sessio
     except quota.QueuePlanError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
     await session.commit()
+    for lecture in planned:
+        await publish_status(lecture.id, user.id, lecture.status)
 
     for index, lecture in enumerate(planned):
         try:
             await enqueue_lecture(lecture.id)
         except (OSError, RedisError) as error:
-            await quota.return_to_waiting(session, planned[index:])
+            returned = planned[index:]
+            await quota.return_to_waiting(session, returned)
             await session.commit()
+            for waiting in returned:
+                await publish_status(waiting.id, user.id, waiting.status)
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
             ) from error
