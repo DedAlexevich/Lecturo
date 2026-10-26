@@ -1440,6 +1440,12 @@
           "200": {
             "description": "Successful Response"
           },
+          "404": {
+            "description": "Лекция не найдена"
+          },
+          "409": {
+            "description": "Расшифровки ещё нет"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1480,6 +1486,12 @@
         "responses": {
           "200": {
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Лекция не найдена"
+          },
+          "409": {
+            "description": "Расшифровки ещё нет"
           },
           "422": {
             "description": "Validation Error",
