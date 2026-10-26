@@ -1,0 +1,153 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: var(--content-width);
+  height: var(--bar-height);
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+}
+
+.logo {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.topNav {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.navLink {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.navLink:hover,
+.navLinkActive {
+  color: var(--color-text);
+}
+
+.navLinkActive {
+  font-weight: 600;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+  font-size: var(--text-sm);
+}
+
+.userName {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--color-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.textButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.textButton:hover {
+  text-decoration: underline;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+}
+
+.footer {
+  border-top: 1px solid var(--color-border);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.footerInner {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.legalLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legalLinks a {
+  text-decoration: none;
+}
+
+.legalLinks a:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.bottomNav {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .topNav {
+    display: none;
+  }
+
+  .withBottomNav {
+    padding-bottom: calc(var(--bar-height) + env(safe-area-inset-bottom));
+  }
+
+  .bottomNav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .bottomNav .navLink {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    height: var(--bar-height);
+  }
+}
