@@ -1,3 +1,5 @@
+import math
+
 from app.core.config import Settings
 from app.schemas.lecture import LocalResultIn
 
@@ -7,6 +9,16 @@ class LocalResultInvalid(Exception):
 
 
 def validate_local_result(body: LocalResultIn, settings: Settings) -> None:
+    if (
+        len(body.segments) > settings.local_max_segments
+        or len(body.chapters) > settings.local_max_chapters
+    ):
+        raise LocalResultInvalid("Слишком много сегментов или глав")
+    if any(len(s.text) > settings.local_max_text_chars for s in body.segments):
+        raise LocalResultInvalid("Слишком длинный текст сегмента")
+    items = [*body.segments, *body.chapters]
+    if not all(math.isfinite(i.start) and math.isfinite(i.end) for i in items):
+        raise LocalResultInvalid("Некорректные таймкоды")
     limit = body.duration_sec + settings.local_timecode_tolerance_sec
     previous_start = 0.0
     for segment in body.segments:

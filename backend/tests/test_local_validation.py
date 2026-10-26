@@ -59,3 +59,15 @@ def test_text_length_must_match_duration(text):
     segments = [SegmentOut(start=0.0, end=100.0, text=text)]
     with pytest.raises(LocalResultInvalid):
         validate_local_result(make_body(segments=segments), Settings())
+
+
+def test_nan_timecodes_rejected():
+    segments = [SegmentOut(start=float("nan"), end=float("nan"), text=TEXT)]
+    with pytest.raises(LocalResultInvalid):
+        validate_local_result(make_body(segments=segments), Settings())
+
+
+def test_too_many_segments_rejected():
+    segments = [SegmentOut(start=0.0, end=1.0, text=TEXT)] * 3
+    with pytest.raises(LocalResultInvalid):
+        validate_local_result(make_body(segments=segments), Settings(local_max_segments=2))
