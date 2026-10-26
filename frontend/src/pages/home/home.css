@@ -259,6 +259,18 @@
   height: 1.5rem;
 }
 
+.course-filter__placeholder {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+}
+
+.skeleton--course {
+  width: 70%;
+  height: 1.1rem;
+}
+
 .skeleton--meta {
   width: min(12rem, 45%);
   height: 1.3rem;
@@ -323,6 +335,17 @@
 
   .course-filter__note {
     padding: 0;
+  }
+
+  .course-filter__placeholder {
+    min-height: var(--tap-target);
+    padding: 0;
+  }
+
+  .skeleton--course {
+    width: 7rem;
+    height: var(--tap-target);
+    border-radius: var(--radius-pill);
   }
 
   .lecture-list {

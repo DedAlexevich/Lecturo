@@ -12,16 +12,27 @@ type CourseFilterProps = {
 export function CourseFilter({ courses, selected, failed, onRetry }: CourseFilterProps) {
   const listRef = useRef<HTMLUListElement>(null);
 
+  const hasList = courses !== undefined && courses.length > 0;
+
   useEffect(() => {
     listRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selected, courses]);
+  }, [selected, hasList]);
 
   return (
     <nav className="course-filter" aria-labelledby="course-filter-title">
       <h2 id="course-filter-title" className="course-filter__title">
         Курсы
       </h2>
-      {courses && courses.length > 0 && (
+      {courses === undefined && !failed && (
+        <ul className="course-filter__list" aria-busy="true" aria-label="Загружаем курсы">
+          {[0, 1, 2].map((index) => (
+            <li key={index} className="course-filter__placeholder">
+              <span className="skeleton skeleton--course" />
+            </li>
+          ))}
+        </ul>
+      )}
+      {hasList && (
         <ul ref={listRef} className="course-filter__list">
           <li>
             <Link to="/" className="course-filter__item" aria-current={selected === null ? "page" : undefined}>
