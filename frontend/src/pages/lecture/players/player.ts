@@ -19,6 +19,7 @@ export function usePlayer() {
 
   const onReady = useCallback((player: Player | null) => {
     playerRef.current = player;
+    if (!player) setCurrentTime(0);
     if (player && pendingSeek.current !== null) {
       player.seek(pendingSeek.current);
       pendingSeek.current = null;
