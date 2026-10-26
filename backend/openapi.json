@@ -298,13 +298,15 @@
             "HTTPBearer": []
           }
         ]
-      },
-      "delete": {
+      }
+    },
+    "/api/v1/me/delete": {
+      "post": {
         "tags": [
           "me"
         ],
         "summary": "Delete Me",
-        "operationId": "delete_me_api_v1_me_delete",
+        "operationId": "delete_me_api_v1_me_delete_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -473,6 +475,32 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/me/consents/ai-transfer": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Accept Ai Transfer",
+        "operationId": "accept_ai_transfer_api_v1_me_consents_ai_transfer_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/telegram-webapp": {
@@ -2120,6 +2148,27 @@
               }
             ],
             "title": "Password"
+          },
+          "telegram": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TelegramLoginIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "telegram_init_data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Init Data"
           }
         },
         "type": "object",
@@ -2853,6 +2902,10 @@
             "type": "string",
             "title": "Product Code"
           },
+          "accept_offer": {
+            "type": "boolean",
+            "title": "Accept Offer"
+          },
           "return_url": {
             "anyOf": [
               {
@@ -2867,7 +2920,8 @@
         },
         "type": "object",
         "required": [
-          "product_code"
+          "product_code",
+          "accept_offer"
         ],
         "title": "PaymentIn"
       },
@@ -3006,7 +3060,7 @@
           },
           "lectures": {
             "items": {
-              "$ref": "#/components/schemas/LectureOut"
+              "$ref": "#/components/schemas/PublicLectureSummary"
             },
             "type": "array",
             "title": "Lectures"
@@ -3107,6 +3161,54 @@
           "summary"
         ],
         "title": "PublicLectureOut"
+      },
+      "PublicLectureSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          },
+          "processed_locally": {
+            "type": "boolean",
+            "title": "Processed Locally"
+          },
+          "share_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "duration_sec",
+          "processed_locally",
+          "share_token"
+        ],
+        "title": "PublicLectureSummary"
       },
       "PublicShareOut": {
         "properties": {
@@ -3647,6 +3749,18 @@
             "type": "string",
             "title": "Display Name"
           },
+          "ai_transfer_accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Transfer Accepted At"
+          },
           "identities": {
             "items": {
               "$ref": "#/components/schemas/IdentityOut"
@@ -3661,6 +3775,7 @@
           "email",
           "email_verified",
           "display_name",
+          "ai_transfer_accepted_at",
           "identities"
         ],
         "title": "UserOut"

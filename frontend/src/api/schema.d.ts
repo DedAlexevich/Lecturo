@@ -151,8 +151,24 @@ export interface paths {
         get: operations["get_me_api_v1_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         /** Delete Me */
-        delete: operations["delete_me_api_v1_me_delete"];
+        post: operations["delete_me_api_v1_me_delete_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -204,6 +220,23 @@ export interface paths {
         post?: never;
         /** Unlink Identity */
         delete: operations["unlink_identity_api_v1_me_identities__provider__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/consents/ai-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept Ai Transfer */
+        post: operations["accept_ai_transfer_api_v1_me_consents_ai_transfer_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -703,6 +736,9 @@ export interface components {
         AccountDeleteIn: {
             /** Password */
             password?: string | null;
+            telegram?: components["schemas"]["TelegramLoginIn"] | null;
+            /** Telegram Init Data */
+            telegram_init_data?: string | null;
         };
         /**
          * AuthProvider
@@ -983,6 +1019,8 @@ export interface components {
         PaymentIn: {
             /** Product Code */
             product_code: string;
+            /** Accept Offer */
+            accept_offer: boolean;
             /** Return Url */
             return_url?: string | null;
         };
@@ -1043,7 +1081,7 @@ export interface components {
             /** Description */
             description: string;
             /** Lectures */
-            lectures: components["schemas"]["LectureOut"][];
+            lectures: components["schemas"]["PublicLectureSummary"][];
         };
         /** PublicLectureOut */
         PublicLectureOut: {
@@ -1067,6 +1105,22 @@ export interface components {
             /** Chapters */
             chapters: components["schemas"]["ChapterOut"][];
             summary: components["schemas"]["SummaryOut"] | null;
+        };
+        /** PublicLectureSummary */
+        PublicLectureSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Duration Sec */
+            duration_sec: number | null;
+            /** Processed Locally */
+            processed_locally: boolean;
+            /** Share Token */
+            share_token: string | null;
         };
         /** PublicShareOut */
         PublicShareOut: {
@@ -1265,6 +1319,8 @@ export interface components {
             email_verified: boolean;
             /** Display Name */
             display_name: string;
+            /** Ai Transfer Accepted At */
+            ai_transfer_accepted_at: string | null;
             /** Identities */
             identities: components["schemas"]["IdentityOut"][];
         };
@@ -1566,7 +1622,7 @@ export interface operations {
             };
         };
     };
-    delete_me_api_v1_me_delete: {
+    delete_me_api_v1_me_delete_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1690,6 +1746,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_ai_transfer_api_v1_me_consents_ai_transfer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
                 };
             };
         };
