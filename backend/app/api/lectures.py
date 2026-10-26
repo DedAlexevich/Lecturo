@@ -2,12 +2,21 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from redis.exceptions import RedisError
-from sqlalchemy import select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.orm import selectinload
 
+from app.api.courses import get_own_course
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
-from app.models import Lecture, LectureStatus, ProcessingStep, StepStatus
+from app.models import (
+    Lecture,
+    LectureStatus,
+    ProcessingStep,
+    SourceType,
+    StepStatus,
+    course_lectures,
+)
+from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import (
     LectureDetail,
@@ -50,8 +59,49 @@ async def get_lecture(
 
 
 @router.post("/link", status_code=status.HTTP_201_CREATED)
-async def add_link(body: LinkIn, user: CurrentUser) -> LectureOut:
-    not_ready()
+async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> LectureOut:
+    if body.course_id is not None:
+        await get_own_course(session, body.course_id, user)
+    url = str(body.url)
+    try:
+        link = await inspect_link(url)
+    except LinkError as error:
+        raise HTTPException(422, str(error)) from error
+
+    lecture = Lecture(
+        owner_id=user.id,
+        title=(body.title or link.title or "Лекция по ссылке")[:300],
+        source_type=SourceType.link,
+        source_url=url,
+        embed_url=link.embed_url,
+        duration_sec=link.duration,
+        status=LectureStatus.queued,
+    )
+    session.add(lecture)
+    await session.flush()
+    if body.course_id is not None:
+        next_position = (
+            select(func.coalesce(func.max(course_lectures.c.position) + 1, 0))
+            .where(course_lectures.c.course_id == body.course_id)
+            .scalar_subquery()
+        )
+        await session.execute(
+            insert(course_lectures).values(
+                course_id=body.course_id, lecture_id=lecture.id, position=next_position
+            )
+        )
+    await session.commit()
+    await session.refresh(lecture)
+
+    try:
+        await enqueue_lecture(lecture.id)
+    except (OSError, RedisError) as error:
+        lecture.status = LectureStatus.failed
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
+        ) from error
+    return LectureOut.model_validate(lecture)
 
 
 @router.patch("/{lecture_id}")
