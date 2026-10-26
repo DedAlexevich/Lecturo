@@ -1,0 +1,63 @@
+{
+  "done": true,
+  "response": {
+    "@type": "type.googleapis.com/yandex.cloud.ai.stt.v2.LongRunningRecognitionResponse",
+    "chunks": [
+      {
+        "alternatives": [
+          {
+            "words": [
+              {"startTime": "0.879999999s", "endTime": "1.159999999s", "word": "сегодня", "confidence": 1},
+              {"startTime": "1.219999999s", "endTime": "1.539999999s", "word": "разберём", "confidence": 1},
+              {"startTime": "1.599999999s", "endTime": "2.399999999s", "word": "производные", "confidence": 1}
+            ],
+            "text": "Сегодня разберём производные.",
+            "confidence": 1
+          }
+        ],
+        "channelTag": "1"
+      },
+      {
+        "alternatives": [
+          {
+            "words": [],
+            "text": "",
+            "confidence": 1
+          }
+        ],
+        "channelTag": "1"
+      },
+      {
+        "alternatives": [
+          {
+            "words": [
+              {"startTime": "3.159999999s", "endTime": "3.519999999s", "word": "начнём", "confidence": 1},
+              {"startTime": "3.579999999s", "endTime": "3.679999999s", "word": "с", "confidence": 1},
+              {"startTime": "3.739999999s", "endTime": "4.659999999s", "word": "определения", "confidence": 1}
+            ],
+            "text": "Начнём с определения.",
+            "confidence": 1
+          }
+        ],
+        "channelTag": "1"
+      },
+      {
+        "alternatives": [
+          {
+            "words": [
+              {"startTime": "65.3s", "endTime": "65.9s", "word": "пример", "confidence": 1},
+              {"startTime": "66s", "endTime": "66.42s", "word": "первый", "confidence": 1}
+            ],
+            "text": "Пример первый.",
+            "confidence": 1
+          }
+        ],
+        "channelTag": "1"
+      }
+    ]
+  },
+  "id": "e03sup6d5h7rq574ht8g",
+  "createdAt": "2026-10-26T10:15:21Z",
+  "createdBy": "ajes08feato88ehbbhqq",
+  "modifiedAt": "2026-10-26T10:15:48Z"
+}
