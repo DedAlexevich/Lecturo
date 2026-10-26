@@ -31,6 +31,10 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - storage:/data/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 5s
+      retries: 20
     depends_on:
       db:
         condition: service_healthy
@@ -84,9 +88,12 @@ services:
       - storage:/srv/storage:ro
       - caddy_data:/data
     depends_on:
-      - api
-      - frontend
-      - tusd
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+      tusd:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
