@@ -35,7 +35,7 @@ function ConfirmEmail({ token }: { token: string }) {
     return (
       <AuthLayout title="Не удалось подтвердить почту" lead={messageOf(error)}>
         <div className="auth__actions">
-          <Link to="/account">
+          <Link to="/verify-email">
             <Button variant="secondary">Запросить новое письмо</Button>
           </Link>
         </div>

@@ -40,7 +40,7 @@ export function RegisterPage() {
         onError: (error) => {
           const fields = fieldErrorsOf(error);
           setErrors(fields);
-          if (Object.keys(fields).length === 0) setFormError(messageOf(error));
+          if (Object.values(fields).length === 0) setFormError(messageOf(error));
         },
       },
     );
@@ -106,9 +106,9 @@ export function RegisterPage() {
             onChange={(event) => setAccepted(event.target.checked)}
             label={
               <>
-                Принимаю <Link to="/legal/terms" target="_blank">пользовательское соглашение</Link>,{" "}
-                <Link to="/legal/privacy" target="_blank">политику обработки данных</Link> и{" "}
-                <Link to="/legal/personal-data-consent" target="_blank">согласие на обработку персональных данных</Link>
+                Принимаю <Link to="/legal/terms" target="_blank" rel="noopener noreferrer">пользовательское соглашение</Link>,{" "}
+                <Link to="/legal/privacy" target="_blank" rel="noopener noreferrer">политику обработки данных</Link> и{" "}
+                <Link to="/legal/personal-data-consent" target="_blank" rel="noopener noreferrer">согласие на обработку персональных данных</Link>
               </>
             }
           />

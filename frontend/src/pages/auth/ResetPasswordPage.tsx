@@ -26,7 +26,7 @@ function RequestReset() {
       onError: (error) => {
         const fields = fieldErrorsOf(error);
         setErrors(fields);
-        if (Object.keys(fields).length === 0) setFormError(messageOf(error));
+        if (Object.values(fields).length === 0) setFormError(messageOf(error));
       },
     });
   }
@@ -99,7 +99,7 @@ function ConfirmReset({ token }: { token: string }) {
         onError: (error) => {
           const fields = fieldErrorsOf(error);
           setErrors(fields);
-          if (Object.keys(fields).length === 0) setFormError(messageOf(error));
+          if (Object.values(fields).length === 0) setFormError(messageOf(error));
         },
       },
     );

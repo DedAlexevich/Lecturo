@@ -36,7 +36,7 @@ export function LoginPage() {
         onError: (error) => {
           const fields = fieldErrorsOf(error);
           setErrors(fields);
-          if (Object.keys(fields).length === 0) setFormError(messageOf(error));
+          if (Object.values(fields).length === 0) setFormError(messageOf(error));
         },
       },
     );

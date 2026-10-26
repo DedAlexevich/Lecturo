@@ -21,7 +21,7 @@ export function fieldErrorsOf(error: unknown): FieldErrors {
   const result: FieldErrors = {};
   for (const item of detail as ValidationDetail[]) {
     const field = String(item.loc[item.loc.length - 1]);
-    result[field] = fieldMessages[field]?.default ?? item.msg;
+    if (field in fieldMessages) result[field] = fieldMessages[field].default;
   }
   return result;
 }
