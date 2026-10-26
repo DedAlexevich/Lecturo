@@ -1,4 +1,4 @@
-import { sameWindow, type EmbedProvider } from "./embed";
+import { sameWindow, withTime, type EmbedProvider } from "./embed";
 
 type VkMessage = {
   event?: string;
@@ -22,8 +22,11 @@ export const vk: EmbedProvider = {
     if (start.autoplay) src.searchParams.set("autoplay", "1");
     return src.toString();
   },
+  linkAt(sourceUrl, seconds) {
+    return withTime(sourceUrl, "t", seconds >= 1 ? vkTimecode(seconds) : null);
+  },
   connect(iframe, { onReady, onTimeUpdate }) {
-    let target = "*";
+    let target = new URL(iframe.src).origin;
     let time = 0;
 
     const send = (message: Record<string, unknown>) => iframe.contentWindow?.postMessage(message, target);

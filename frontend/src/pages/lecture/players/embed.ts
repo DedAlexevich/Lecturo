@@ -17,6 +17,7 @@ export type EmbedProvider = {
   name: string;
   hosts: string[];
   buildSrc: (url: URL, start: EmbedStart) => string;
+  linkAt: (sourceUrl: string, seconds: number) => string;
   connect: (iframe: HTMLIFrameElement, handlers: EmbedHandlers) => () => void;
 };
 
@@ -43,4 +44,16 @@ export function resolveEmbed(embedUrl: string | null): Embed | null {
 
 export function sameWindow(iframe: HTMLIFrameElement, event: MessageEvent) {
   return iframe.contentWindow !== null && event.source === iframe.contentWindow;
+}
+
+export function withTime(sourceUrl: string, name: string, value: string | null) {
+  let url: URL;
+  try {
+    url = new URL(sourceUrl);
+  } catch {
+    return sourceUrl;
+  }
+  if (value === null) url.searchParams.delete(name);
+  else url.searchParams.set(name, value);
+  return url.toString();
 }

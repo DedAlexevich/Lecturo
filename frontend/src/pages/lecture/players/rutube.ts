@@ -1,4 +1,4 @@
-import { sameWindow, type EmbedProvider } from "./embed";
+import { sameWindow, withTime, type EmbedProvider } from "./embed";
 
 type RutubeMessage = {
   type?: string;
@@ -21,7 +21,11 @@ export const rutube: EmbedProvider = {
   buildSrc(url, start) {
     const src = new URL(url);
     if (start.seconds > 0) src.searchParams.set("t", String(Math.floor(start.seconds)));
+    if (start.autoplay) src.searchParams.set("autoplay", "1");
     return src.toString();
+  },
+  linkAt(sourceUrl, seconds) {
+    return withTime(sourceUrl, "t", seconds >= 1 ? String(Math.floor(seconds)) : null);
   },
   connect(iframe, { onReady, onTimeUpdate }) {
     const origin = new URL(iframe.src).origin;

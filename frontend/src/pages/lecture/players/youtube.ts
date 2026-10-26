@@ -1,4 +1,4 @@
-import type { EmbedProvider } from "./embed";
+import { withTime, type EmbedProvider } from "./embed";
 
 const API_SRC = "https://www.youtube.com/iframe_api";
 const POLL_INTERVAL_MS = 250;
@@ -8,6 +8,7 @@ type YouTubePlayer = {
   playVideo: () => void;
   pauseVideo: () => void;
   getCurrentTime: () => number;
+  destroy: () => void;
 };
 
 type YouTubeApi = {
@@ -29,19 +30,14 @@ let apiPromise: Promise<YouTubeApi> | null = null;
 function loadApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT as YouTubeApi);
   if (apiPromise) return apiPromise;
-  apiPromise = new Promise<YouTubeApi>((resolve, reject) => {
-    const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve(window.YT as YouTubeApi);
-    };
+  apiPromise = new Promise<YouTubeApi>((resolve) => {
+    window.onYouTubeIframeAPIReady = () => resolve(window.YT as YouTubeApi);
     const script = document.createElement("script");
     script.src = API_SRC;
     script.async = true;
     script.onerror = () => {
       script.remove();
       apiPromise = null;
-      reject(new Error("YouTube API unavailable"));
     };
     document.head.append(script);
   });
@@ -61,42 +57,45 @@ export const youtube: EmbedProvider = {
     if (start.autoplay) src.searchParams.set("autoplay", "1");
     return src.toString();
   },
+  linkAt(sourceUrl, seconds) {
+    return withTime(sourceUrl, "t", seconds >= 1 ? String(Math.floor(seconds)) : null);
+  },
   connect(iframe, { onReady, onTimeUpdate }) {
     let active = true;
     let timer: number | undefined;
+    let player: YouTubePlayer | null = null;
 
-    loadApi()
-      .then((api) => {
-        if (!active) return;
-        new api.Player(iframe, {
-          events: {
-            onReady: ({ target }) => {
-              if (!active) return;
-              let reported = -1;
-              timer = window.setInterval(() => {
-                const time = target.getCurrentTime();
-                if (time === reported) return;
-                reported = time;
-                onTimeUpdate(time);
-              }, POLL_INTERVAL_MS);
-              onReady({
-                seek: (seconds) => {
-                  target.seekTo(Math.max(0, seconds), true);
-                  onTimeUpdate(Math.max(0, seconds));
-                },
-                play: () => target.playVideo(),
-                pause: () => target.pauseVideo(),
-                getCurrentTime: () => target.getCurrentTime(),
-              });
-            },
+    void loadApi().then((api) => {
+      if (!active) return;
+      player = new api.Player(iframe, {
+        events: {
+          onReady: ({ target }) => {
+            if (!active) return;
+            let reported = -1;
+            timer = window.setInterval(() => {
+              const time = target.getCurrentTime();
+              if (time === reported) return;
+              reported = time;
+              onTimeUpdate(time);
+            }, POLL_INTERVAL_MS);
+            onReady({
+              seek: (seconds) => {
+                target.seekTo(Math.max(0, seconds), true);
+                onTimeUpdate(Math.max(0, seconds));
+              },
+              play: () => target.playVideo(),
+              pause: () => target.pauseVideo(),
+              getCurrentTime: () => target.getCurrentTime(),
+            });
           },
-        });
-      })
-      .catch(() => undefined);
+        },
+      });
+    });
 
     return () => {
       active = false;
       window.clearInterval(timer);
+      player?.destroy();
     };
   },
 };
