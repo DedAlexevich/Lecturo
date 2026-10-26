@@ -318,8 +318,24 @@ async def test_malformed_notification_is_rejected(client, fake, body):
         ({"value": "1.001", "currency": "RUB"}, None),
         ({"value": "299.00", "currency": "USD"}, None),
         ({"value": "abc", "currency": "RUB"}, None),
+        ({"value": "Infinity", "currency": "RUB"}, None),
+        ({"value": "NaN", "currency": "RUB"}, None),
         (None, None),
     ],
 )
 def test_parse_amount(amount, expected):
     assert yookassa.parse_amount(amount) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-10-26T10:00:00.000Z", datetime(2026, 10, 26, 10, tzinfo=UTC)),
+        ("2026-10-26T10:00:00", datetime(2026, 10, 26, 10, tzinfo=UTC)),
+        ("2026-10-26T13:00:00+03:00", datetime(2026, 10, 26, 10, tzinfo=UTC)),
+        ("вчера", None),
+        (None, None),
+    ],
+)
+def test_parse_time(value, expected):
+    assert yookassa.parse_time(value) == expected

@@ -227,14 +227,19 @@ def parse_amount(amount: Any) -> int | None:
         kopecks = Decimal(str(amount.get("value"))) * 100
     except InvalidOperation:
         return None
-    return int(kopecks) if kopecks == kopecks.to_integral_value() else None
+    if not kopecks.is_finite() or kopecks != kopecks.to_integral_value():
+        return None
+    return int(kopecks)
 
 
 def parse_time(value: Any) -> datetime | None:
     try:
-        return datetime.fromisoformat(value) if isinstance(value, str) else None
+        parsed = datetime.fromisoformat(value) if isinstance(value, str) else None
     except ValueError:
         return None
+    if parsed is not None and parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 async def grant_subscription(
