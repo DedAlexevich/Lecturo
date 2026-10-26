@@ -6,7 +6,7 @@ import { formatRubles, formatShortDate } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 
 const statusLabels: Record<Payment["status"], string> = {
-  pending: "Ждёт оплаты",
+  pending: "Не оплачен",
   succeeded: "Оплачен",
   canceled: "Отменён",
 };
@@ -52,13 +52,12 @@ export function PaymentsSection() {
                 <td>{titles.get(payment.product_code) ?? payment.product_code}</td>
                 <td className={styles.numeric}>{formatRubles(payment.amount_kopecks / 100)}</td>
                 <td>
-                  <span className={statusClasses[payment.status]}>{statusLabels[payment.status]}</span>
-                  {payment.status === "pending" && payment.confirmation_url && (
-                    <>
-                      {" "}
+                  <span className={styles.status}>
+                    <span className={statusClasses[payment.status]}>{statusLabels[payment.status]}</span>
+                    {payment.status === "pending" && payment.confirmation_url && (
                       <a href={payment.confirmation_url}>Оплатить</a>
-                    </>
-                  )}
+                    )}
+                  </span>
                 </td>
               </tr>
             ))}
