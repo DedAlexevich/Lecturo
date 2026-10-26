@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, field_validator
 
 from app.models import AuthProvider
 from app.schemas.common import Schema
@@ -74,3 +74,20 @@ class AccountDeleteIn(Schema):
     password: str | None = None
     telegram: TelegramLoginIn | None = None
     telegram_init_data: str | None = None
+
+
+class ProfileUpdateIn(Schema):
+    display_name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Имя не может быть пустым")
+        return value
+
+
+class PasswordChangeIn(Schema):
+    current_password: str | None = None
+    new_password: str = Field(min_length=8, max_length=128)

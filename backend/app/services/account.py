@@ -8,15 +8,16 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import AuthIdentity, AuthProvider, Lecture, Payment, User
+from app.models import AuthIdentity, AuthProvider, AuthToken, AuthTokenKind, Lecture, Payment, User
 from app.schemas.user import AccountDeleteIn
-from app.services.auth import verify_password
+from app.services.auth import hash_password, verify_password
 from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
 
 logger = logging.getLogger(__name__)
 
 CONFIRMATION_REQUIRED = "Подтвердите удаление паролем или данными Telegram"
 CONFIRMATION_FAILED = "Подтверждение не прошло"
+WRONG_PASSWORD = "Неверный текущий пароль"
 
 
 async def has_telegram_identity(session: AsyncSession, user: User, telegram_id: int) -> bool:
@@ -44,6 +45,28 @@ async def confirm_deletion(session: AsyncSession, user: User, body: AccountDelet
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, CONFIRMATION_REQUIRED)
     if not await has_telegram_identity(session, user, telegram_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, CONFIRMATION_FAILED)
+
+
+async def update_display_name(session: AsyncSession, user: User, display_name: str) -> None:
+    user.display_name = display_name
+    await session.commit()
+
+
+async def change_password(
+    session: AsyncSession, user: User, current_password: str | None, new_password: str
+) -> None:
+    if user.password_hash:
+        if current_password is None or not verify_password(user.password_hash, current_password):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, WRONG_PASSWORD)
+    user.password_hash = hash_password(new_password)
+    await session.execute(
+        delete(AuthToken).where(
+            AuthToken.user_id == user.id,
+            AuthToken.kind == AuthTokenKind.reset_password,
+            AuthToken.used_at.is_(None),
+        )
+    )
+    await session.commit()
 
 
 def lecture_files(lecture_id: uuid.UUID, paths: list[str | None]) -> set[Path]:
