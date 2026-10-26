@@ -11,6 +11,15 @@
   border-color: var(--color-border-strong);
 }
 
+.video-player:focus {
+  outline: none;
+}
+
+.video-player:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 .video-player__screen {
   position: relative;
   aspect-ratio: 16 / 9;

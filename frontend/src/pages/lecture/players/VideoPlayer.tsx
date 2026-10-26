@@ -98,7 +98,10 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+    const target = event.target;
+    if (target instanceof HTMLSelectElement) return;
+    if (target instanceof HTMLButtonElement && (event.key === " " || event.key === "Enter")) return;
+    if (target instanceof HTMLInputElement && event.key.startsWith("Arrow")) return;
     const element = video();
     if (!element || event.altKey || event.ctrlKey || event.metaKey) return;
     const actions: Record<string, () => void> = {
@@ -111,7 +114,6 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
     };
     const action = actions[event.key];
     if (!action) return;
-    if (event.key === " " && event.target instanceof HTMLButtonElement) return;
     event.preventDefault();
     action();
   };
@@ -122,6 +124,9 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
     <div
       ref={rootRef}
       className={fullscreen ? "video-player video-player--fullscreen" : "video-player"}
+      tabIndex={0}
+      role="group"
+      aria-label={`Плеер: ${title}`}
       onKeyDown={onKeyDown}
     >
       <div className="video-player__screen">
@@ -132,7 +137,10 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
           preload="metadata"
           playsInline
           aria-label={title}
-          onClick={togglePlay}
+          onClick={() => {
+            rootRef.current?.focus({ preventScroll: true });
+            togglePlay();
+          }}
           onLoadedMetadata={onLoadedMetadata}
           onDurationChange={(event) => setDuration(event.currentTarget.duration)}
           onTimeUpdate={(event) => {
