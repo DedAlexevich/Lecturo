@@ -14,11 +14,12 @@ from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.courses import get_own_course
-from app.api.lectures import add_to_course
+from app.api.lectures import QUEUE_UNAVAILABLE, add_to_course
 from app.core.config import get_settings
 from app.core.deps import SessionDep
 from app.core.security import decode_access_token
 from app.models import Lecture, LectureStatus, SourceType, User
+from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
 from app.pipeline.tasks import enqueue_lecture
 
@@ -177,9 +178,8 @@ async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     except (OSError, RedisError) as error:
         lecture.status = LectureStatus.failed
         await session.commit()
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
-        ) from error
+        await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
     return {"HTTPResponse": json_response(status.HTTP_200_OK, {"lecture_id": str(lecture.id)})}
 
 

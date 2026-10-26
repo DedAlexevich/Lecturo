@@ -1,0 +1,96 @@
+.add-lecture {
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.add-lecture__form,
+.add-lecture__upload {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.add-lecture__drop {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  align-content: center;
+  min-height: 7.5rem;
+  padding: var(--space-5);
+  background: var(--color-surface-sunken);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.add-lecture__drop:hover,
+.add-lecture__drop--active {
+  border-color: var(--color-border-strong);
+}
+
+.add-lecture__drop--active {
+  background: var(--color-accent-soft);
+}
+
+.add-lecture__drop:focus-within {
+  border-color: var(--color-focus);
+}
+
+.add-lecture__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.add-lecture__input[aria-invalid="true"] + .add-lecture__drop-title {
+  color: var(--color-danger);
+}
+
+.add-lecture__drop-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.add-lecture__drop-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.add-lecture__file-name {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.add-lecture__note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.add-lecture__error {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.add-lecture__course {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.add-lecture__select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.add-lecture__text-button {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--color-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

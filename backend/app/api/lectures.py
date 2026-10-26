@@ -18,6 +18,7 @@ from app.models import (
     course_lectures,
 )
 from app.pipeline.download import LinkError, inspect_link
+from app.pipeline.events import publish_status
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import (
     LectureDetail,
@@ -29,6 +30,8 @@ from app.schemas.lecture import (
 )
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
+
+QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
 
 
 async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
@@ -104,9 +107,8 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
     except (OSError, RedisError) as error:
         lecture.status = LectureStatus.failed
         await session.commit()
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
-        ) from error
+        await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
     return LectureOut.model_validate(lecture)
 
 
@@ -174,9 +176,8 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
             update(Lecture).where(Lecture.id == lecture_id).values(status=LectureStatus.failed)
         )
         await session.commit()
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
-        ) from error
+        await publish_status(lecture_id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
 
     lecture = await session.scalar(
         select(Lecture)

@@ -2,6 +2,11 @@
 
 encode gzip
 
+@tusd_hooks path /api/v1/uploads/hooks /api/v1/uploads/hooks/*
+handle @tusd_hooks {
+	respond 404
+}
+
 handle /api/* {
 	reverse_proxy api:8000
 }
