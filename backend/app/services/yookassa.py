@@ -98,7 +98,7 @@ def format_amount(kopecks: int) -> dict[str, str]:
 def payment_request(
     payment: Payment,
     product: ProductOut,
-    email: str | None,
+    email: str,
     return_url: str,
     settings: Settings,
 ) -> dict[str, Any]:
@@ -164,7 +164,7 @@ async def create_payment(
     settings: Settings,
 ) -> Payment:
     user_id, email = user.id, user.email
-    if settings.yookassa_receipt and not email:
+    if not email:
         raise PaymentError("Для чека нужен email: укажите его в профиле")
     payment = await find_by_key(session, user_id, idempotence_key)
     if payment is None:
