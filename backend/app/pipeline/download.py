@@ -95,7 +95,10 @@ def build_embed_url(url: str) -> str | None:
 
 
 async def ensure_public_host(url: str) -> None:
-    host = urlparse(url).hostname
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise LinkError("Поддерживаются только ссылки http и https")
+    host = parsed.hostname
     try:
         addresses = await asyncio.get_running_loop().getaddrinfo(host, None)
     except socket.gaierror as error:
@@ -134,6 +137,8 @@ async def probe_duration(url: str) -> float | None:
         "ffprobe",
         "-v",
         "error",
+        "-protocol_whitelist",
+        "http,https,tls,tcp",
         "-show_entries",
         "format=duration",
         "-of",
@@ -157,9 +162,8 @@ async def probe_duration(url: str) -> float | None:
 async def inspect_link(url: str) -> LinkInfo:
     await ensure_public_host(url)
     if is_yandex_disk(url):
-        name, href = await resolve_yandex_disk(url)
-        title, embed_url = Path(name).stem, None
-        duration = await probe_duration(href)
+        name, media_url = await resolve_yandex_disk(url)
+        title, embed_url, duration = Path(name).stem, None, None
     else:
         try:
             info = await asyncio.to_thread(extract_info, url)
@@ -169,8 +173,11 @@ async def inspect_link(url: str) -> LinkInfo:
             raise LinkError("Нужна ссылка на одно видео, а не на плейлист")
         if info.get("is_live"):
             raise LinkError("Прямые трансляции не поддерживаются")
-        title, embed_url = info.get("title"), build_embed_url(url)
-        duration = info.get("duration") or await probe_duration(info.get("url") or url)
+        title, embed_url, duration = info.get("title"), build_embed_url(url), info.get("duration")
+        media_url = info.get("url") or url
+    if not duration:
+        await ensure_public_host(media_url)
+        duration = await probe_duration(media_url)
     if not duration:
         raise LinkError("Не удалось определить длительность видео")
     if duration > MAX_DURATION_SEC:
@@ -202,6 +209,7 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     url = lecture.source_url or ""
     if is_yandex_disk(url):
         _, url = await resolve_yandex_disk(url)
+    await ensure_public_host(url)
     audio_dir = get_settings().storage_dir / "audio"
     await asyncio.to_thread(audio_dir.mkdir, parents=True, exist_ok=True)
     progress = {"fraction": 0.0}

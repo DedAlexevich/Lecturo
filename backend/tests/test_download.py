@@ -1,5 +1,6 @@
 import functools
 import uuid
+import wave
 
 import httpx
 import pytest
@@ -49,10 +50,13 @@ def test_build_embed_url(url, expected):
 
 @pytest.fixture
 def public_host(monkeypatch):
+    checked = []
+
     async def allow(url):
-        pass
+        checked.append(url)
 
     monkeypatch.setattr(download, "ensure_public_host", allow)
+    return checked
 
 
 def fake_info(monkeypatch, **info):
@@ -91,6 +95,7 @@ async def test_inspect_link_probes_duration_of_direct_file(public_host, monkeypa
     assert link.duration == 1800.5
     assert link.embed_url is None
     assert probed == ["https://files.lecturo.test/lecture.mp4"]
+    assert public_host == ["https://files.lecturo.test/lecture.mp4"] * 2
 
 
 async def test_inspect_link_rejects_unknown_duration(public_host, monkeypatch):
@@ -118,6 +123,49 @@ async def test_inspect_link_rejects_live_and_playlists(public_host, monkeypatch)
 async def test_ensure_public_host_rejects_internal_addresses():
     with pytest.raises(LinkError, match="внутреннюю сеть"):
         await download.ensure_public_host("http://127.0.0.1:6379/")
+
+
+@pytest.mark.parametrize(
+    ("media_url", "message"),
+    [("http://10.0.0.5/lecture.mp4", "внутреннюю сеть"), ("file:///etc/passwd", "http и https")],
+)
+async def test_inspect_link_checks_media_url_before_probe(monkeypatch, media_url, message):
+    fake_info(monkeypatch, title="lecture", url=media_url)
+    probed = []
+
+    async def probe(url):
+        probed.append(url)
+        return 60.0
+
+    monkeypatch.setattr(download, "probe_duration", probe)
+
+    with pytest.raises(LinkError, match=message):
+        await inspect_link("http://93.184.216.34/lecture")
+    assert probed == []
+
+
+async def test_probe_duration_does_not_read_local_files(tmp_path):
+    path = tmp_path / "lecture.wav"
+    with wave.open(str(path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b"\0\0" * 8000)
+
+    assert await download.probe_duration(str(path)) is None
+    assert await download.probe_duration(f"file:{path}") is None
+
+
+async def test_download_step_rejects_internal_link():
+    lecture = Lecture(
+        id=uuid.uuid4(),
+        title="Матанализ",
+        source_type=SourceType.link,
+        source_url="http://127.0.0.1:8000/lecture.mp4",
+    )
+
+    with pytest.raises(LinkError, match="внутреннюю сеть"):
+        await download.download(None, lecture, None)
 
 
 def disk_transport(meta: dict, requests: list[str]) -> httpx.MockTransport:
@@ -197,7 +245,7 @@ async def test_inspect_link_for_yandex_disk(public_host, monkeypatch):
     assert link.embed_url is None
 
 
-async def test_download_saves_audio_path(monkeypatch, tmp_path):
+async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     download.get_settings.cache_clear()
     calls = []
@@ -225,5 +273,6 @@ async def test_download_saves_audio_path(monkeypatch, tmp_path):
         download.get_settings.cache_clear()
 
     assert calls == ["https://vkvideo.ru/video-1_2"]
+    assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
     assert reported[-1] == 1.0
