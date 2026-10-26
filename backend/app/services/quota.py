@@ -49,6 +49,22 @@ async def subscription_until(
     )
 
 
+async def has_subscription(session: AsyncSession, user: User, now: datetime | None = None) -> bool:
+    return await subscription_until(session, user.id, now or datetime.now(UTC)) is not None
+
+
+async def video_retention_days(
+    session: AsyncSession,
+    user: User,
+    now: datetime | None = None,
+    settings: Settings | None = None,
+) -> int:
+    settings = settings or get_settings()
+    if await has_subscription(session, user, now):
+        return settings.subscription_video_retention_days
+    return settings.free_video_retention_days
+
+
 async def get_quota(
     session: AsyncSession,
     user: User,
