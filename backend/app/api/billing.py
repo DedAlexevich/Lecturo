@@ -132,7 +132,7 @@ async def yookassa_webhook(
     return {"status": "ok"}
 
 
-async def waiting_out(session: SessionDep, user: CurrentUser) -> WaitingOut:
+async def waiting_out(user: CurrentUser, session: SessionDep) -> WaitingOut:
     lectures = await quota.list_waiting(session, user.id)
     result = await quota.get_quota(session, user)
     return WaitingOut(
@@ -144,7 +144,7 @@ async def waiting_out(session: SessionDep, user: CurrentUser) -> WaitingOut:
 
 @router.get("/waiting")
 async def get_waiting(user: CurrentUser, session: SessionDep) -> WaitingOut:
-    result = await waiting_out(session, user)
+    result = await waiting_out(user, session)
     await session.commit()
     return result
 
@@ -174,6 +174,6 @@ async def apply_queue_plan(body: QueuePlanIn, user: CurrentUser, session: Sessio
                 status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
             ) from error
 
-    result = await waiting_out(session, user)
+    result = await waiting_out(user, session)
     await session.commit()
     return result

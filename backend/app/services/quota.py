@@ -291,10 +291,8 @@ async def plan_queue(
             f"а осталось {format_duration(quota.available_sec)}. Уберите часть лекций из плана"
         )
     for lecture in planned:
-        if lecture.duration_sec is not None and not await charge_lecture(
-            session, user.id, lecture.id, lecture.duration_sec, now, settings
-        ):
-            raise PlanExceedsQuota("Лимит изменился, обновите список и выберите лекции заново")
+        if lecture.duration_sec is not None:
+            await charge_lecture(session, user.id, lecture.id, lecture.duration_sec, now, settings)
         lecture.status = LectureStatus.queued
     await session.flush()
     return planned
