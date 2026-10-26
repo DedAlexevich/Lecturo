@@ -114,3 +114,85 @@
     gap: var(--space-1);
   }
 }
+
+.sectionHead {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.purchase {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.options {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.option:first-of-type {
+  border-top-color: transparent;
+}
+
+.option:hover {
+  background: var(--color-surface-sunken);
+}
+
+.option:has(input:checked) {
+  background: var(--color-accent-soft);
+  border-top-color: transparent;
+}
+
+.option:has(input:checked) + .option {
+  border-top-color: transparent;
+}
+
+.option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.2rem 0 0;
+  accent-color: var(--color-accent);
+}
+
+.optionText {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.optionTitle {
+  font-weight: var(--weight-semibold);
+}
+
+.optionPrice {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.consent {
+  display: grid;
+  gap: var(--space-1);
+}

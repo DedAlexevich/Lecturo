@@ -1,5 +1,6 @@
 import { useMe } from "../../app/useMe";
 import styles from "./AccountPage.module.css";
+import { PurchaseSection } from "./PurchaseSection";
 import { QuotaSection } from "./QuotaSection";
 
 export function AccountPage() {
@@ -12,6 +13,7 @@ export function AccountPage() {
         {me && <p className={styles.muted}>{me.email ? `${me.display_name}, ${me.email}` : me.display_name}</p>}
       </header>
       <QuotaSection />
+      <PurchaseSection />
     </div>
   );
 }
