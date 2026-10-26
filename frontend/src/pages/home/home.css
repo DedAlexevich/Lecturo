@@ -124,6 +124,16 @@
   outline-offset: 1px;
 }
 
+.course-filter__new {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
 .course-filter__name {
   flex: 1;
   min-width: 0;
@@ -320,6 +330,11 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-pill);
     white-space: nowrap;
+  }
+
+  .course-filter__new {
+    width: auto;
+    border: 1px dashed var(--color-border-strong);
   }
 
   .course-filter__item[aria-current="page"] {

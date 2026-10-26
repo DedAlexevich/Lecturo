@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
+import { CreateCourseDialog } from "../course/CreateCourseDialog";
 import type { Course } from "./queries";
 
 type CourseFilterProps = {
@@ -11,6 +12,7 @@ type CourseFilterProps = {
 
 export function CourseFilter({ courses, selected, failed, onRetry }: CourseFilterProps) {
   const listRef = useRef<HTMLUListElement>(null);
+  const [creating, setCreating] = useState(false);
 
   const hasList = courses !== undefined && courses.length > 0;
 
@@ -51,6 +53,11 @@ export function CourseFilter({ courses, selected, failed, onRetry }: CourseFilte
               </Link>
             </li>
           ))}
+          <li>
+            <button type="button" className="course-filter__item course-filter__new" onClick={() => setCreating(true)}>
+              Новый курс
+            </button>
+          </li>
         </ul>
       )}
       {failed && (
@@ -62,8 +69,14 @@ export function CourseFilter({ courses, selected, failed, onRetry }: CourseFilte
         </p>
       )}
       {courses?.length === 0 && (
-        <p className="course-filter__note">Курсов пока нет. Курс собирает лекции одного предмета в папку.</p>
+        <p className="course-filter__note">
+          Курсов пока нет. Курс собирает лекции одного предмета в папку.{" "}
+          <button type="button" className="home__text-action" onClick={() => setCreating(true)}>
+            Создать курс
+          </button>
+        </p>
       )}
+      {creating && <CreateCourseDialog onClose={() => setCreating(false)} />}
     </nav>
   );
 }
