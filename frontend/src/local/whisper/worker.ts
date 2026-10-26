@@ -33,7 +33,7 @@ async function createRecognizer(
     device,
     dtype: dtypeFor(device),
     progress_callback: (event) => {
-      if (event.status !== "progress") return;
+      if (event.status !== "progress" || !event.file.includes(".onnx")) return;
       files.set(event.file, { loaded: event.loaded, total: event.total });
       let done = 0;
       let total = 0;
@@ -54,7 +54,11 @@ async function loadRecognizer(
 ): Promise<Recognizer> {
   const key = `${model}:${device}`;
   if (loaded?.key === key) return loaded.recognizer;
-  loaded = null;
+  if (loaded) {
+    const previous = loaded.recognizer;
+    loaded = null;
+    await previous.dispose();
+  }
 
   let recognizer: Recognizer;
   try {
@@ -79,8 +83,10 @@ async function run(request: WorkerRequest) {
     post({ id, type: "progress", progress: { stage: "transcribing", value: 0 } });
 
     const overlapSize = OVERLAP_SECONDS * SAMPLE_RATE;
+    const minStep = CHUNK_SECONDS * SAMPLE_RATE;
+    let from = 0;
 
-    for (let from = 0; from < audio.length; from += blockSize) {
+    while (from < audio.length) {
       const isLast = from + blockSize >= audio.length;
       const block = audio.subarray(from, Math.min(from + blockSize + overlapSize, audio.length));
       const offset = from / SAMPLE_RATE;
@@ -94,28 +100,32 @@ async function run(request: WorkerRequest) {
       });
       const output = Array.isArray(result) ? result[0] : result;
       const blockEnd = offset + block.length / SAMPLE_RATE;
+      let lastEnd = offset;
       for (const chunk of output.chunks ?? []) {
         const text = chunk.text.trim();
         if (!text) continue;
         const [start, end] = chunk.timestamp;
         const absoluteStart = offset + start;
         if (absoluteStart >= keepUntil) continue;
-        segments.push({
-          start: absoluteStart,
-          end: end === null ? blockEnd : offset + end,
-          text,
-        });
+        const absoluteEnd = end === null ? blockEnd : offset + end;
+        segments.push({ start: absoluteStart, end: absoluteEnd, text });
+        lastEnd = Math.max(lastEnd, absoluteEnd);
       }
+      const next = isLast
+        ? audio.length
+        : Math.min(
+            Math.max(Math.round(lastEnd * SAMPLE_RATE), from + minStep),
+            from + blockSize + overlapSize,
+          );
+      from = next;
       post({
         id,
         type: "progress",
-        progress: {
-          stage: "transcribing",
-          value: Math.min(1, (from + blockSize) / audio.length),
-        },
+        progress: { stage: "transcribing", value: Math.min(1, from / audio.length) },
       });
     }
 
+    post({ id, type: "progress", progress: { stage: "transcribing", value: 1 } });
     post({ id, type: "done", segments });
   } catch (error) {
     post({ id, type: "error", message: error instanceof Error ? error.message : String(error) });
