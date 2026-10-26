@@ -5,9 +5,13 @@ import { AUDIO_SAMPLE_RATE } from "./pcm";
 import { type ExtractOptions, type ExtractedAudio, NoAudioTrackError, OPUS_BITRATE, OPUS_MIME } from "./types";
 
 const INPUT_DIR = "/input";
-const INPUT_NAME = "source";
 const PCM_PATH = "/audio.pcm";
 const OPUS_PATH = "/audio.webm";
+
+function inputName(file: Blob) {
+  const extension = file instanceof File ? /\.[a-z0-9]{1,5}$/i.exec(file.name)?.[0] : undefined;
+  return `source${extension ?? ""}`;
+}
 
 function asBytes(data: Uint8Array | string) {
   if (typeof data === "string") throw new Error("Не удалось прочитать извлечённый звук");
@@ -33,10 +37,11 @@ export async function extractWithFfmpeg(
   try {
     await ffmpeg.load({ coreURL, wasmURL });
     await ffmpeg.createDir(INPUT_DIR);
-    await ffmpeg.mount(FFFSType.WORKERFS, { files: [new File([file], INPUT_NAME)] }, INPUT_DIR);
+    const name = inputName(file);
+    await ffmpeg.mount(FFFSType.WORKERFS, { files: [new File([file], name)] }, INPUT_DIR);
 
     const mono = ["-map", "0:a:0", "-ac", "1", "-ar", String(AUDIO_SAMPLE_RATE)];
-    const args = ["-nostdin", "-i", `${INPUT_DIR}/${INPUT_NAME}`, ...mono, "-f", "f32le", PCM_PATH];
+    const args = ["-nostdin", "-i", `${INPUT_DIR}/${name}`, ...mono, "-f", "f32le", PCM_PATH];
     if (opus) {
       args.push(...mono, "-c:a", "libopus", "-b:a", String(OPUS_BITRATE), "-application", "voip", OPUS_PATH);
     }

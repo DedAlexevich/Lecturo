@@ -7,6 +7,7 @@ function canFallBack(error: unknown, signal?: AbortSignal) {
 }
 
 export async function extractAudio(file: Blob, options: ExtractOptions = {}): Promise<ExtractedAudio> {
+  options.signal?.throwIfAborted();
   const opus = options.opus ?? false;
   const prepared = await prepareWebCodecs(file, opus);
   if (prepared) {
