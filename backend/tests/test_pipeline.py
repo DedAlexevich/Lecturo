@@ -3,10 +3,12 @@ import json
 import math
 import shutil
 import subprocess
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -25,7 +27,7 @@ from app.models import (
     TranscriptSegment,
     UsageEntry,
 )
-from app.pipeline import media, stages, tasks
+from app.pipeline import events, media, stages, tasks
 from app.pipeline.stages import split_into_chunks
 from app.providers.stub import STUB_PHRASES
 
@@ -514,3 +516,88 @@ async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
 
     assert (await load(lecture.id)).duration_sec == 59.5
     assert await charged_seconds(lecture.id) == 60
+
+
+Received = Callable[[Lecture], Awaitable[list[dict]]]
+
+
+@pytest.fixture
+async def received() -> AsyncIterator[Received]:
+    redis = Redis.from_url(get_settings().redis_url)
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(events.CHANNEL)
+    await pubsub.get_message(timeout=1)
+
+    async def collect(lecture: Lecture) -> list[dict]:
+        messages = []
+        while message := await pubsub.get_message(ignore_subscribe_messages=True, timeout=1):
+            payload = json.loads(message["data"])
+            if payload["lecture_id"] == str(lecture.id):
+                messages.append(payload)
+        return messages
+
+    yield collect
+    await pubsub.aclose()
+    await redis.aclose()
+
+
+async def test_ready_lecture_publishes_events(user, sample_audio, received):
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    assert await received(lecture) == [
+        {"lecture_id": str(lecture.id), "user_id": str(user.id), "status": status, "error": None}
+        for status in ("processing", "ready")
+    ]
+
+
+async def test_failed_step_publishes_error(user, sample_audio, received, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken(session, lecture, report):
+        raise RuntimeError("сбой распознавания")
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    assert (await received(lecture))[-1] == {
+        "lecture_id": str(lecture.id),
+        "user_id": str(user.id),
+        "status": "failed",
+        "error": "сбой распознавания",
+    }
+
+
+async def test_error_outside_step_publishes_failed(user, sample_audio, received, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken_get_step(*args):
+        raise ConnectionError("база недоступна")
+
+    monkeypatch.setattr("app.pipeline.runner.get_step", broken_get_step)
+    with pytest.raises(ConnectionError):
+        await tasks.process_lecture({}, str(lecture.id))
+
+    last = (await received(lecture))[-1]
+    assert (last["status"], last["error"]) == ("failed", "база недоступна")
+
+
+async def test_unavailable_redis_does_not_break_pipeline(user, sample_audio, monkeypatch):
+    monkeypatch.setattr(get_settings(), "redis_url", "redis://127.0.0.1:1/0")
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+
+async def test_interrupted_ready_event_keeps_lecture_ready(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    publish = events.publish_status
+
+    async def cancelled_on_ready(lecture_id, user_id, status, error=None):
+        if status == LectureStatus.ready:
+            raise asyncio.CancelledError
+        await publish(lecture_id, user_id, status, error)
+
+    monkeypatch.setattr(tasks, "publish_status", cancelled_on_ready)
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert (await load(lecture.id)).status == LectureStatus.ready
