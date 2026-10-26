@@ -161,3 +161,32 @@ async def test_summarize_on_stub_llm_replaces_previous_result(user):
     chapters, summary = await saved(lecture.id)
     assert [(c.start, c.end) for c in chapters] == [(0, 1199)]
     assert summary.content_md
+
+
+class FailingReduceLLM(ScriptedLLM):
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        if system == summarize.load_prompt("reduce"):
+            raise RuntimeError("LLM недоступна")
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+async def test_failed_reduce_keeps_previous_chapters(user, monkeypatch):
+    monkeypatch.setattr(summarize, "get_llm", ScriptedLLM)
+    lecture = await create_transcribed_lecture(user, 30)
+    await run_summarize(lecture.id)
+    before = [(c.title, c.start, c.end) for c in (await saved(lecture.id))[0]]
+
+    monkeypatch.setattr(summarize, "get_llm", FailingReduceLLM)
+    async with SessionLocal() as session:
+        loaded = await session.get(Lecture, lecture.id)
+
+        async def report(progress):
+            await session.commit()
+
+        with pytest.raises(RuntimeError):
+            await summarize.summarize(session, loaded, report)
+        await session.rollback()
+
+    chapters, summary = await saved(lecture.id)
+    assert [(c.title, c.start, c.end) for c in chapters] == before
+    assert summary.content_md == "## Итог"

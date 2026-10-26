@@ -158,11 +158,15 @@ def fallback_title(digest: PartDigest, number: int) -> str:
     return (digest.topics[0].title if digest.topics else f"Часть {number}")[:TITLE_MAX_LENGTH]
 
 
-async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> None:
-    segments = await load_segments(session, lecture)
+async def clear_previous(session: AsyncSession, lecture: Lecture) -> None:
     await session.execute(delete(Chapter).where(Chapter.lecture_id == lecture.id))
     await session.execute(delete(Summary).where(Summary.lecture_id == lecture.id))
+
+
+async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> None:
+    segments = await load_segments(session, lecture)
     if not segments:
+        await clear_previous(session, lecture)
         session.add(Summary(lecture_id=lecture.id, content_md=""))
         return
 
@@ -183,6 +187,7 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
         f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters
     )
 
+    await clear_previous(session, lecture)
     session.add(Summary(lecture_id=lecture.id, content_md=content))
     session.add_all(
         Chapter(
