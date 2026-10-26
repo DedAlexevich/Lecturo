@@ -16,7 +16,7 @@ function post(message: WorkerResponse) {
   self.postMessage(message);
 }
 
-function dtypeFor(device: WhisperDevice) {
+function dtypeFor(device: WhisperDevice): Record<string, "fp32" | "q4" | "q8"> {
   return device === "webgpu"
     ? { encoder_model: "fp32", decoder_model_merged: "q4" }
     : { encoder_model: "q8", decoder_model_merged: "q8" };
