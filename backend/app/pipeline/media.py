@@ -171,7 +171,7 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
                 "-map",
                 "0:a:0",
                 "-vf",
-                f"scale=-2:'min({VIDEO_HEIGHT},ih)'",
+                f"scale=-2:'2*trunc(min({VIDEO_HEIGHT},ih)/2)'",
                 "-c:v",
                 "libx264",
                 "-preset",

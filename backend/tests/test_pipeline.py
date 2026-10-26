@@ -161,6 +161,17 @@ async def test_upload_gets_compressed_audio_and_video(
     assert response.json()["video_url"] == f"/media/{lecture.id}.mp4"
 
 
+async def test_odd_sized_video_is_transcoded(user, storage, tmp_path):
+    odd = generate_media(tmp_path / "odd.mkv", "testsrc=size=641x359:rate=10", "sine=frequency=440")
+    lecture = await create_lecture(user, odd)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    lecture = await load(lecture.id)
+    streams = {stream["codec_type"]: stream for stream in probe_streams(Path(lecture.video_path))}
+    assert streams["video"]["height"] == 358
+
+
 async def test_audio_upload_has_no_video(user, sample_audio, storage):
     lecture = await create_lecture(user, sample_audio)
 
