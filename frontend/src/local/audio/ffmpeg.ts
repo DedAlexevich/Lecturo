@@ -52,7 +52,8 @@ export async function extractWithFfmpeg(
     }
 
     const raw = asBytes(await ffmpeg.readFile(PCM_PATH));
-    const pcm = new Float32Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 4));
+    const aligned = raw.byteOffset % 4 === 0 ? raw : raw.slice();
+    const pcm = new Float32Array(aligned.buffer, aligned.byteOffset, Math.floor(aligned.byteLength / 4));
     const encoded = opus ? new Blob([asBytes(await ffmpeg.readFile(OPUS_PATH))], { type: OPUS_MIME }) : null;
     onProgress?.(1);
     return {
