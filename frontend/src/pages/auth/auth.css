@@ -140,3 +140,8 @@
   gap: var(--space-3);
   margin-top: var(--space-5);
 }
+
+.auth__consents {
+  display: grid;
+  gap: var(--space-3);
+}
