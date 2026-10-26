@@ -27,11 +27,23 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,mjs,css,html,svg,png,ico,woff2,wasm}"],
-        maximumFileSizeToCacheInBytes: 64 * 1024 * 1024,
+        globPatterns: ["**/*.{js,mjs,css,html,svg,png,ico,woff2}"],
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/files\//, /^\/media\//],
         cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) =>
+              url.origin === "https://cdn.jsdelivr.net" && url.pathname.startsWith("/npm/onnxruntime-web@"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "onnxruntime",
+              expiration: { maxEntries: 8 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
       },
     }),
   ],
