@@ -12,7 +12,6 @@ from app.models import (
     Lecture,
     LectureStatus,
     PaymentKind,
-    SourceType,
     Subscription,
     UsageEntry,
     UsageSource,
@@ -215,23 +214,6 @@ async def can_process(
     return math.ceil(seconds) <= quota.available_sec
 
 
-async def admit_lecture(
-    session: AsyncSession,
-    lecture: Lecture,
-    now: datetime | None = None,
-    settings: Settings | None = None,
-) -> bool:
-    if lecture.source_type == SourceType.local:
-        return True
-    if await charge_lecture(
-        session, lecture.owner_id, lecture.id, lecture.duration_sec, now, settings
-    ):
-        return True
-    lecture.status = LectureStatus.waiting_quota
-    await session.flush()
-    return False
-
-
 async def list_waiting(session: AsyncSession, user_id: uuid.UUID) -> list[Lecture]:
     rows = await session.scalars(
         select(Lecture)
@@ -274,7 +256,9 @@ async def plan_queue(
     planned = [lectures.get(lecture_id) for lecture_id in lecture_ids]
     if any(lecture is None or lecture.status != LectureStatus.waiting_quota for lecture in planned):
         raise LectureNotWaiting("Часть лекций не ожидает лимита, обновите список")
-    needed = sum(math.ceil(lecture.duration_sec) for lecture in planned)
+    needed = sum(
+        math.ceil(lecture.duration_sec) for lecture in planned if lecture.duration_sec is not None
+    )
     if not await can_process(session, user, needed, now, settings):
         quota = await get_quota(session, user, now, settings)
         raise PlanExceedsQuota(
@@ -282,7 +266,10 @@ async def plan_queue(
             f"а осталось {format_duration(quota.available_sec)}. Уберите часть лекций из плана"
         )
     for lecture in planned:
-        await charge_lecture(session, user.id, lecture.id, lecture.duration_sec, now, settings)
+        if lecture.duration_sec is not None and not await charge_lecture(
+            session, user.id, lecture.id, lecture.duration_sec, now, settings
+        ):
+            raise PlanExceedsQuota("Лимит изменился, обновите список и выберите лекции заново")
         lecture.status = LectureStatus.queued
     await session.flush()
     return planned
