@@ -12,6 +12,9 @@ from app.models import (
     Lecture,
     LectureStatus,
     PaymentKind,
+    ProcessingStep,
+    StepName,
+    StepStatus,
     Subscription,
     UsageEntry,
     UsageSource,
@@ -212,6 +215,28 @@ async def can_process(
 ) -> bool:
     quota = await get_quota(session, user, now, settings)
     return math.ceil(seconds) <= quota.available_sec
+
+
+async def refund_failed_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> int:
+    transcribed = await session.scalar(
+        select(
+            exists().where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step == StepName.transcribe,
+                ProcessingStep.status == StepStatus.done,
+            )
+        )
+    )
+    if transcribed:
+        return 0
+    return await refund_lecture(session, lecture_id)
+
+
+async def hold_if_over_quota(session: AsyncSession, user: User, lecture: Lecture) -> bool:
+    if lecture.duration_sec is None or await can_process(session, user, lecture.duration_sec):
+        return False
+    lecture.status = LectureStatus.waiting_quota
+    return True
 
 
 async def list_waiting(session: AsyncSession, user_id: uuid.UUID) -> list[Lecture]:

@@ -129,22 +129,78 @@ async def test_lecture_over_limit_waits_without_processing(user, weekly_limit, h
             ).all()
         )
     assert steps[StepName.transcribe] == StepStatus.pending
+    async with SessionLocal() as session:
+        step = await session.scalar(
+            select(ProcessingStep).where(
+                ProcessingStep.lecture_id == second.id,
+                ProcessingStep.step == StepName.transcribe,
+            )
+        )
+    assert step.attempts == 0
+    assert step.progress == 0.0
+    assert step.started_at is None
     assert StepName.summarize not in steps
 
 
-async def test_failed_processing_returns_quota(user, weekly_limit, handlers, monkeypatch):
-    lecture = await new_lecture(user, HOUR)
+async def planned_lecture(user, client, auth_headers, seconds=HOUR) -> Lecture:
+    lecture = await new_lecture(user, seconds, LectureStatus.waiting_quota)
+    response = await client.post(
+        "/api/v1/billing/queue-plan", json={"lecture_ids": [str(lecture.id)]}, headers=auth_headers
+    )
+    assert response.status_code == 200
+    return lecture
+
+
+async def test_failure_before_transcribe_returns_quota(
+    user, auth_headers, client, weekly_limit, handlers, enqueued, published, monkeypatch
+):
+    lecture = await planned_lecture(user, client, auth_headers)
+    assert await charged(lecture) == HOUR
 
     async def broken(session, lecture, report):
-        raise RuntimeError("модель недоступна")
+        raise RuntimeError("ffmpeg упал")
 
-    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, broken)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, broken)
 
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
     assert await charged(lecture) == 0
 
 
-async def test_cancelled_processing_returns_quota(user, weekly_limit, handlers, monkeypatch):
+async def test_cancel_before_transcribe_returns_quota(
+    user, auth_headers, client, weekly_limit, handlers, enqueued, published, monkeypatch
+):
+    lecture = await planned_lecture(user, client, auth_headers)
+
+    async def cancelled(session, lecture, report):
+        raise asyncio.CancelledError
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert await status_of(lecture) == LectureStatus.failed
+    assert await charged(lecture) == 0
+
+
+async def test_failure_after_transcribe_keeps_single_charge_on_retry(
+    user, weekly_limit, handlers, monkeypatch
+):
+    lecture = await new_lecture(user, HOUR)
+    original = tasks.HANDLERS[StepName.summarize]
+
+    async def broken(session, lecture, report):
+        raise RuntimeError("модель недоступна")
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+    assert await charged(lecture) == HOUR
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, original)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    assert await charged(lecture) == HOUR
+
+
+async def test_cancel_after_transcribe_keeps_charge(user, weekly_limit, handlers, monkeypatch):
     lecture = await new_lecture(user, HOUR)
 
     async def cancelled(session, lecture, report):
@@ -155,7 +211,7 @@ async def test_cancelled_processing_returns_quota(user, weekly_limit, handlers, 
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
     assert await status_of(lecture) == LectureStatus.failed
-    assert await charged(lecture) == 0
+    assert await charged(lecture) == HOUR
 
 
 async def test_ready_lecture_keeps_charge_after_late_error(user, weekly_limit, handlers):

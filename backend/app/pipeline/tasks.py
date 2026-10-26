@@ -81,7 +81,7 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
             .returning(Lecture.owner_id)
         )
         if owner_id is not None:
-            await quota.refund_lecture(session, lecture_id)
+            await quota.refund_failed_lecture(session, lecture_id)
         await session.commit()
     if owner_id is not None:
         await publish_status(lecture_id, owner_id, LectureStatus.failed, error)
@@ -89,7 +89,7 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
 
 async def refund(lecture_id: uuid.UUID) -> None:
     async with SessionLocal() as session:
-        await quota.refund_lecture(session, lecture_id)
+        await quota.refund_failed_lecture(session, lecture_id)
         await session.commit()
 
 
