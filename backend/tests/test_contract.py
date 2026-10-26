@@ -18,4 +18,3 @@ def test_contract_has_p0_endpoints():
         "/api/v1/legal/{slug}",
     ):
         assert path in paths
-
