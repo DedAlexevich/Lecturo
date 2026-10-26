@@ -1,11 +1,14 @@
 import asyncio
 import json
+import math
 import shutil
 import subprocess
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
@@ -22,9 +25,11 @@ from app.models import (
     StepStatus,
     Summary,
     TranscriptSegment,
+    UsageEntry,
 )
-from app.pipeline import media, tasks
+from app.pipeline import events, media, stages, tasks
 from app.pipeline.stages import split_into_chunks
+from app.providers.stub import STUB_PHRASES
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -423,3 +428,177 @@ async def test_cancelled_ffmpeg_is_killed(sample_video, storage, monkeypatch):
         await encoding
     assert not target.exists()
     assert not list((storage / "tmp").iterdir())
+
+
+async def load_segments(lecture_id) -> list[TranscriptSegment]:
+    async with SessionLocal() as session:
+        rows = await session.scalars(
+            select(TranscriptSegment)
+            .where(TranscriptSegment.lecture_id == lecture_id)
+            .order_by(TranscriptSegment.idx)
+        )
+        return list(rows)
+
+
+async def run_transcribe(lecture_id) -> None:
+    async def report(progress):
+        pass
+
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        await stages.transcribe(session, lecture, report)
+        await session.commit()
+
+
+async def charged_seconds(lecture_id) -> int:
+    async with SessionLocal() as session:
+        return await session.scalar(
+            select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
+                UsageEntry.lecture_id == lecture_id
+            )
+        )
+
+
+async def test_transcribe_saves_stub_segments_in_order(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+
+    await run_transcribe(lecture.id)
+
+    segments = await load_segments(lecture.id)
+    assert [s.idx for s in segments] == list(range(len(STUB_PHRASES)))
+    assert [s.text for s in segments] == STUB_PHRASES
+    assert all(s.start < s.end for s in segments)
+    assert [s.start for s in segments] == sorted(s.start for s in segments)
+
+
+async def test_repeated_transcribe_replaces_segments(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+
+    await run_transcribe(lecture.id)
+    await run_transcribe(lecture.id)
+
+    segments = await load_segments(lecture.id)
+    assert [s.idx for s in segments] == list(range(len(STUB_PHRASES)))
+    assert await charged_seconds(lecture.id) == 2
+
+
+async def test_transcribe_charges_lecture_duration(user, sample_video):
+    lecture = await create_lecture(user, sample_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    loaded = await load(lecture.id)
+    assert await charged_seconds(lecture.id) == math.ceil(loaded.duration_sec)
+
+
+async def test_transcribe_fails_without_quota(user, sample_audio, monkeypatch):
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
+    lecture = await create_lecture(user, sample_audio)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    failed = await load(lecture.id)
+    step = steps_by_name(failed)[StepName.transcribe]
+    assert step.status == StepStatus.failed
+    assert step.error == "Не хватает лимита на обработку лекции"
+    assert StepName.summarize not in steps_by_name(failed)
+    assert await count(TranscriptSegment, lecture.id) == 0
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.duration_sec = None
+        await session.commit()
+
+    await run_transcribe(lecture.id)
+
+    assert (await load(lecture.id)).duration_sec == 59.5
+    assert await charged_seconds(lecture.id) == 60
+
+
+Received = Callable[[Lecture], Awaitable[list[dict]]]
+
+
+@pytest.fixture
+async def received() -> AsyncIterator[Received]:
+    redis = Redis.from_url(get_settings().redis_url)
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(events.CHANNEL)
+    await pubsub.get_message(timeout=1)
+
+    async def collect(lecture: Lecture) -> list[dict]:
+        messages = []
+        while message := await pubsub.get_message(ignore_subscribe_messages=True, timeout=1):
+            payload = json.loads(message["data"])
+            if payload["lecture_id"] == str(lecture.id):
+                messages.append(payload)
+        return messages
+
+    yield collect
+    await pubsub.aclose()
+    await redis.aclose()
+
+
+async def test_ready_lecture_publishes_events(user, sample_audio, received):
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    assert await received(lecture) == [
+        {"lecture_id": str(lecture.id), "user_id": str(user.id), "status": status, "error": None}
+        for status in ("processing", "ready")
+    ]
+
+
+async def test_failed_step_publishes_error(user, sample_audio, received, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken(session, lecture, report):
+        raise RuntimeError("сбой распознавания")
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    assert (await received(lecture))[-1] == {
+        "lecture_id": str(lecture.id),
+        "user_id": str(user.id),
+        "status": "failed",
+        "error": "сбой распознавания",
+    }
+
+
+async def test_error_outside_step_publishes_failed(user, sample_audio, received, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken_get_step(*args):
+        raise ConnectionError("база недоступна")
+
+    monkeypatch.setattr("app.pipeline.runner.get_step", broken_get_step)
+    with pytest.raises(ConnectionError):
+        await tasks.process_lecture({}, str(lecture.id))
+
+    last = (await received(lecture))[-1]
+    assert (last["status"], last["error"]) == ("failed", "база недоступна")
+
+
+async def test_unavailable_redis_does_not_break_pipeline(user, sample_audio, monkeypatch):
+    monkeypatch.setattr(get_settings(), "redis_url", "redis://127.0.0.1:1/0")
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+
+async def test_interrupted_ready_event_keeps_lecture_ready(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    publish = events.publish_status
+
+    async def cancelled_on_ready(lecture_id, user_id, status, error=None):
+        if status == LectureStatus.ready:
+            raise asyncio.CancelledError
+        await publish(lecture_id, user_id, status, error)
+
+    monkeypatch.setattr(tasks, "publish_status", cancelled_on_ready)
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert (await load(lecture.id)).status == LectureStatus.ready

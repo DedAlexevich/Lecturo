@@ -7,7 +7,8 @@ from sqlalchemy import update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
-from app.pipeline import download, media, stages
+from app.pipeline import download, media, stages, summarize
+from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 from app.services import quota
 
@@ -16,7 +17,7 @@ HANDLERS: dict[StepName, StepHandler] = {
     StepName.audio: media.extract_audio,
     StepName.video: media.transcode_video,
     StepName.transcribe: stages.transcribe,
-    StepName.summarize: stages.summarize,
+    StepName.summarize: summarize.summarize,
     StepName.embed: stages.embed,
 }
 
@@ -55,10 +56,12 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             return lecture.status
         lecture.status = LectureStatus.processing
         await session.commit()
+        await publish_status(lecture.id, lecture.owner_id, lecture.status)
         for name in PLANS[lecture.source_type]:
             await run_step(session, lecture, name, HANDLERS[name])
         lecture.status = LectureStatus.ready
         await session.commit()
+        await publish_status(lecture.id, lecture.owner_id, lecture.status)
         return lecture.status
 
 
@@ -72,8 +75,11 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
             )
             .values(status=StepStatus.failed, error=error)
         )
-        await session.execute(
-            update(Lecture).where(Lecture.id == lecture_id).values(status=LectureStatus.failed)
+        owner_id = await session.scalar(
+            update(Lecture)
+            .where(Lecture.id == lecture_id, Lecture.status != LectureStatus.ready)
+            .values(status=LectureStatus.failed)
+            .returning(Lecture.owner_id)
         )
         await quota.refund_lecture(session, lecture_id)
         await session.commit()
@@ -83,6 +89,8 @@ async def refund(lecture_id: uuid.UUID) -> None:
     async with SessionLocal() as session:
         await quota.refund_lecture(session, lecture_id)
         await session.commit()
+    if owner_id is not None:
+        await publish_status(lecture_id, owner_id, LectureStatus.failed, error)
 
 
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:

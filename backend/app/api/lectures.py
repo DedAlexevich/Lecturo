@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from redis.exceptions import RedisError
 from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
 from app.core.deps import CurrentUser, SessionDep
@@ -123,8 +123,20 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser) -> None:
 
 
 @router.get("/{lecture_id}/status")
-async def get_status(lecture_id: uuid.UUID, user: CurrentUser) -> LectureStatusOut:
-    not_ready()
+async def get_status(
+    lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> LectureStatusOut:
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .options(
+            load_only(Lecture.id, Lecture.status, Lecture.queue_position),
+            selectinload(Lecture.steps),
+        )
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    return LectureStatusOut.model_validate(lecture)
 
 
 @router.post("/{lecture_id}/retry")
