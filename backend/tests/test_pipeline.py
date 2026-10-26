@@ -396,3 +396,29 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
     assert order == [StepName.download, StepName.transcribe]
     assert loaded.audio_path == f"/data/storage/audio/{lecture.id}.opus"
     assert steps_by_name(loaded)[StepName.download].status == StepStatus.done
+
+
+async def test_cancelled_ffmpeg_is_killed(sample_video, storage, monkeypatch):
+    started = asyncio.Event()
+
+    async def report(progress):
+        started.set()
+
+    monkeypatch.setattr(media, "PROGRESS_INTERVAL_SEC", 0.0)
+    target = storage / "videos" / "cancelled.mp4"
+    encoding = asyncio.create_task(
+        media.encode(
+            ["-stream_loop", "-1", "-i", str(sample_video), "-c:v", "libx264", "-f", "mp4"],
+            target,
+            2.0,
+            report,
+            "ошибка",
+        )
+    )
+    await asyncio.wait_for(started.wait(), 30)
+    encoding.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await encoding
+    assert not target.exists()
+    assert not list((storage / "tmp").iterdir())

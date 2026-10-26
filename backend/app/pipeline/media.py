@@ -112,11 +112,12 @@ async def run_ffmpeg(args: list[str], duration: float | None, report: Report, er
                 reported_at = loop.time()
                 await report(int(value) / 1_000_000 / duration)
         returncode = await process.wait()
+        output = (await stderr).decode(errors="replace").strip()
     finally:
         if process.returncode is None:
             process.kill()
             await process.wait()
-    output = (await stderr).decode(errors="replace").strip()
+        stderr.cancel()
     if returncode != 0:
         logger.warning("ffmpeg завершился с кодом %s: %s", returncode, output[-2000:])
         raise MediaError(error)
