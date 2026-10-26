@@ -36,8 +36,6 @@ export function registerServiceWorker() {
     onNeedRefresh() {
       setState({ needRefresh: true });
     },
-    onOfflineReady() {
-      setState({ needRefresh: false });
-    },
+    onOfflineReady() {},
   });
 }

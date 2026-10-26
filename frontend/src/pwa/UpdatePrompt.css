@@ -3,7 +3,7 @@
   right: var(--space-4);
   bottom: var(--space-4);
   left: var(--space-4);
-  z-index: 110;
+  z-index: 90;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -51,6 +51,12 @@
   stroke: currentColor;
   stroke-width: 1.75;
   stroke-linecap: round;
+}
+
+@media (min-width: 48rem) {
+  .update-prompt {
+    margin-inline: 0 auto;
+  }
 }
 
 @keyframes update-prompt-in {
