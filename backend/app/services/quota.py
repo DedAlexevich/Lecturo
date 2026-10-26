@@ -14,6 +14,10 @@ WEEK = timedelta(days=7)
 CHARGED_SOURCES = (UsageSource.weekly, UsageSource.package)
 
 
+class QuotaExceeded(Exception):
+    pass
+
+
 @dataclass
 class Quota:
     weekly_limit_sec: int
