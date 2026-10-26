@@ -58,24 +58,24 @@ class Hook(HookModel):
 
 @router.post("/hooks", include_in_schema=False)
 async def tusd_hook(hook: Hook, session: SessionDep) -> dict[str, Any]:
-    if hook.type == "pre-create":
-        try:
+    try:
+        if hook.type == "pre-create":
             return await pre_create(session, hook)
-        except HTTPException as error:
-            return reject(error)
-    if hook.type == "post-finish":
-        await post_finish(session, hook)
+        if hook.type == "pre-finish":
+            return await pre_finish(session, hook)
+    except HTTPException as error:
+        return {
+            "RejectUpload": hook.type == "pre-create",
+            "HTTPResponse": json_response(error.status_code, {"detail": error.detail}),
+        }
     return {}
 
 
-def reject(error: HTTPException) -> dict[str, Any]:
+def json_response(status_code: int, content: dict[str, Any]) -> dict[str, Any]:
     return {
-        "RejectUpload": True,
-        "HTTPResponse": {
-            "StatusCode": error.status_code,
-            "Body": json.dumps({"detail": error.detail}, ensure_ascii=False),
-            "Header": {"Content-Type": "application/json"},
-        },
+        "StatusCode": status_code,
+        "Body": json.dumps(content, ensure_ascii=False),
+        "Header": {"Content-Type": "application/json"},
     }
 
 
@@ -119,29 +119,30 @@ async def pre_create(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     return {"ChangeFileInfo": {"ID": user.id.hex + secrets.token_hex(16)}}
 
 
-async def post_finish(session: AsyncSession, hook: Hook) -> None:
+async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     upload = hook.event.upload
-    try:
-        user = await hook_user(session, hook)
-    except HTTPException:
-        logger.warning("Завершение загрузки %s без авторизации", upload.id)
-        return
-    if not UPLOAD_ID.fullmatch(upload.id) or not upload.id.startswith(user.id.hex):
-        logger.warning("Загрузка %s не принадлежит пользователю %s", upload.id, user.id)
-        return
+    if not UPLOAD_ID.fullmatch(upload.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Загрузка не найдена")
     storage_dir = get_settings().storage_dir
     path = storage_dir / "uploads" / upload.id
     info_path = path.with_suffix(".info")
+    try:
+        user = await hook_user(session, hook)
+        if not upload.id.startswith(user.id.hex):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Загрузка принадлежит другому пользователю"
+            )
+    except HTTPException:
+        await asyncio.to_thread(discard, path, info_path)
+        raise
     if not await asyncio.to_thread(upload_complete, path, info_path):
-        logger.warning("Загрузка %s не найдена или не завершена", upload.id)
-        return
+        raise HTTPException(status.HTTP_409_CONFLICT, "Файл загружен не полностью")
     await session.commit()
     try:
         duration = await probe_upload(path)
     except MediaError as error:
-        logger.info("Загрузка %s отклонена: %s", upload.id, error)
         await asyncio.to_thread(discard, path, info_path)
-        return
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
     course_id = None
     try:
@@ -164,10 +165,9 @@ async def post_finish(session: AsyncSession, hook: Hook) -> None:
     original = storage_dir / "originals" / str(lecture.id)
     try:
         await asyncio.to_thread(move_original, path, original)
-    except FileNotFoundError:
+    except FileNotFoundError as error:
         await session.rollback()
-        logger.warning("Загрузка %s уже обработана", upload.id)
-        return
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Загрузка не найдена") from error
     lecture.audio_path = str(original)
     await session.commit()
     await asyncio.to_thread(info_path.unlink, missing_ok=True)
@@ -177,7 +177,10 @@ async def post_finish(session: AsyncSession, hook: Hook) -> None:
     except (OSError, RedisError) as error:
         lecture.status = LectureStatus.failed
         await session.commit()
-        logger.error("Не удалось поставить лекцию %s в очередь: %s", lecture.id, error)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Очередь недоступна, попробуйте позже"
+        ) from error
+    return {"HTTPResponse": json_response(status.HTTP_200_OK, {"lecture_id": str(lecture.id)})}
 
 
 def upload_complete(path: Path, info_path: Path) -> bool:

@@ -121,22 +121,25 @@ async def test_pre_create_binds_upload_to_user(client, user, auth_headers):
     assert upload_id.startswith(user.id.hex)
 
 
-async def test_post_finish_creates_lecture(client, user, auth_headers, storage, enqueued):
+async def test_pre_finish_creates_lecture(client, user, auth_headers, storage, enqueued):
     course = await client.post("/api/v1/courses", json={"title": "Физика"}, headers=auth_headers)
     course_id = course.json()["id"]
     upload_id = user.id.hex + "a" * 32
     put_upload(storage, upload_id, sample_audio(storage))
 
     request = hook(
-        "post-finish",
+        "pre-finish",
         auth_headers,
         ID=upload_id,
         MetaData={"filename": "Лекция 3.mp4", "course_id": course_id},
     )
     response = await client.post(HOOKS_URL, json=request)
     assert response.status_code == 200
+    answer = response.json()["HTTPResponse"]
+    assert answer["StatusCode"] == 200
 
     [lecture] = await user_lectures(user.id)
+    assert json.loads(answer["Body"]) == {"lecture_id": str(lecture.id)}
     assert lecture.title == "Лекция 3"
     assert lecture.source_type == SourceType.upload
     assert lecture.status == LectureStatus.queued
@@ -154,45 +157,51 @@ async def test_post_finish_creates_lecture(client, user, auth_headers, storage, 
     assert str(linked) == course_id
 
     repeated = await client.post(HOOKS_URL, json=request)
-    assert repeated.status_code == 200
+    assert repeated.json()["HTTPResponse"]["StatusCode"] == 409
     assert len(await user_lectures(user.id)) == 1
 
 
-async def test_post_finish_rejects_text_file(client, user, auth_headers, storage, enqueued):
+async def test_pre_finish_rejects_text_file(client, user, auth_headers, storage, enqueued):
     upload_id = user.id.hex + "b" * 32
     fake_video = storage / "fake.mp4"
     fake_video.write_text("это не видео, а просто текст\n" * 100)
     path = put_upload(storage, upload_id, fake_video)
 
-    request = hook("post-finish", auth_headers, ID=upload_id, MetaData={"filename": "fake.mp4"})
+    request = hook("pre-finish", auth_headers, ID=upload_id, MetaData={"filename": "fake.mp4"})
     response = await client.post(HOOKS_URL, json=request)
-    assert response.status_code == 200
+    answer = response.json()["HTTPResponse"]
+    assert answer["StatusCode"] == 422
+    assert json.loads(answer["Body"])["detail"]
 
     assert await user_lectures(user.id) == []
     assert not path.exists()
     assert enqueued == []
 
 
-async def test_post_finish_ignores_foreign_upload(client, user, auth_headers, storage, enqueued):
+@pytest.mark.parametrize(("anonymous", "status_code"), [(False, 403), (True, 401)])
+async def test_pre_finish_discards_foreign_upload(
+    client, user, auth_headers, storage, enqueued, anonymous, status_code
+):
     upload_id = uuid.uuid4().hex + "c" * 32
-    path = put_upload(storage, upload_id, sample_audio(storage))
+    put_upload(storage, upload_id, sample_audio(storage))
 
-    request = hook("post-finish", auth_headers, ID=upload_id)
-    await client.post(HOOKS_URL, json=request)
-    await client.post(HOOKS_URL, json=hook("post-finish", {}, ID=upload_id))
+    request = hook("pre-finish", {} if anonymous else auth_headers, ID=upload_id)
+    response = await client.post(HOOKS_URL, json=request)
 
+    assert response.json()["HTTPResponse"]["StatusCode"] == status_code
     assert await user_lectures(user.id) == []
-    assert path.exists()
+    assert list((storage / "uploads").iterdir()) == []
     assert enqueued == []
 
 
-async def test_post_finish_ignores_incomplete_upload(client, user, auth_headers, storage):
+async def test_pre_finish_keeps_incomplete_upload(client, user, auth_headers, storage):
     upload_id = user.id.hex + "d" * 32
     path = put_upload(storage, upload_id, sample_audio(storage))
     with path.open("ab") as file:
         file.write(b"\0")
 
-    await client.post(HOOKS_URL, json=hook("post-finish", auth_headers, ID=upload_id))
+    response = await client.post(HOOKS_URL, json=hook("pre-finish", auth_headers, ID=upload_id))
 
+    assert response.json()["HTTPResponse"]["StatusCode"] == 409
     assert await user_lectures(user.id) == []
     assert path.exists()
