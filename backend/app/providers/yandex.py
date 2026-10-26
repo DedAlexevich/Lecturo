@@ -145,9 +145,7 @@ class YandexSpeechToText:
         deadline = time.monotonic() + self.timeout
         url = OPERATION_URL.format(operation_id=operation_id)
         while True:
-            response = await client.get(url, headers=self._api_headers())
-            self._raise_for_status(response, "проверка операции распознавания")
-            operation = response.json()
+            operation = await self._fetch_operation(client, url)
             if operation.get("done"):
                 if "error" in operation:
                     error = operation["error"]
@@ -158,6 +156,16 @@ class YandexSpeechToText:
             if time.monotonic() > deadline:
                 raise YandexSpeechKitError(f"Распознавание не завершилось: {operation_id}")
             await asyncio.sleep(self.poll_interval)
+
+    async def _fetch_operation(self, client: httpx.AsyncClient, url: str) -> dict[str, Any]:
+        try:
+            response = await client.get(url, headers=self._api_headers())
+        except httpx.TransportError:
+            return {}
+        if response.status_code == 429 or response.is_server_error:
+            return {}
+        self._raise_for_status(response, "проверка операции распознавания")
+        return response.json()
 
     def _api_headers(self) -> dict[str, str]:
         return {"Authorization": f"Api-Key {self.api_key}"}

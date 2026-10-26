@@ -158,3 +158,63 @@ async def test_transcribe_error_not_replaced_by_cleanup_error(tmp_path: Path):
     )
     with pytest.raises(YandexSpeechKitError, match="invalid config"):
         await provider.transcribe(audio)
+
+
+async def test_wait_survives_temporary_poll_failures(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    polls = iter(["connect", 503, 429, "done"])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            return httpx.Response(200, json={"id": "op4", "done": False})
+        poll = next(polls)
+        if poll == "connect":
+            raise httpx.ConnectError("network down", request=request)
+        if poll == "done":
+            return httpx.Response(200, json=saved_operation())
+        return httpx.Response(poll)
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    segments = await provider.transcribe(audio)
+    assert len(segments) == 3
+
+
+async def test_wait_stops_at_deadline_on_persistent_failures(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            return httpx.Response(200, json={"id": "op5", "done": False})
+        return httpx.Response(502)
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, timeout=0, transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(YandexSpeechKitError, match="op5"):
+        await provider.transcribe(audio)
+
+
+async def test_wait_fails_on_client_error(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            return httpx.Response(200, json={"id": "op6", "done": False})
+        return httpx.Response(403, text="permission denied")
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(YandexSpeechKitError, match="permission denied"):
+        await provider.transcribe(audio)
