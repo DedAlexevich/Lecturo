@@ -1,4 +1,5 @@
 import type { RouteObject } from "react-router";
+import { UiPage } from "../ui/UiPage";
 import { EmptyPage } from "./EmptyPage";
 
 export const guestRoutes: RouteObject[] = [
@@ -7,6 +8,7 @@ export const guestRoutes: RouteObject[] = [
 
 export const publicRoutes: RouteObject[] = [
   { path: "/legal/:slug", element: <EmptyPage title="Документ" /> },
+  { path: "/ui", element: <UiPage /> },
 ];
 
 export const privateRoutes: RouteObject[] = [
