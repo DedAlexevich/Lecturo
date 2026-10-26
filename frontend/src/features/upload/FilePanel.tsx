@@ -69,6 +69,7 @@ export function FilePanel(props: FilePanelProps) {
   const [dragging, setDragging] = useState(false);
   const hintId = useId();
   const problem = file ? problemOf(file) : null;
+  const message = file ? problem : state.error;
 
   if (state.phase !== "idle" && state.phase !== "done") return <UploadProgress {...props} />;
 
@@ -122,9 +123,9 @@ export function FilePanel(props: FilePanelProps) {
       <p className="add-lecture__note" id={hintId}>
         Видео или аудио до 2 ГБ и до 4 часов. Если связь оборвётся, загрузка продолжится с того же места.
       </p>
-      {(problem ?? (file ? null : state.error)) && (
+      {message && (
         <p className="add-lecture__error" role="alert">
-          {problem ?? state.error}
+          {message}
         </p>
       )}
       {courseField}
