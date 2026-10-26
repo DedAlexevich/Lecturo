@@ -108,9 +108,11 @@ jobs:
       - run: curl -fsS http://localhost/api/v1/health
       - run: curl -fsS http://localhost/ | grep -q Lecturo
       - name: Hooks endpoint closed from outside
-        run: test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost/api/v1/uploads/hooks)" = 404
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost/api/v1/uploads/hooks)" = 404
       - name: tusd reaches hooks inside compose
-        run: test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Tus-Resumable: 1.0.0' -H 'Upload-Length: 10' http://localhost/files/)" = 401
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Tus-Resumable: 1.0.0' -H 'Upload-Length: 10' http://localhost/files/)" = 401
       - run: test "$(docker compose ps worker --format '{{.State}}')" = running
       - run: test "$(docker compose ps bot --format '{{.State}}')" = running
       - if: failure()
