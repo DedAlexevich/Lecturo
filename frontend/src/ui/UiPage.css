@@ -37,13 +37,13 @@
   font-size: var(--text-sm);
 }
 
-code {
+.ui-page code {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
 
-ul {
+.ui-page ul {
   margin: 0;
   padding: 0;
   list-style: none;
