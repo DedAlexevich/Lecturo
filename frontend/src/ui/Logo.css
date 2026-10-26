@@ -1,0 +1,20 @@
+.logo {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.logo--md {
+  font-size: var(--text-xl);
+}
+
+.logo--lg {
+  font-size: var(--text-3xl);
+}
+
+.logo__mark {
+  color: var(--color-accent);
+  font-style: italic;
+}
