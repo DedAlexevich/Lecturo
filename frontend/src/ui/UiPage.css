@@ -1,0 +1,120 @@
+.ui-page {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+
+.ui-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ui-section {
+  display: grid;
+  gap: var(--space-4);
+  padding-top: var(--space-7);
+}
+
+.ui-group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ui-group h3 {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.ui-note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.ui-page code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.ui-page ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+}
+
+.ui-swatch {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ui-swatch__color {
+  height: 3.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.ui-type {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.ui-type__row {
+  display: grid;
+  gap: var(--space-1);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ui-mono code {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.ui-spaces {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ui-space {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ui-space__bar {
+  height: 0.75rem;
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.ui-samples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--space-4);
+}
+
+.ui-sample {
+  display: grid;
+  place-items: center;
+  height: 4.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.ui-sample--raised {
+  border-color: transparent;
+}
