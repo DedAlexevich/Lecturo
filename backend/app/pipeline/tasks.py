@@ -122,7 +122,9 @@ async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
 
 
 async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
+    redis_settings.conn_retries = 0
+    redis = await create_pool(redis_settings)
     try:
         job = Job(lecture_job_id(lecture_id), redis)
         if await job.status() not in (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress):
