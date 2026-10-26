@@ -123,6 +123,20 @@ async def test_embed_requires_consent(user, monkeypatch):
             await stages.embed(session, stored, report)
 
 
+async def test_local_lecture_with_consent_is_embedded(user):
+    lecture = await create_local_lecture(user)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    async with SessionLocal() as session:
+        chunks = await session.scalar(
+            select(func.count())
+            .select_from(SearchChunk)
+            .where(SearchChunk.lecture_id == lecture.id)
+        )
+        assert chunks == 1
+
+
 async def test_local_lecture_without_consent_is_not_embedded(user, monkeypatch):
     monkeypatch.setattr(stages, "get_embeddings", ForbiddenEmbeddings)
     await revoke_consent(user)
