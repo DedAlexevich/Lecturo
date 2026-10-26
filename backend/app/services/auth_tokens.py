@@ -1,12 +1,13 @@
 import hashlib
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuthToken, AuthTokenKind
+from app.models import AuthToken, AuthTokenKind, User
 
 TOKEN_TTL = {
     AuthTokenKind.verify_email: timedelta(hours=24),
@@ -18,8 +19,9 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def issue_token(session: AsyncSession, user_id, kind: AuthTokenKind) -> str:
+async def issue_token(session: AsyncSession, user_id: uuid.UUID, kind: AuthTokenKind) -> str:
     token = secrets.token_urlsafe(32)
+    await session.execute(select(User.id).where(User.id == user_id).with_for_update())
     await session.execute(
         delete(AuthToken).where(
             AuthToken.user_id == user_id,
@@ -39,7 +41,7 @@ async def issue_token(session: AsyncSession, user_id, kind: AuthTokenKind) -> st
     return token
 
 
-async def consume_token(session: AsyncSession, token: str, kind: AuthTokenKind):
+async def consume_token(session: AsyncSession, token: str, kind: AuthTokenKind) -> uuid.UUID:
     now = datetime.now(UTC)
     user_id = await session.scalar(
         update(AuthToken)
