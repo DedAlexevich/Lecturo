@@ -105,7 +105,7 @@ def payment_request(
 
 
 def confirmation_url(payment: Payment) -> str | None:
-    return (payment.raw or {}).get("confirmation", {}).get("confirmation_url")
+    return ((payment.raw or {}).get("confirmation") or {}).get("confirmation_url")
 
 
 def payment_out(payment: Payment) -> PaymentOut:
@@ -121,8 +121,14 @@ def payment_out(payment: Payment) -> PaymentOut:
     )
 
 
-async def find_by_key(session: AsyncSession, idempotence_key: str) -> Payment | None:
-    return await session.scalar(select(Payment).where(Payment.idempotence_key == idempotence_key))
+async def find_by_key(
+    session: AsyncSession, user_id: uuid.UUID, idempotence_key: str
+) -> Payment | None:
+    return await session.scalar(
+        select(Payment).where(
+            Payment.user_id == user_id, Payment.idempotence_key == idempotence_key
+        )
+    )
 
 
 async def create_payment(
@@ -137,7 +143,7 @@ async def create_payment(
     user_id, email = user.id, user.email
     if settings.yookassa_receipt and not email:
         raise PaymentError("Для чека нужен email: укажите его в профиле")
-    payment = await find_by_key(session, idempotence_key)
+    payment = await find_by_key(session, user_id, idempotence_key)
     if payment is None:
         payment = Payment(
             user_id=user_id,
@@ -152,10 +158,10 @@ async def create_payment(
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            payment = await find_by_key(session, idempotence_key)
+            payment = await find_by_key(session, user_id, idempotence_key)
             if payment is None:
                 raise IdempotenceKeyConflict("Платёж с этим ключом ещё создаётся") from None
-    if payment.user_id != user_id or payment.product_code != product.code:
+    if payment.product_code != product.code:
         raise IdempotenceKeyConflict("Ключ идемпотентности уже использован для другого платежа")
     if payment.yookassa_id:
         return payment
