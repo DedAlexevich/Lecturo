@@ -1,8 +1,9 @@
+import asyncio
 import uuid
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -11,6 +12,7 @@ from app.pipeline import download, media, stages, summarize
 from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 from app.services import quota
+from app.services.account import lecture_files, remove_files
 
 HANDLERS: dict[StepName, StepHandler] = {
     StepName.download: download.download,
@@ -46,6 +48,15 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
     except BaseException as error:
         await mark_failed(lecture_uuid, str(error) or type(error).__name__)
         raise
+    finally:
+        await purge_if_deleted(lecture_uuid)
+
+
+async def purge_if_deleted(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        exists = await session.scalar(select(Lecture.id).where(Lecture.id == lecture_id))
+    if exists is None:
+        await asyncio.to_thread(remove_files, lecture_files(lecture_id, []))
 
 
 async def run_plan(lecture_id: uuid.UUID) -> str:
