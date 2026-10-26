@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from app.models import AuthIdentity, AuthProvider, Lecture, Payment, User
 from app.schemas.user import AccountDeleteIn
 from app.services.auth import verify_password
 from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
+
+logger = logging.getLogger(__name__)
 
 CONFIRMATION_REQUIRED = "Подтвердите удаление паролем или данными Telegram"
 CONFIRMATION_FAILED = "Подтверждение не прошло"
@@ -58,12 +61,15 @@ def lecture_files(lecture_id: uuid.UUID, paths: list[str | None]) -> set[Path]:
     return files
 
 
-def remove_files(files: set[Path], user_id: uuid.UUID) -> None:
+def remove_files(files: set[Path], user_id: uuid.UUID | None = None) -> None:
     uploads_dir = get_settings().storage_dir / "uploads"
-    if uploads_dir.is_dir():
+    if user_id is not None and uploads_dir.is_dir():
         files.update(uploads_dir.glob(f"{user_id.hex}*"))
     for file in files:
-        file.unlink(missing_ok=True)
+        try:
+            file.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Не удалось удалить файл %s", file)
 
 
 async def delete_account(session: AsyncSession, user: User) -> None:
