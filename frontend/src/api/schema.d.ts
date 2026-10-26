@@ -1217,6 +1217,8 @@ export interface components {
             display_name: string;
             /** Accept Terms */
             accept_terms: boolean;
+            /** Accept Personal Data */
+            accept_personal_data: boolean;
         };
         /** SearchHit */
         SearchHit: {
@@ -1316,10 +1318,47 @@ export interface components {
             /** Hash */
             hash: string;
         };
+        /** TelegramSignupIn */
+        TelegramSignupIn: {
+            /** Id */
+            id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Photo Url */
+            photo_url?: string | null;
+            /** Auth Date */
+            auth_date: number;
+            /** Hash */
+            hash: string;
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms: boolean;
+            /**
+             * Accept Personal Data
+             * @default false
+             */
+            accept_personal_data: boolean;
+        };
         /** TelegramWebAppIn */
         TelegramWebAppIn: {
             /** Init Data */
             init_data: string;
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms: boolean;
+            /**
+             * Accept Personal Data
+             * @default false
+             */
+            accept_personal_data: boolean;
         };
         /** TokenIn */
         TokenIn: {
@@ -1497,7 +1536,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TelegramLoginIn"];
+                "application/json": components["schemas"]["TelegramSignupIn"];
             };
         };
         responses: {
@@ -1509,6 +1548,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
                 };
+            };
+            /** @description Новому пользователю нужны оба согласия */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1913,6 +1959,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
                 };
+            };
+            /** @description Новому пользователю нужны оба согласия */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
