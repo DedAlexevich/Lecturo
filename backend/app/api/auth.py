@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy import delete, select, update
 
+from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
 from app.models import AuthToken, AuthTokenKind, User
@@ -19,6 +20,7 @@ from app.schemas.user import (
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import consume_token, issue_token
 from app.services.mail import send_password_reset_mail, send_verification_mail
+from app.services.rate_limit import enforce_mail_rate_limit
 from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -56,10 +58,11 @@ async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut
 
 @router.post("/verify-email/request", status_code=status.HTTP_204_NO_CONTENT)
 async def request_email_verification(
-    user: CurrentUser, session: SessionDep, background: BackgroundTasks
+    user: CurrentUser, session: SessionDep, background: BackgroundTasks, request: Request
 ) -> None:
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "У аккаунта нет email")
+    await enforce_mail_rate_limit(request, f"verify:{user.id}")
     if user.email_verified_at is not None:
         return
     token = await issue_token(session, user.id, AuthTokenKind.verify_email)
@@ -79,13 +82,20 @@ async def confirm_email(body: TokenIn, session: SessionDep) -> None:
 
 @router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
 async def request_password_reset(
-    body: EmailIn, session: SessionDep, background: BackgroundTasks
+    body: EmailIn, background: BackgroundTasks, request: Request
 ) -> None:
-    user = await session.scalar(select(User).where(User.email == normalize_email(body.email)))
-    if user is None or user.email is None:
-        return
-    token = await issue_token(session, user.id, AuthTokenKind.reset_password)
-    background.add_task(send_password_reset_mail, user.email, token)
+    email = normalize_email(body.email)
+    await enforce_mail_rate_limit(request, f"reset:{email}")
+    background.add_task(issue_and_send_password_reset, email)
+
+
+async def issue_and_send_password_reset(email: str) -> None:
+    async with SessionLocal() as session:
+        user = await session.scalar(select(User).where(User.email == email))
+        if user is None or user.email is None:
+            return
+        token = await issue_token(session, user.id, AuthTokenKind.reset_password)
+    await send_password_reset_mail(user.email, token)
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)

@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, select, update
 
 from app.core.config import get_settings
@@ -174,3 +175,58 @@ async def test_mail_without_smtp_goes_to_log(caplog, monkeypatch):
         await send_verification_mail("a@example.org", "abc")
     get_settings.cache_clear()
     assert "https://lecturo.test/verify-email?token=abc" in caplog.text
+
+
+@pytest.fixture(autouse=True)
+async def clean_mail_limits():
+    redis = Redis.from_url(get_settings().redis_url)
+    for key in await redis.keys("rate:auth-mail:*"):
+        await redis.delete(key)
+    await redis.aclose()
+
+
+async def test_password_reset_rate_limited_per_email(client, email, mails):
+    await register(client, email)
+    statuses = [
+        (await client.post(f"{API}/password-reset/request", json={"email": email})).status_code
+        for _ in range(4)
+    ]
+    assert statuses == [204, 204, 204, 429]
+    assert len(mails) == 3
+
+
+async def test_password_reset_limit_same_for_unknown_email(client, email, mails):
+    unknown = f"missing-{email}"
+    responses = [
+        await client.post(f"{API}/password-reset/request", json={"email": unknown})
+        for _ in range(4)
+    ]
+    assert [r.status_code for r in responses] == [204, 204, 204, 429]
+    assert not mails
+
+
+async def test_password_reset_rate_limited_per_ip(client, mails, monkeypatch):
+    monkeypatch.setenv("AUTH_MAIL_IP_RATE_LIMIT", "2")
+    get_settings.cache_clear()
+    try:
+        statuses = [
+            (
+                await client.post(
+                    f"{API}/password-reset/request", json={"email": f"a{i}@example.org"}
+                )
+            ).status_code
+            for i in range(3)
+        ]
+    finally:
+        get_settings.cache_clear()
+    assert statuses == [204, 204, 429]
+
+
+async def test_verify_email_rate_limited(client, email, mails):
+    headers = await register(client, email)
+    statuses = [
+        (await client.post(f"{API}/verify-email/request", headers=headers)).status_code
+        for _ in range(4)
+    ]
+    assert statuses == [204, 204, 204, 429]
+    assert len(mails) == 3
