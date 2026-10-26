@@ -6,6 +6,7 @@ from app.models import (
     Lecture,
     LectureStatus,
     ProcessingStep,
+    SearchChunk,
     SourceType,
     StepName,
     StepStatus,
@@ -35,6 +36,32 @@ async def create_link_lecture(user: User) -> Lecture:
         session.add(lecture)
         await session.commit()
         return lecture
+
+
+async def create_local_lecture(user: User) -> Lecture:
+    async with SessionLocal() as session:
+        lecture = Lecture(
+            owner_id=user.id,
+            title="Линейная алгебра",
+            source_type=SourceType.local,
+            duration_sec=20.0,
+            processed_locally=True,
+        )
+        session.add(lecture)
+        await session.flush()
+        session.add_all(
+            TranscriptSegment(
+                lecture_id=lecture.id, idx=idx, start=start, end=start + 9.0, text=text
+            )
+            for idx, (start, text) in enumerate([(0.0, "Матрицы"), (10.0, "Определители")])
+        )
+        await session.commit()
+        return lecture
+
+
+class ForbiddenEmbeddings:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise AssertionError("Текст ушёл провайдеру эмбеддингов")
 
 
 async def noop_download(session, lecture, report) -> None:
@@ -84,3 +111,50 @@ async def test_pipeline_without_consent_fails_before_server_processing(user, mon
             .where(TranscriptSegment.lecture_id == lecture.id)
         )
         assert segments == 0
+
+
+async def test_embed_requires_consent(user, monkeypatch):
+    monkeypatch.setattr(stages, "get_embeddings", ForbiddenEmbeddings)
+    await revoke_consent(user)
+    lecture = await create_local_lecture(user)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        with pytest.raises(stages.ConsentMissing):
+            await stages.embed(session, stored, report)
+
+
+async def test_local_lecture_with_consent_is_embedded(user):
+    lecture = await create_local_lecture(user)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    async with SessionLocal() as session:
+        chunks = await session.scalar(
+            select(func.count())
+            .select_from(SearchChunk)
+            .where(SearchChunk.lecture_id == lecture.id)
+        )
+        assert chunks == 1
+
+
+async def test_local_lecture_without_consent_is_not_embedded(user, monkeypatch):
+    monkeypatch.setattr(stages, "get_embeddings", ForbiddenEmbeddings)
+    await revoke_consent(user)
+    lecture = await create_local_lecture(user)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    async with SessionLocal() as session:
+        step = await session.scalar(
+            select(ProcessingStep).where(
+                ProcessingStep.lecture_id == lecture.id, ProcessingStep.step == StepName.embed
+            )
+        )
+        assert step.status == StepStatus.failed
+        assert step.error == stages.AI_TRANSFER_REQUIRED
+        chunks = await session.scalar(
+            select(func.count())
+            .select_from(SearchChunk)
+            .where(SearchChunk.lecture_id == lecture.id)
+        )
+        assert chunks == 0

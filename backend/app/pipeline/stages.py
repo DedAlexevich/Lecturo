@@ -43,6 +43,7 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
 
 
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
+    await require_ai_transfer(session, lecture)
     chunks = split_into_chunks(await load_segments(session, lecture))
     vectors = await get_embeddings().embed([text for _, _, text in chunks])
     await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))
