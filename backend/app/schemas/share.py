@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from app.schemas.common import Schema
-from app.schemas.lecture import ChapterOut, LectureOut, SegmentOut, SummaryOut
+from app.schemas.lecture import ChapterOut, SegmentOut, SummaryOut
 
 
 class ShareIn(Schema):
@@ -35,11 +35,19 @@ class PublicLectureOut(Schema):
     summary: SummaryOut | None
 
 
+class PublicLectureSummary(Schema):
+    id: uuid.UUID
+    title: str
+    duration_sec: float | None
+    processed_locally: bool
+    share_token: str | None
+
+
 class PublicCourseOut(Schema):
     id: uuid.UUID
     title: str
     description: str
-    lectures: list[LectureOut]
+    lectures: list[PublicLectureSummary]
 
 
 class PublicShareOut(Schema):
