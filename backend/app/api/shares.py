@@ -85,7 +85,9 @@ async def public_course(session: AsyncSession, course_id: uuid.UUID) -> PublicCo
         .join(course_lectures, course_lectures.c.lecture_id == Lecture.id)
         .outerjoin(
             ShareLink,
-            (ShareLink.lecture_id == Lecture.id) & ShareLink.revoked_at.is_(None),
+            (ShareLink.lecture_id == Lecture.id)
+            & (ShareLink.owner_id == course.owner_id)
+            & ShareLink.revoked_at.is_(None),
         )
         .where(course_lectures.c.course_id == course_id)
         .order_by(course_lectures.c.position, course_lectures.c.added_at)

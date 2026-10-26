@@ -154,3 +154,14 @@ async def test_unknown_token_is_404(client):
 
 async def test_shares_require_auth(client):
     assert (await client.get("/api/v1/shares")).status_code == 401
+
+
+async def test_revoked_course_share_is_404(client, verified_user, auth_headers):
+    course = (
+        await client.post("/api/v1/courses", json={"title": "Матан"}, headers=auth_headers)
+    ).json()
+    share = (await create_share(client, auth_headers, course_id=course["id"])).json()
+    assert (await client.get(f"/api/v1/public/{share['token']}")).status_code == 200
+    revoked = await client.delete(f"/api/v1/shares/{share['token']}", headers=auth_headers)
+    assert revoked.status_code == 204
+    assert (await client.get(f"/api/v1/public/{share['token']}")).status_code == 404
