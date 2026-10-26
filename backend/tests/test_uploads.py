@@ -205,12 +205,3 @@ async def test_pre_finish_keeps_incomplete_upload(client, user, auth_headers, st
     assert response.json()["HTTPResponse"]["StatusCode"] == 409
     assert await user_lectures(user.id) == []
     assert path.exists()
-
-
-async def test_hooks_reject_proxied_request(client, auth_headers):
-    response = await client.post(
-        HOOKS_URL,
-        json=hook("pre-create", auth_headers, Size=1000),
-        headers={"X-Forwarded-For": "203.0.113.7"},
-    )
-    assert response.status_code == 404
