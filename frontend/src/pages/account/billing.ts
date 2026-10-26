@@ -61,16 +61,35 @@ type CreatePayment = {
 
 export const paymentReturnParam = "payment";
 
+const pendingPaymentPrefix = "lecturo.payment.";
+
+function rememberPayment(returnKey: string, paymentId: string) {
+  try {
+    sessionStorage.setItem(pendingPaymentPrefix + returnKey, paymentId);
+  } catch {
+    return;
+  }
+}
+
+export function rememberedPayment(returnKey: string) {
+  try {
+    return sessionStorage.getItem(pendingPaymentPrefix + returnKey);
+  } catch {
+    return null;
+  }
+}
+
 export function useCreatePayment() {
   return useMutation({
     mutationFn: async ({ productCode, idempotenceKey }: CreatePayment) => {
       const returnUrl = new URL("/account", window.location.origin);
-      returnUrl.searchParams.set(paymentReturnParam, "return");
+      returnUrl.searchParams.set(paymentReturnParam, idempotenceKey);
       const { data, error, response } = await api.POST("/api/v1/billing/payments", {
         params: { header: { "Idempotence-Key": idempotenceKey } },
         body: { product_code: productCode, accept_offer: true, return_url: returnUrl.toString() },
       });
       if (data === undefined) throw new ApiError(response.status, error);
+      rememberPayment(idempotenceKey, data.id);
       return data;
     },
   });

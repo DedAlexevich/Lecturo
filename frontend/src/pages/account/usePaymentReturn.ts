@@ -2,14 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useToast } from "../../ui/Toast";
-import { paymentReturnParam, paymentsQueryKey, quotaQueryKey, usePayments } from "./billing";
+import { paymentReturnParam, paymentsQueryKey, quotaQueryKey, rememberedPayment, usePayments } from "./billing";
 
 const pollInterval = 3000;
 const pollLimit = 2 * 60_000;
 
 export function usePaymentReturn() {
   const [params, setParams] = useSearchParams();
-  const returned = params.has(paymentReturnParam);
+  const returnKey = params.get(paymentReturnParam);
+  const returned = returnKey !== null;
+  const [paymentId] = useState(() => (returnKey ? rememberedPayment(returnKey) : null));
   const queryClient = useQueryClient();
   const toast = useToast();
   const [startedAt] = useState(() => Date.now());
@@ -18,7 +20,7 @@ export function usePaymentReturn() {
 
   useEffect(() => {
     if (!returned || handled.current || (!payments && !isError)) return;
-    const latest = payments?.[0];
+    const latest = payments?.find((payment) => payment.id === paymentId) ?? payments?.[0];
     const finish = (message: string, tone: "success" | "info" | "error") => {
       handled.current = true;
       toast.show(message, tone);
@@ -37,7 +39,7 @@ export function usePaymentReturn() {
     else if (latest?.status === "canceled") finish("Платёж отменён, деньги не списаны.", "info");
     else if (!latest || Date.now() - startedAt > pollLimit)
       finish("Платёж ещё обрабатывается. Статус обновится в истории платежей.", "info");
-  }, [returned, payments, dataUpdatedAt, isError, startedAt, toast, queryClient, setParams]);
+  }, [returned, paymentId, payments, dataUpdatedAt, isError, startedAt, toast, queryClient, setParams]);
 
   return returned && !handled.current;
 }
