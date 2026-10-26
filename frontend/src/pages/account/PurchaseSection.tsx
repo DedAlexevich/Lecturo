@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
@@ -44,6 +44,15 @@ function PurchaseForm({ products }: { products: Product[] }) {
   const offer = documents?.find((document) => document.slug === "offer");
   const refund = documents?.find((document) => document.slug === "refund");
   const selected = products.find((product) => product.code === code) ?? products[0];
+  const { reset } = createPayment;
+
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) reset();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, [reset]);
 
   const choose = (next: string) => {
     setCode(next);
@@ -61,6 +70,7 @@ function PurchaseForm({ products }: { products: Product[] }) {
       { productCode: selected.code, idempotenceKey: idempotenceKey.current },
       {
         onSuccess: (payment) => {
+          idempotenceKey.current = crypto.randomUUID();
           if (payment.confirmation_url) window.location.assign(payment.confirmation_url);
         },
       },
