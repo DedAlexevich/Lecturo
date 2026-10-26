@@ -65,7 +65,7 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
     try:
         link = await inspect_link(url)
     except LinkError as error:
-        raise HTTPException(422, str(error)) from error
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
     if body.course_id is not None:
         await get_own_course(session, body.course_id, user)
 
