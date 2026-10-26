@@ -1,0 +1,263 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+  padding-bottom: var(--space-7);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.header h1 {
+  font-size: var(--text-2xl);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.sectionTitle {
+  font-size: var(--text-xl);
+}
+
+.state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  min-height: 6rem;
+  align-content: center;
+}
+
+.quota {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+}
+
+.quotaLead {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+}
+
+.figureLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.figure {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.alert {
+  color: var(--color-danger);
+}
+
+.facts {
+  display: grid;
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.fact:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.fact dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.fact dd {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.factValue {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.sectionHead {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.purchase {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.options {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.option:first-of-type {
+  border-top-color: transparent;
+}
+
+.option:hover {
+  background: var(--color-surface-sunken);
+}
+
+.option:has(input:checked) {
+  background: var(--color-accent-soft);
+  border-top-color: transparent;
+}
+
+.option:has(input:checked) + .option {
+  border-top-color: transparent;
+}
+
+.option input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.2rem 0 0;
+  accent-color: var(--color-accent);
+}
+
+.optionText {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.optionTitle {
+  font-weight: var(--weight-semibold);
+}
+
+.optionPrice {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.consent {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+}
+
+.payments {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.payments th {
+  padding: 0 var(--space-3) var(--space-2) 0;
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+  text-align: left;
+}
+
+.payments td {
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.payments th:last-child,
+.payments td:last-child {
+  padding-right: 0;
+}
+
+.payments .numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.date {
+  white-space: nowrap;
+}
+
+.status {
+  display: grid;
+  justify-items: start;
+  white-space: nowrap;
+}
+
+.statusSucceeded {
+  color: var(--color-success);
+}
+
+.statusPending {
+  color: var(--color-warning);
+}
+
+.statusCanceled {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 720px) {
+  .panel {
+    padding: var(--space-4);
+  }
+
+  .quota {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
