@@ -99,8 +99,32 @@ async def list_payments(user: CurrentUser, session: SessionDep) -> list[PaymentO
 
 
 @router.post("/webhook", include_in_schema=False)
-async def yookassa_webhook(body: dict[str, Any]) -> dict[str, str]:
-    not_ready()
+async def yookassa_webhook(
+    body: dict[str, Any], session: SessionDep, yookassa_factory: YooKassaFactory
+) -> dict[str, str]:
+    try:
+        yookassa_id = yookassa.notification_payment_id(body)
+    except yookassa.NotificationError as error:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
+    try:
+        client = yookassa_factory()
+    except ValueError as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Оплата недоступна") from error
+    try:
+        await yookassa.process_notification(session, client, yookassa_id, get_settings())
+    except yookassa.NotificationError as error:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
+    except yookassa.PaymentError as error:
+        logger.error("Не удалось начислить оплату %s: %s", yookassa_id, error)
+        raise HTTPException(422, str(error)) from error
+    except yookassa.YooKassaError as error:
+        if error.rejected:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Платёж не найден в ЮKassa") from error
+        logger.error("Не удалось проверить платёж %s в ЮKassa: %s", yookassa_id, error)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "ЮKassa недоступна, повторите позже"
+        ) from error
+    return {"status": "ok"}
 
 
 @router.get("/waiting")
