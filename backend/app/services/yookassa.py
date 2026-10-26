@@ -333,6 +333,14 @@ async def process_notification(
         return payment
 
     status = remote.get("status")
+    if payment.user_id is None:
+        if status == PaymentStatus.succeeded:
+            payment.status = PaymentStatus.succeeded
+            payment.paid_at = parse_time(remote.get("captured_at")) or now or datetime.now(UTC)
+        elif status == PaymentStatus.canceled:
+            payment.status = PaymentStatus.canceled
+        await session.commit()
+        return payment
     if status == PaymentStatus.succeeded:
         await apply_succeeded(session, payment, remote, now or datetime.now(UTC), settings)
     elif status == PaymentStatus.canceled:
