@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -121,3 +123,31 @@ async def test_retry_rejects_lecture_that_did_not_fail(user, client, auth_header
 def test_split_into_chunks(bounds, expected):
     segments = [TranscriptSegment(start=s, end=e, text="т") for s, e in bounds]
     assert [(s, e) for s, e, _ in split_into_chunks(segments)] == expected
+
+
+async def test_error_outside_step_marks_lecture_failed(user, monkeypatch):
+    lecture = await create_lecture(user)
+
+    async def broken_get_step(*args):
+        raise ConnectionError("база недоступна")
+
+    monkeypatch.setattr("app.pipeline.runner.get_step", broken_get_step)
+
+    with pytest.raises(ConnectionError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert (await load(lecture.id)).status == LectureStatus.failed
+
+
+async def test_cancelled_job_marks_running_step_failed(user, monkeypatch):
+    lecture = await create_lecture(user)
+
+    async def cancelled(session, lecture, report):
+        raise asyncio.CancelledError
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    failed = await load(lecture.id)
+    assert failed.status == LectureStatus.failed
+    assert steps_by_name(failed)[StepName.transcribe].status == StepStatus.failed
