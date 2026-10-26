@@ -4,6 +4,7 @@ import { EmptyState } from "../../ui/EmptyState";
 import { CourseFilter } from "./CourseFilter";
 import { lecturesCount } from "./format";
 import { LectureList, LectureListSkeleton } from "./LectureList";
+import { ApiError } from "../../app/queryClient";
 import { isActive, useCourses, useLectures, type Lecture } from "./queries";
 import "./home.css";
 
@@ -22,6 +23,10 @@ export function HomePage() {
   const lectures = useLectures(courseId);
   const courses = useCourses();
   const course = courses.data?.find((item) => item.id === courseId);
+  const courseMissing =
+    courseId !== null &&
+    lectures.error instanceof ApiError &&
+    (lectures.error.status === 404 || lectures.error.status === 422);
 
   function openAddLecture() {
     setSearchParams((params) => {
@@ -41,7 +46,7 @@ export function HomePage() {
           {lectures.data && lectures.data.length > 0 && <p className="home__summary">{summaryOf(lectures.data)}</p>}
         </div>
         <div className="home__actions">
-          {courseId && (
+          {courseId && !courseMissing && (
             <Link to={`/courses/${courseId}`} className="home__text-action">
               Открыть курс
             </Link>
@@ -59,7 +64,8 @@ export function HomePage() {
 
       <section className="home__lectures" aria-label="Список лекций">
         {lectures.isPending && <LectureListSkeleton />}
-        {lectures.isError && !lectures.data && (
+        {courseMissing && <EmptyState title="Курс не найден" action={<Link to="/">Все лекции</Link>} />}
+        {lectures.isError && !lectures.data && !courseMissing && (
           <div className="home__error" role="alert">
             <p>Не получилось загрузить лекции.</p>
             <button type="button" className="home__text-action" onClick={() => lectures.refetch()}>
@@ -69,10 +75,7 @@ export function HomePage() {
         )}
         {lectures.data?.length === 0 &&
           (courseId ? (
-            <EmptyState
-              title="В этом курсе пока нет лекций"
-              description="Добавить лекцию в курс можно на странице курса."
-            />
+            <EmptyState title="В этом курсе пока нет лекций" />
           ) : (
             <EmptyState
               title="Лекций пока нет"
