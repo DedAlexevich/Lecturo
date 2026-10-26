@@ -8,8 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AuthIdentity, AuthProvider, User
 from app.schemas.user import EmailIdentityIn, IdentityOut, UserOut
 from app.services.auth import hash_password, normalize_email
-from app.services.consents import ai_transfer_given
-from app.services.legal import read_document
+from app.services.consents import ai_transfer_given, current_ai_transfer_revision
 
 TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому аккаунту"
 EMAIL_TAKEN = "Этот email уже используется"
@@ -113,7 +112,7 @@ async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvi
 async def accept_ai_transfer(session: AsyncSession, user: User) -> None:
     if not ai_transfer_given(user.ai_transfer_accepted_at, user.ai_transfer_revision):
         user.ai_transfer_accepted_at = datetime.now(UTC)
-        user.ai_transfer_revision = read_document("ai-transfer").revision_date
+        user.ai_transfer_revision = current_ai_transfer_revision()
         await session.commit()
 
 
