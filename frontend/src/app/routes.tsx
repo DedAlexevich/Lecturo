@@ -1,5 +1,6 @@
 import type { RouteObject } from "react-router";
 import { LoginPage } from "../pages/auth/LoginPage";
+import { LegalPage } from "../pages/legal/LegalPage";
 import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
@@ -12,7 +13,7 @@ export const guestRoutes: RouteObject[] = [
 ];
 
 export const publicRoutes: RouteObject[] = [
-  { path: "/legal/:slug", element: <EmptyPage title="Документ" /> },
+  { path: "/legal/:slug", element: <LegalPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/ui", element: <UiPage /> },
