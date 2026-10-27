@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
-from app.core.deps import CurrentUser, SessionDep
+from app.core.deps import CurrentUser, RequireSubscription, SessionDep
 from app.core.errors import not_ready
 from app.models import (
     Lecture,
@@ -224,10 +224,10 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)
-async def create_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> None:
+async def create_quiz(lecture_id: uuid.UUID, user: RequireSubscription) -> None:
     not_ready()
 
 
 @router.get("/{lecture_id}/quiz")
-async def get_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> QuizOut:
+async def get_quiz(lecture_id: uuid.UUID, user: RequireSubscription) -> QuizOut:
     not_ready()
