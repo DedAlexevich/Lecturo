@@ -14,7 +14,7 @@ type QuizRunnerProps = {
 
 type Answer = number | null;
 
-export function momentLink(lectureId: string, seconds: number) {
+function momentLink(lectureId: string, seconds: number) {
   return `/lectures/${lectureId}?t=${Math.floor(seconds)}`;
 }
 

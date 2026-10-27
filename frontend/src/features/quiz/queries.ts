@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
+import { lectureQueryKey } from "../../pages/lecture/useLecture";
 import { detailOf } from "../upload/errors";
 
 export type Quiz = components["schemas"]["QuizOut"];
@@ -72,7 +73,14 @@ export function useQuizStep(id: string, enabled: boolean) {
 
 export function useRefreshQuiz(id: string) {
   const queryClient = useQueryClient();
-  return useCallback(() => queryClient.invalidateQueries({ queryKey: quizQueryKey(id) }), [queryClient, id]);
+  return useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: quizQueryKey(id) }),
+        queryClient.invalidateQueries({ queryKey: lectureQueryKey(id), exact: true }),
+      ]),
+    [queryClient, id],
+  );
 }
 
 export function useCreateQuiz(id: string) {
