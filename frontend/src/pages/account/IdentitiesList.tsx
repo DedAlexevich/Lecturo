@@ -5,6 +5,8 @@ import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
+import { VkButton } from "../auth/VkButton";
+import { useVkEnabled } from "../auth/vk";
 import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
 import styles from "./SettingsSection.module.css";
@@ -25,10 +27,14 @@ export function IdentitiesList({ me }: { me: Me }) {
   const toast = useToast();
   const { reset } = unlink;
   const linked = (provider: Provider) => me.identities.find((identity) => identity.provider === provider);
+  const vkEnabled = useVkEnabled();
   const providers: Provider[] = [
     "telegram",
     "email",
-    ...me.identities.map((identity) => identity.provider).filter((provider) => provider !== "telegram" && provider !== "email"),
+    ...(vkEnabled || linked("vk") ? (["vk"] as const) : []),
+    ...me.identities
+      .map((identity) => identity.provider)
+      .filter((provider) => provider !== "telegram" && provider !== "email" && provider !== "vk"),
   ];
   const onlyOne = me.identities.length <= 1;
 
@@ -67,6 +73,8 @@ export function IdentitiesList({ me }: { me: Me }) {
                 </div>
               ) : provider === "telegram" ? (
                 <LinkTelegram />
+              ) : provider === "vk" ? (
+                <LinkVk />
               ) : (
                 <LinkEmail />
               )}
@@ -123,6 +131,20 @@ function LinkTelegram() {
       {link.isError && (
         <p className={styles.alert} role="alert">
           {settingsError(link.error)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LinkVk() {
+  const [error, setError] = useState<unknown>();
+  return (
+    <div className={styles.identityAction}>
+      <VkButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
+      {error !== undefined && (
+        <p className={styles.alert} role="alert">
+          {settingsError(error)}
         </p>
       )}
     </div>

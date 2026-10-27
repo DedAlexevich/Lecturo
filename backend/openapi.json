@@ -156,6 +156,130 @@
         }
       }
     },
+    "/api/v1/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Providers",
+        "operationId": "providers_api_v1_auth_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/vk/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start Vk Login",
+        "operationId": "start_vk_login_api_v1_auth_vk_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VkStartOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток входа"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/vk/callback": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Vk",
+        "operationId": "login_vk_api_v1_auth_vk_callback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия входа не найдена или устарела"
+          },
+          "401": {
+            "description": "VK отклонил вход"
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
+          },
+          "502": {
+            "description": "VK недоступен"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/verify-email/request": {
       "post": {
         "tags": [
@@ -464,6 +588,96 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities/vk/start": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Start Vk Link",
+        "operationId": "start_vk_link_api_v1_me_identities_vk_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VkStartOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities/vk": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Link Vk",
+        "operationId": "link_vk_api_v1_me_identities_vk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия привязки не найдена или устарела"
+          },
+          "401": {
+            "description": "VK отклонил вход"
+          },
+          "409": {
+            "description": "VK уже привязан к другому аккаунту"
+          },
+          "502": {
+            "description": "VK недоступен"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
           },
           "422": {
             "description": "Validation Error",
@@ -3229,6 +3443,19 @@
         ],
         "title": "ProfileUpdateIn"
       },
+      "ProvidersOut": {
+        "properties": {
+          "vk": {
+            "type": "boolean",
+            "title": "Vk"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vk"
+        ],
+        "title": "ProvidersOut"
+      },
       "PublicCourseOut": {
         "properties": {
           "id": {
@@ -4091,6 +4318,76 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VkCallbackIn": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "State"
+          },
+          "device_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id"
+          },
+          "nonce": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state",
+          "device_id",
+          "nonce"
+        ],
+        "title": "VkCallbackIn"
+      },
+      "VkStartIn": {
+        "properties": {
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "VkStartIn"
+      },
+      "VkStartOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "nonce": {
+            "type": "string",
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "nonce"
+        ],
+        "title": "VkStartOut"
       },
       "WaitingLectureOut": {
         "properties": {

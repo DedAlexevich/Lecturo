@@ -11,6 +11,7 @@ from app.services.auth import hash_password, normalize_email
 from app.services.consents import ai_transfer_given, current_ai_transfer_revision
 
 TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому аккаунту"
+VK_TAKEN = "Этот VK уже привязан к другому аккаунту"
 EMAIL_TAKEN = "Этот email уже используется"
 
 
@@ -73,6 +74,28 @@ async def link_telegram(session: AsyncSession, user: User, telegram_id: int, pro
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, TELEGRAM_TAKEN) from None
+
+
+async def link_vk(session: AsyncSession, user: User, vk_id: str, profile: dict) -> None:
+    existing = await find_identity(session, AuthProvider.vk, vk_id)
+    if existing is not None and existing.user_id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, VK_TAKEN)
+    own = await user_identity(session, user, AuthProvider.vk)
+    if own is not None and own.provider_user_id != vk_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "К аккаунту уже привязан другой VK")
+    if own is None:
+        session.add(
+            AuthIdentity(
+                user_id=user.id, provider=AuthProvider.vk, provider_user_id=vk_id, data=profile
+            )
+        )
+    else:
+        own.data = profile
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, VK_TAKEN) from None
 
 
 async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -> None:

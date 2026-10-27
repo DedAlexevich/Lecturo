@@ -68,6 +68,12 @@ export function useLinkTelegram() {
   );
 }
 
+export function useLinkVk() {
+  return useMeMutation(async (body: components["schemas"]["VkCallbackIn"]) =>
+    unwrap(await api.POST("/api/v1/me/identities/vk", { body })),
+  );
+}
+
 export function useLinkEmail() {
   return useMeMutation(async (body: components["schemas"]["EmailIdentityIn"]) =>
     unwrap(await api.POST("/api/v1/me/identities/email", { body })),

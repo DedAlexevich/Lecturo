@@ -10,6 +10,8 @@ from app.schemas.user import (
     ProfileUpdateIn,
     TelegramLoginIn,
     UserOut,
+    VkCallbackIn,
+    VkStartOut,
 )
 from app.services import identities
 from app.services.account import (
@@ -20,6 +22,7 @@ from app.services.account import (
 )
 from app.services.rate_limit import enforce_rate_limit
 from app.services.telegram_auth import verify_login_widget
+from app.services.vk_auth import VkClientDep, complete_flow, start_flow
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -67,6 +70,38 @@ async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: Sessi
     verify_login_widget(body)
     profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
     await identities.link_telegram(session, user, body.id, profile)
+    return await identities.user_out(session, user)
+
+
+@router.post(
+    "/identities/vk/start",
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"}},
+)
+async def start_vk_link(user: CurrentUser) -> VkStartOut:
+    url, nonce = await start_flow(get_settings(), user_id=user.id)
+    return VkStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/identities/vk",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия привязки не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "VK отклонил вход"},
+        status.HTTP_409_CONFLICT: {"description": "VK уже привязан к другому аккаунту"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "VK недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
+)
+async def link_vk(
+    body: VkCallbackIn,
+    user: CurrentUser,
+    session: SessionDep,
+    client: VkClientDep,
+) -> UserOut:
+    vk_id, profile, _ = await complete_flow(
+        get_settings(), client, body.code, body.state, body.device_id, body.nonce, user.id
+    )
+    await identities.link_vk(session, user, vk_id, profile)
     return await identities.user_out(session, user)
 
 
