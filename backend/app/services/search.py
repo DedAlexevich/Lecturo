@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 RRF_K = 60
 CANDIDATES = 50
 LIMIT = 20
-LEXEME_PATTERN = r"'((?:[^']|'')+)'"
+MIN_PREFIX_LENGTH = 4
+LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
 
 
 async def embed_query(q: str) -> list[float] | None:
@@ -58,7 +60,12 @@ async def hybrid_search(
 
 
 async def fulltext_ids(session: AsyncSession, scope: ColumnElement[bool], q: str) -> list[int]:
-    query = prefix_tsquery(q)
+    stemmed = await session.scalar(
+        select(cast(func.websearch_to_tsquery(literal("russian", REGCONFIG), q), Text))
+    )
+    if not stemmed:
+        return []
+    query = func.to_tsquery(literal("simple", REGCONFIG), add_prefixes(stemmed))
     rows = await session.scalars(
         select(SearchChunk.id)
         .where(scope, SearchChunk.tsv.op("@@")(query))
@@ -68,10 +75,12 @@ async def fulltext_ids(session: AsyncSession, scope: ColumnElement[bool], q: str
     return list(rows)
 
 
-def prefix_tsquery(q: str) -> ColumnElement:
-    stemmed = cast(func.websearch_to_tsquery(literal("russian", REGCONFIG), q), Text)
-    prefixed = func.regexp_replace(stemmed, LEXEME_PATTERN, r"'\1':*", "g")
-    return func.to_tsquery(literal("simple", REGCONFIG), prefixed)
+def add_prefixes(tsquery: str) -> str:
+    def prefix(match: re.Match[str]) -> str:
+        lexeme = match.group(1).replace("''", "'")
+        return f"{match.group(0)}:*" if len(lexeme) >= MIN_PREFIX_LENGTH else match.group(0)
+
+    return LEXEME_PATTERN.sub(prefix, tsquery)
 
 
 async def vector_ids(

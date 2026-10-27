@@ -7,7 +7,7 @@ from app.models import Course, Lecture, SearchChunk, SourceType, User, course_le
 from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import StubEmbeddings
 from app.services import search as search_service
-from app.services.search import LIMIT, RRF_K, rrf
+from app.services.search import LIMIT, RRF_K, add_prefixes, rrf
 
 
 async def create_lecture(owner_id: uuid.UUID, title: str, *texts: str) -> uuid.UUID:
@@ -195,3 +195,26 @@ def test_rrf_sums_reciprocal_ranks():
         2: 1 / (RRF_K + 2) + 1 / (RRF_K + 1),
         3: 1 / (RRF_K + 2),
     }
+
+
+@pytest.mark.parametrize(
+    ("stemmed", "expected"),
+    [
+        ("'интегра'", "'интегра':*"),
+        ("'ряд'", "'ряд'"),
+        ("'интегра' & !'ряд'", "'интегра':* & !'ряд'"),
+        ("'формул' <-> 'ньютон'", "'формул':* <-> 'ньютон':*"),
+        ("'it''s' | 'ok'", "'it''s':* | 'ok'"),
+    ],
+)
+def test_add_prefixes_only_to_long_lexemes(stemmed, expected):
+    assert add_prefixes(stemmed) == expected
+
+
+async def test_short_word_matches_exactly(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(search_service, "get_embeddings", BrokenEmbeddings)
+    lecture_id = await create_lecture(user.id, "Лекция", "Мат в три хода", "Математика")
+
+    response = await search(client, auth_headers, q="мат", lecture_id=str(lecture_id))
+
+    assert [hit["text"] for hit in response.json()] == ["Мат в три хода"]
