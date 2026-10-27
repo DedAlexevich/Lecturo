@@ -1164,6 +1164,38 @@ export interface components {
             /** Course Id */
             course_id?: string | null;
         };
+        /** LinkLectureOut */
+        LinkLectureOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            source_type: components["schemas"]["SourceType"];
+            /** Source Url */
+            source_url: string | null;
+            /** Embed Url */
+            embed_url: string | null;
+            /** Duration Sec */
+            duration_sec: number | null;
+            status: components["schemas"]["LectureStatus"];
+            /** Processed Locally */
+            processed_locally: boolean;
+            /** Video Expires At */
+            video_expires_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Existing
+             * @default false
+             */
+            existing: boolean;
+        };
         /** LocalResultIn */
         LocalResultIn: {
             /** Title */
@@ -3177,7 +3209,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LectureOut"];
+                    "application/json": components["schemas"]["LinkLectureOut"];
                 };
             };
             /** @description Validation Error */

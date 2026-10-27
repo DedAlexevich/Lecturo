@@ -20,7 +20,7 @@ from app.models import (
     StepStatus,
     course_lectures,
 )
-from app.pipeline.download import LinkError, inspect_link
+from app.pipeline.download import LinkError, inspect_link, link_key
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
 from app.pipeline.tasks import (
@@ -37,6 +37,7 @@ from app.schemas.lecture import (
     LectureStatusOut,
     LectureUpdate,
     LinkIn,
+    LinkLectureOut,
     QuizOut,
 )
 from app.services import quota
@@ -112,11 +113,52 @@ async def video_access(
     return Response(status_code=status.HTTP_200_OK)
 
 
+async def find_same_link(session: AsyncSession, user_id: uuid.UUID, url: str) -> Lecture | None:
+    key = link_key(url)
+    lectures = await session.scalars(
+        select(Lecture)
+        .where(
+            Lecture.owner_id == user_id,
+            Lecture.source_type == SourceType.link,
+            Lecture.status != LectureStatus.failed,
+        )
+        .order_by(Lecture.created_at.desc())
+    )
+    return next(
+        (lecture for lecture in lectures if link_key(lecture.source_url or "") == key), None
+    )
+
+
+async def add_existing_to_course(
+    session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID
+) -> None:
+    in_course = await session.scalar(
+        select(
+            exists().where(
+                course_lectures.c.course_id == course_id,
+                course_lectures.c.lecture_id == lecture_id,
+            )
+        )
+    )
+    if not in_course:
+        await add_to_course(session, course_id, lecture_id)
+
+
 @router.post("/link", status_code=status.HTTP_201_CREATED)
-async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> LectureOut:
+async def add_link(
+    body: LinkIn, user: CurrentUser, session: SessionDep, response: Response
+) -> LinkLectureOut:
     require_ai_transfer_consent(user)
-    await session.commit()
     url = str(body.url)
+    if (same := await find_same_link(session, user.id, url)) is not None:
+        if body.course_id is not None:
+            await get_own_course(session, body.course_id, user)
+            await add_existing_to_course(session, body.course_id, same.id)
+        existing = LinkLectureOut.model_validate(same).model_copy(update={"existing": True})
+        await session.commit()
+        response.status_code = status.HTTP_200_OK
+        return existing
+    await session.commit()
     try:
         link = await inspect_link(url)
     except LinkError as error:
@@ -142,7 +184,7 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
     await session.refresh(lecture)
     if waiting:
         await publish_status(lecture.id, user.id, lecture.status)
-        return LectureOut.model_validate(lecture)
+        return LinkLectureOut.model_validate(lecture)
 
     try:
         await enqueue_lecture(lecture.id)
@@ -151,7 +193,7 @@ async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> Lect
         await session.commit()
         await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
-    return LectureOut.model_validate(lecture)
+    return LinkLectureOut.model_validate(lecture)
 
 
 @router.patch("/{lecture_id}")

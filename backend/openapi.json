@@ -1813,7 +1813,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LectureOut"
+                  "$ref": "#/components/schemas/LinkLectureOut"
                 }
               }
             }
@@ -3430,6 +3430,98 @@
           "url"
         ],
         "title": "LinkIn"
+      },
+      "LinkLectureOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "embed_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embed Url"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LectureStatus"
+          },
+          "processed_locally": {
+            "type": "boolean",
+            "title": "Processed Locally"
+          },
+          "video_expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "existing": {
+            "type": "boolean",
+            "title": "Existing",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "source_type",
+          "source_url",
+          "embed_url",
+          "duration_sec",
+          "status",
+          "processed_locally",
+          "video_expires_at",
+          "created_at"
+        ],
+        "title": "LinkLectureOut"
       },
       "LocalResultIn": {
         "properties": {
