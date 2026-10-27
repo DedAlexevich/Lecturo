@@ -43,7 +43,7 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
       responseStatus = 401;
       body = { detail: "Недействительный токен" };
     } else if (path === "/api/v1/me") {
-      body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: [], balance_seconds: 0 };
+      body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: platform ? [{ provider: "telegram", created_at: "2026-10-27T00:00:00Z" }] : [], balance_seconds: 0 };
     }
     await route.fulfill({ status: responseStatus, json: body });
   });
@@ -94,7 +94,7 @@ try {
       window.mock.events.themeChanged.forEach((fn) => fn());
     });
     assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue("--color-surface")), "#fafafa");
-    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click({ timeout: 5000 }).catch(async (e) => { console.log(platform, page.url(), await page.locator("dialog[open]").evaluateAll((d) => d.map((x) => x.outerHTML))); throw e; });
+    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click();
     await page.waitForURL(base + "/account");
     await page.waitForFunction(() => window.mock.visible);
     await page.locator("label.checkbox").filter({ hasText: "Принимаю условия" }).locator(".checkbox__box").click();
