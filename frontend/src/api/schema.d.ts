@@ -1479,6 +1479,25 @@ export interface components {
             /** Content Md */
             content_md: string;
         };
+        /** TelegramLinkIn */
+        TelegramLinkIn: {
+            /** Id */
+            id?: number | null;
+            /** First Name */
+            first_name?: string | null;
+            /** Last Name */
+            last_name?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Photo Url */
+            photo_url?: string | null;
+            /** Auth Date */
+            auth_date?: number | null;
+            /** Hash */
+            hash?: string | null;
+            /** Telegram Init Data */
+            telegram_init_data?: string | null;
+        };
         /** TelegramLoginIn */
         TelegramLoginIn: {
             /** Id */
@@ -2318,7 +2337,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TelegramLoginIn"];
+                "application/json": components["schemas"]["TelegramLinkIn"];
             };
         };
         responses: {

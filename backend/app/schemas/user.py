@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 from app.models import AuthProvider
 from app.schemas.common import Schema
@@ -47,6 +47,27 @@ class TelegramLoginIn(Schema):
     photo_url: str | None = None
     auth_date: int
     hash: str
+
+
+class TelegramLinkIn(Schema):
+    id: int | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    photo_url: str | None = None
+    auth_date: int | None = None
+    hash: str | None = None
+    telegram_init_data: str | None = None
+
+    @model_validator(mode="after")
+    def require_one_source(self) -> "TelegramLinkIn":
+        widget = (self.id, self.first_name, self.auth_date, self.hash)
+        if self.telegram_init_data is not None:
+            if any(value is not None for value in widget):
+                raise ValueError("Укажите либо telegram_init_data, либо данные виджета")
+        elif any(value is None for value in widget):
+            raise ValueError("Нужны telegram_init_data или данные виджета Telegram")
+        return self
 
 
 class TelegramSignupIn(TelegramLoginIn):
