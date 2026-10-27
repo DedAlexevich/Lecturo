@@ -71,9 +71,9 @@ cd ../frontend && npm run gen:api
 
 ## APK для Android
 
-Готовый подписанный APK лежит в `android/lecturo-1.0.0.apk`, его можно сразу ставить на телефон.
+Готовый подписанный APK лежит в `android/lecturo.apk`, его можно сразу ставить на телефон.
 
-APK — это Trusted Web Activity: приложение открывает https://lecturo.ru в Chrome без адресной строки. Проект собирается [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) из `android/twa-manifest.json`, остальное в `android/` генерируется и в репозиторий не попадает.
+APK — это Trusted Web Activity: приложение открывает https://lecturo.ru в Chrome без адресной строки. Проект собирается [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) из `android/twa-manifest.json`, остальное в `android/`, кроме готового APK, генерируется и в репозиторий не попадает.
 
 Нужны Node.js 22. JDK 17 и Android SDK Bubblewrap при первом запуске предложит скачать сам, пути сохраняются в `~/.bubblewrap/config.json`.
 
@@ -88,7 +88,7 @@ bubblewrap build --skipPwaValidation
 
 Пароли от хранилища и ключа Bubblewrap спросит или возьмёт из `BUBBLEWRAP_KEYSTORE_PASSWORD` и `BUBBLEWRAP_KEY_PASSWORD`. Готовый файл: `android/app-release-signed.apk`, для Google Play — `android/app-release-bundle.aab`.
 
-Новая версия: поднимите `appVersionCode` и `appVersionName` в `twa-manifest.json` и соберите заново.
+Новая версия: поднимите `appVersionCode` и `appVersionName` в `twa-manifest.json`, соберите заново и замените `android/lecturo.apk` новым `app-release-signed.apk`.
 
 Сайт подтверждает приложение файлом `frontend/public/.well-known/assetlinks.json`, он отдаётся по https://lecturo.ru/.well-known/assetlinks.json. В нём записан SHA-256 отпечаток сертификата. Если ключ сменился или приложение подписывает Google Play (Play App Signing), возьмите новый отпечаток (`keytool -list -v -keystore android/lecturo-release.keystore -alias lecturo` или Play Console → Целостность приложения) и замените его в `assetlinks.json` и в `fingerprints` в `twa-manifest.json`. Отпечатков может быть несколько. Без совпадающего отпечатка приложение откроется с адресной строкой.
 
