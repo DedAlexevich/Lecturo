@@ -4,7 +4,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 env_value() {
-  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2-
+  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true
 }
 
 public_url=$(env_value PUBLIC_URL)
