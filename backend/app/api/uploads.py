@@ -16,8 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.courses import get_own_course
 from app.api.lectures import QUEUE_UNAVAILABLE, add_to_course
 from app.core.config import get_settings
-from app.core.deps import SessionDep
-from app.core.security import decode_access_token
+from app.core.deps import SessionDep, user_by_token
 from app.models import Lecture, LectureStatus, SourceType, User
 from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
@@ -87,8 +86,7 @@ async def hook_user(session: AsyncSession, hook: Hook) -> User:
     values = next((v for name, v in header.items() if name.lower() == "authorization"), [])
     value = values[0] if values else ""
     scheme, _, token = value.partition(" ")
-    user_id = decode_access_token(token) if scheme.lower() == "bearer" else None
-    user = await session.get(User, user_id) if user_id else None
+    user = await user_by_token(session, token) if scheme.lower() == "bearer" else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужно войти")
     return user

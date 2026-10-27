@@ -19,7 +19,9 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def issue_token(session: AsyncSession, user_id: uuid.UUID, kind: AuthTokenKind) -> str:
+async def issue_token(
+    session: AsyncSession, user_id: uuid.UUID, email: str, kind: AuthTokenKind
+) -> str:
     token = secrets.token_urlsafe(32)
     await session.execute(select(User.id).where(User.id == user_id).with_for_update())
     await session.execute(
@@ -34,6 +36,7 @@ async def issue_token(session: AsyncSession, user_id: uuid.UUID, kind: AuthToken
             user_id=user_id,
             kind=kind,
             token_hash=hash_token(token),
+            email=email,
             expires_at=datetime.now(UTC) + TOKEN_TTL[kind],
         )
     )
@@ -50,11 +53,29 @@ async def consume_token(session: AsyncSession, token: str, kind: AuthTokenKind) 
             AuthToken.kind == kind,
             AuthToken.used_at.is_(None),
             AuthToken.expires_at > now,
+            AuthToken.user_id == User.id,
+            AuthToken.email == User.email,
         )
         .values(used_at=now)
         .returning(AuthToken.user_id)
+        .execution_options(synchronize_session=False)
     )
     if user_id is None:
         await session.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ссылка недействительна или устарела")
     return user_id
+
+
+async def revoke_unused_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
+    await session.execute(
+        delete(AuthToken).where(AuthToken.user_id == user_id, AuthToken.used_at.is_(None))
+    )
+
+
+async def bump_token_version(session: AsyncSession, user_id: uuid.UUID) -> int:
+    return await session.scalar(
+        update(User)
+        .where(User.id == user_id)
+        .values(token_version=User.token_version + 1)
+        .returning(User.token_version)
+    )

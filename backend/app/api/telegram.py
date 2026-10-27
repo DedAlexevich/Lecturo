@@ -26,4 +26,4 @@ async def login_webapp(body: TelegramWebAppIn, session: SessionDep) -> TokenOut:
         body.accept_terms,
         body.accept_personal_data,
     )
-    return TokenOut(access_token=create_access_token(user.id))
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
+from app.core.security import create_access_token
 from app.models import AuthProvider
 from app.schemas.user import (
     AccountDeleteIn,
@@ -10,6 +11,7 @@ from app.schemas.user import (
     ProfileUpdateIn,
     TelegramLinkIn,
     TelegramLoginIn,
+    TokenOut,
     UserOut,
     VkCallbackIn,
     VkStartOut,
@@ -29,6 +31,8 @@ from app.services.vk_auth import VkClientDep, complete_flow, start_flow
 
 router = APIRouter(prefix="/me", tags=["me"])
 
+ACCESS_TOKEN_HEADER = "X-Access-Token"
+
 
 @router.get("")
 async def get_me(user: CurrentUser, session: SessionDep) -> UserOut:
@@ -41,10 +45,10 @@ async def update_me(body: ProfileUpdateIn, user: CurrentUser, session: SessionDe
     return await identities.user_out(session, user)
 
 
-@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/password")
 async def change_my_password(
     body: PasswordChangeIn, user: CurrentUser, session: SessionDep
-) -> None:
+) -> TokenOut:
     settings = get_settings()
     await enforce_rate_limit(
         settings.redis_url,
@@ -52,7 +56,8 @@ async def change_my_password(
         settings.password_change_rate_limit,
         settings.password_change_rate_window_seconds,
     )
-    await change_password(session, user, body.current_password, body.new_password)
+    version = await change_password(session, user, body.current_password, body.new_password)
+    return TokenOut(access_token=create_access_token(user.id, version))
 
 
 @router.post("/delete", status_code=status.HTTP_204_NO_CONTENT)
@@ -175,11 +180,24 @@ async def link_email(body: EmailIdentityIn, user: CurrentUser, session: SessionD
     return await identities.user_out(session, user)
 
 
-@router.delete("/identities/{provider}")
+@router.delete(
+    "/identities/{provider}",
+    responses={
+        status.HTTP_200_OK: {
+            "headers": {
+                ACCESS_TOKEN_HEADER: {
+                    "description": "Новый токен доступа, старые токены больше не действуют",
+                    "schema": {"type": "string"},
+                }
+            }
+        }
+    },
+)
 async def unlink_identity(
-    provider: AuthProvider, user: CurrentUser, session: SessionDep
+    provider: AuthProvider, user: CurrentUser, session: SessionDep, response: Response
 ) -> UserOut:
-    await identities.unlink_identity(session, user, provider)
+    version = await identities.unlink_identity(session, user, provider)
+    response.headers[ACCESS_TOKEN_HEADER] = create_access_token(user.id, version)
     return await identities.user_out(session, user)
 
 
