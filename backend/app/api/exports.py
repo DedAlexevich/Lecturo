@@ -9,9 +9,10 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import CurrentUser, SessionDep
 from app.core.errors import not_ready
 from app.models import Lecture, User
-from app.services.subtitles import Segment, content_disposition, to_srt, to_vtt
+from app.services.subtitles import Segment, build_cues, content_disposition, to_srt, to_vtt
 
 router = APIRouter(prefix="/lectures/{lecture_id}", tags=["exports"])
+
 
 async def subtitles_response(
     session: AsyncSession,
@@ -28,7 +29,7 @@ async def subtitles_response(
     )
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    if not lecture.segments:
+    if not build_cues(lecture.segments):
         raise HTTPException(status.HTTP_409_CONFLICT, "Расшифровки ещё нет")
     return Response(
         render(lecture.segments),

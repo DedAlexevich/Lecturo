@@ -128,8 +128,9 @@ async def test_export_vtt(client, user, auth_headers):
     assert response.text == "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nраз\n\n"
 
 
-async def test_export_without_transcript(client, user, auth_headers):
-    lecture = await create_lecture(user, [])
+@pytest.mark.parametrize("segments", [[], [Seg(0.0, 1.0, "  "), Seg(1.0, 2.0, "\n")]])
+async def test_export_without_transcript(client, user, auth_headers, segments):
+    lecture = await create_lecture(user, segments)
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}/export.srt", headers=auth_headers)
     assert response.status_code == 409
