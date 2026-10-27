@@ -31,7 +31,12 @@ async def get_step(session: AsyncSession, lecture_id: uuid.UUID, name: StepName)
 
 
 async def run_step(
-    session: AsyncSession, lecture: Lecture, name: StepName, handler: StepHandler
+    session: AsyncSession,
+    lecture: Lecture,
+    name: StepName,
+    handler: StepHandler,
+    *,
+    fails_lecture: bool = True,
 ) -> None:
     step = await get_step(session, lecture.id, name)
     if step.status == StepStatus.done:
@@ -68,9 +73,11 @@ async def run_step(
         step.status = StepStatus.failed
         step.error = str(error) or type(error).__name__
         step.finished_at = datetime.now(UTC)
-        lecture.status = LectureStatus.failed
+        if fails_lecture:
+            lecture.status = LectureStatus.failed
         await session.commit()
-        await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
+        if fails_lecture:
+            await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
         raise StepFailed(name) from error
 
     step.status = StepStatus.done
