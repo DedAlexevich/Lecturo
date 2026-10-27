@@ -53,7 +53,7 @@ Workflow `Deploy` запускается после зелёного CI на `ma
 
 ## Мониторинг и логи
 
-Ротация логов контейнеров описана в #246. Смотреть логи: `docker compose logs -f --tail 200 api worker`.
+Логи пишутся в файлы с ротацией, см. [logs.md](logs.md). Смотреть логи: `docker compose logs -f --tail 200 api worker`.
 
 Сводка по серверу одной командой (под `deploy`, из `/opt/lecturo`):
 
