@@ -33,10 +33,12 @@ if ! swapon --show | grep -q .; then
   echo "/swapfile none swap sw 0 0" >> /etc/fstab
 fi
 
-install -d -m 700 /root/.ssh
-touch /root/.ssh/authorized_keys
-grep -qxF "$admin_key" /root/.ssh/authorized_keys || echo "$admin_key" >> /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
+id admin >/dev/null 2>&1 || useradd -m -s /bin/bash admin
+install -d -m 700 -o admin -g admin /home/admin/.ssh
+touch /home/admin/.ssh/authorized_keys
+grep -qxF "$admin_key" /home/admin/.ssh/authorized_keys || echo "$admin_key" >> /home/admin/.ssh/authorized_keys
+chown admin:admin /home/admin/.ssh/authorized_keys
+chmod 600 /home/admin/.ssh/authorized_keys
 
 id deploy >/dev/null 2>&1 || useradd -m -s /bin/bash deploy
 usermod -aG docker deploy
@@ -75,7 +77,8 @@ ufw allow 443/udp
 ufw --force enable
 
 cat > /etc/ssh/sshd_config.d/00-lecturo.conf <<SSHD
-PermitRootLogin prohibit-password
+PermitRootLogin no
+AllowUsers admin deploy
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PubkeyAuthentication yes
