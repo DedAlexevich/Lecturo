@@ -167,7 +167,7 @@ async def test_local_lecture_without_consent_is_not_embedded(user, monkeypatch):
         assert chunks == 0
 
 
-async def test_outdated_revision_blocks_server_processing(user):
+async def test_previous_revision_keeps_server_processing(user):
     async with SessionLocal() as session:
         await session.execute(
             update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
@@ -176,8 +176,7 @@ async def test_outdated_revision_blocks_server_processing(user):
     lecture = await create_link_lecture(user)
     async with SessionLocal() as session:
         stored = await session.get(Lecture, lecture.id)
-        with pytest.raises(stages.ConsentMissing):
-            await stages.transcribe(session, stored, report)
+        await stages.require_ai_transfer(session, stored)
 
 
 async def lecture_count(user: User) -> int:
@@ -251,9 +250,12 @@ async def test_local_result_requires_consent(client, user, auth_headers, no_serv
     assert await lecture_count(user) == 0
 
 
-async def test_outdated_revision_blocks_lecture_creation(
-    client, user, auth_headers, no_server_work
-):
+async def test_previous_revision_allows_lecture_creation(client, user, auth_headers, monkeypatch):
+    async def accept(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(local_results_api, "enqueue_lecture", accept)
+    monkeypatch.setattr(local_results_api, "enforce_rate_limit", accept)
     async with SessionLocal() as session:
         await session.execute(
             update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
@@ -262,5 +264,5 @@ async def test_outdated_revision_blocks_lecture_creation(
 
     response = await post_local_result(client, auth_headers)
 
-    assert response.status_code == 403
-    assert await lecture_count(user) == 0
+    assert response.status_code == 201
+    assert await lecture_count(user) == 1
