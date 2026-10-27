@@ -69,7 +69,7 @@ export function GlobalSearch({ children }: { children: ReactNode }) {
       {!active && children}
       <div className={active ? "search__body" : "search__body search__body--idle"} aria-live="polite">
         {active && search.isPending && <p className="search__note">Ищем…</p>}
-        {active && search.isError && !hits && (
+        {active && search.isError && !search.isFetching && (
           <div className="search__error" role="alert">
             <p>Поиск не сработал. Проверьте соединение и попробуйте ещё раз.</p>
             <Button variant="secondary" size="sm" onClick={() => void search.refetch()}>
