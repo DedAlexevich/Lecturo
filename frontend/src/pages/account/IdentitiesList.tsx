@@ -11,6 +11,7 @@ import { useVkEnabled } from "../auth/vk";
 import { useYandexEnabled } from "../auth/yandex";
 import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
+import { getMiniAppInitData } from "./miniApp";
 import styles from "./SettingsSection.module.css";
 import { settingsError, useLinkEmail, useLinkTelegram, useUnlink, type Me, type Provider, type TelegramUser } from "./settings";
 
@@ -132,11 +133,25 @@ function LinkTelegram() {
     [mutate, toast],
   );
 
-  if (!telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
+  const initData = getMiniAppInitData();
+  if (!initData && !telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
 
   return (
     <div className={styles.identityAction}>
-      <TelegramButton onAuth={onAuth} />
+      {initData ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={link.isPending}
+          onClick={() =>
+            mutate({ telegram_init_data: initData }, { onSuccess: () => toast.show("Telegram привязан", "success") })
+          }
+        >
+          Привязать этот Telegram
+        </Button>
+      ) : (
+        <TelegramButton onAuth={onAuth} />
+      )}
       {link.isError && (
         <p className={styles.alert} role="alert">
           {settingsError(link.error)}
