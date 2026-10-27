@@ -38,7 +38,13 @@ if ! swapon --show | grep -q .; then
   echo "/swapfile none swap sw 0 0" >> /etc/fstab
 fi
 
-id admin >/dev/null 2>&1 || useradd -m -s /bin/bash admin
+if ! id admin >/dev/null 2>&1; then
+  if getent group admin >/dev/null; then
+    useradd -m -s /bin/bash -g admin admin
+  else
+    useradd -m -s /bin/bash admin
+  fi
+fi
 install -d -m 700 -o admin -g admin /home/admin/.ssh
 touch /home/admin/.ssh/authorized_keys
 grep -qxF "$admin_key" /home/admin/.ssh/authorized_keys || echo "$admin_key" >> /home/admin/.ssh/authorized_keys
