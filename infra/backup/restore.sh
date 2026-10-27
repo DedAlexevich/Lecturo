@@ -5,7 +5,7 @@ if [ "$#" -ne 1 ]; then
   echo "usage: restore.sh <backup.dump>" >&2
   exit 1
 fi
-file=$(realpath "$1")
+file=$(realpath -m "$1")
 
 source "$(dirname "$0")/common.sh"
 

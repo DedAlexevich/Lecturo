@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-file="${1:+$(realpath "$1")}"
+file="${1:+$(realpath -m "$1")}"
 
 source "$(dirname "$0")/common.sh"
 
@@ -16,6 +16,7 @@ else
 fi
 container="${BACKUP_CHECK_CONTAINER:-lecturo-backup-check}"
 
+docker rm -f "$container" > /dev/null 2>&1 || true
 docker run -d --rm --name "$container" --network none \
   -e POSTGRES_USER=lecturo -e POSTGRES_DB=lecturo -e POSTGRES_HOST_AUTH_METHOD=trust \
   "$image" > /dev/null
