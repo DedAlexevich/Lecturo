@@ -10,6 +10,11 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+if [ "$(passwd -S root | awk '{print $2}')" != P ]; then
+  echo "root has no password, set it with passwd first: after setup root is reachable only via su" >&2
+  exit 1
+fi
+
 domain="$1"
 admin_key="$2"
 app_dir=/opt/lecturo
