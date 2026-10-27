@@ -113,7 +113,32 @@
   overflow-wrap: anywhere;
 }
 
-.search__text mark {
+.search__description,
+.search__quote {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.search__description {
+  font-weight: var(--weight-medium);
+}
+
+.search__quote,
+.search__chapter {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+.search__chapter {
+  overflow-wrap: anywhere;
+}
+
+.search__text mark,
+.search__quote mark {
   border-radius: 2px;
   background: var(--color-data-soft);
   color: inherit;
