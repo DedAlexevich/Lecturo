@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ru.lecturo.app",
+      "sha256_cert_fingerprints": [
+        "0C:E8:86:66:4B:27:EF:1A:FE:F6:B5:36:D1:C2:A7:6B:6B:2F:83:75:BE:A1:3B:2A:BF:F6:AD:00:C6:7F:89:61"
+      ]
+    }
+  }
+]
