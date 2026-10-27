@@ -24,7 +24,11 @@ import "./lecture.css";
 
 type Lecture = components["schemas"]["LectureDetail"];
 
-const dateFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+const dateFormat = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
 
 function BackLink() {
   return (
@@ -48,7 +52,7 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   let title = "Видео недоступно";
   let description = "Расшифровка остаётся на странице.";
   if (isPending(lecture.status) && !external) {
-    title = "Видео ещё обрабатывается";
+    title = "Запись ещё обрабатывается";
     description = "Плеер появится здесь, когда обработка закончится.";
   } else if (awaitsVideo(lecture)) {
     title = "Видео ещё сжимается";
@@ -59,6 +63,8 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   } else if (expiresAt !== null && expiresAt < new Date()) {
     title = "Срок хранения видео истёк";
     description = `Видео удалено ${dateFormat.format(expiresAt)}. Расшифровка остаётся на странице.`;
+  } else if (lecture.audio_only || lecture.status === "failed") {
+    title = "Запись недоступна";
   }
 
   return (
@@ -192,8 +198,9 @@ export function LecturePage() {
 
   const data = lecture.data;
   const videoUrl = data.video_url ?? null;
-  const embed = videoUrl ? null : resolveEmbed(data.embed_url);
-  const hasPlayer = videoUrl !== null || embed !== null;
+  const audioUrl = videoUrl ? null : (data.audio_url ?? null);
+  const embed = videoUrl || audioUrl ? null : resolveEmbed(data.embed_url);
+  const hasPlayer = videoUrl !== null || audioUrl !== null || embed !== null;
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
@@ -250,7 +257,11 @@ export function LecturePage() {
       ]}
     />
   );
-  const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0 };
+  const tabHasContent = {
+    summary: summary !== "",
+    chapters: chapters.length > 0,
+    transcript: segments.length > 0,
+  };
 
   return (
     <div className="lecture">
@@ -299,6 +310,15 @@ export function LecturePage() {
               src={videoUrl}
               title={data.title}
               refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
+              {...bind}
+            />
+          ) : audioUrl ? (
+            <VideoPlayer
+              key={videoIdentity(audioUrl)}
+              src={audioUrl}
+              title={data.title}
+              refreshSrc={async () => (await fetchLecture(id)).audio_url ?? null}
+              audio
               {...bind}
             />
           ) : embed ? (

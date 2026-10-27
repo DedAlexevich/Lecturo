@@ -52,6 +52,8 @@ class LectureOut(Schema):
 
 class LectureDetail(LectureOut):
     video_url: str | None = None
+    audio_only: bool = False
+    audio_url: str | None = None
     steps: list[StepOut]
     segments: list[SegmentOut]
     chapters: list[ChapterOut]
