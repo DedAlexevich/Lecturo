@@ -4,7 +4,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright")
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE, headless: true });
 const base = process.env.TEST_BASE_URL ?? "http://127.0.0.1:5186";
 
-async function setup(platform, status = 200) {
+async function setup(platform, status = 200, savedToken = false) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const requests = [];
@@ -31,12 +31,15 @@ async function setup(platform, status = 200) {
     } else if (path.endsWith("/billing/payments") && route.request().method() === "POST") {
       payments.push(route.request().postDataJSON());
       body = { id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null };
+    } else if (path.endsWith("/billing/payments")) {
+      body = [{ id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null }];
     } else if (path === "/api/v1/me") {
       body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: [], balance_seconds: 0 };
     }
     await route.fulfill({ status: responseStatus, json: body });
   });
-  await page.addInitScript(({ platform }) => {
+  await page.addInitScript(({ platform, savedToken }) => {
+    if (savedToken) localStorage.setItem("lecturo.token", "saved-token");
     localStorage.setItem("lecturo-theme", "light");
     localStorage.setItem("lecturo.cookies-ack", "accepted");
     window.mock = { events: {}, back: new Set(), ready: 0, expand: 0, visible: false, links: [] };
@@ -51,7 +54,7 @@ async function setup(platform, status = 200) {
       BackButton: { show: () => mock.visible = true, hide: () => mock.visible = false,
         onClick: (fn) => mock.back.add(fn), offClick: (fn) => mock.back.delete(fn) },
     } };
-  }, { platform });
+  }, { platform, savedToken });
   return { context, page, requests, errors, payments };
 }
 
@@ -154,6 +157,16 @@ try {
     await page.getByRole("button", { name: "Выйти", exact: true }).click();
     await page.waitForURL(base + "/login");
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const { context, page, requests, errors } = await setup("ios", 200, true);
+    await page.goto(base + "/");
+    await page.getByRole("button", { name: "Выйти", exact: true }).click();
+    await page.waitForURL(base + "/login");
+    assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
+    assert.equal(requests.length, 0);
     assert.deepEqual(errors, []);
     await context.close();
   }

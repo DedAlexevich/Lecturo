@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { api } from "../api/client";
+import { api, tokenStorage } from "../api/client";
 import { ApiError } from "../app/queryClient";
 import { signIn, useToken } from "../app/session";
 import { ConsentFields } from "../pages/auth/ConsentFields";
@@ -10,7 +10,7 @@ import { Dialog } from "../ui/Dialog";
 import { bindTheme, getWebApp } from "./sdk";
 
 const app = getWebApp();
-let authenticated = false;
+let initialSessionHandled = tokenStorage.get() !== null;
 let automaticLogin: ReturnType<typeof authenticate> | undefined;
 
 async function authenticate(acceptTerms = false, acceptPersonalData = false) {
@@ -52,13 +52,13 @@ export function TelegramBridge() {
   }, [location.key, navigate]);
 
   useEffect(() => {
-    if (!app || token !== null || authenticated) return;
+    if (!app || token !== null || initialSessionHandled) return;
     let active = true;
     automaticLogin ??= authenticate();
     automaticLogin.then(
       (tokens) => {
         if (active) {
-          authenticated = true;
+          initialSessionHandled = true;
           signIn(tokens.access_token);
         }
       },
@@ -81,7 +81,7 @@ export function TelegramBridge() {
     try {
       const tokens = await authenticate(terms, personalData);
       automaticLogin = Promise.resolve(tokens);
-      authenticated = true;
+      initialSessionHandled = true;
       signIn(tokens.access_token);
       setConsent(false);
     } catch (failure) {
