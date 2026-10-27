@@ -62,6 +62,10 @@ cp .env.example .env
 | `SALUTE_AUTH_KEY` | Ключ авторизации SaluteSpeech, подставляется в заголовок `Authorization: Basic ...` | при `salute` | пусто | `backend/app/providers/salute.py` |
 | `SALUTE_SCOPE` | Область доступа SaluteSpeech, например `SALUTE_SPEECH_PERS` для физических лиц | нет | `SALUTE_SPEECH_PERS` | `backend/app/providers/salute.py` |
 | `SALUTE_CA_BUNDLE` | Путь внутри контейнера к файлу с корневыми сертификатами в формате PEM | нет | пусто | `backend/app/providers/salute.py` |
+| `STT_RETRY_ATTEMPTS` | Сколько раз всего пробовать запрос к SpeechKit или SaluteSpeech при временной ошибке (429, 500, 502, 503, 504, код 13, таймаут или обрыв соединения). `1` отключает повторы | нет | `5` | `backend/app/providers/retry.py` |
+| `STT_RETRY_BASE_SECONDS` | Пауза перед первым повтором, секунды | нет | `2` | `backend/app/providers/retry.py` |
+| `STT_RETRY_FACTOR` | Во сколько раз растёт пауза после каждой неудачи. При значениях по умолчанию паузы около 2, 6, 18 и 54 секунд, к каждой добавляется случайный разброс до 20% | нет | `3` | `backend/app/providers/retry.py` |
+| `STT_RETRY_MAX_SECONDS` | Верхняя граница одной паузы, секунды | нет | `60` | `backend/app/providers/retry.py` |
 
 ### Yandex Cloud: SpeechKit и Object Storage
 
