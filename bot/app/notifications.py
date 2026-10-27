@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import asyncpg
 from aiogram import Bot
@@ -14,7 +14,7 @@ from app.handlers import open_app_markup
 logger = logging.getLogger(__name__)
 
 LECTURE_CHAT = """
-SELECT u.telegram_chat_id FROM users u
+SELECT u.telegram_chat_id, l.updated_at FROM users u
 JOIN lectures l ON l.owner_id = u.id
 WHERE u.id = $1 AND l.id = $2 AND u.telegram_chat_id IS NOT NULL
 """
@@ -38,13 +38,25 @@ WHERE user_id = $1 AND source = 'weekly' AND created_at >= $2
 
 async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, markup=None):
     key = f"bot:notification:{key}"
-    if not await redis.set(key, "sent", nx=True):
-        return
+    if await redis.get(key):
+        return True
+    lock = f"{key}:lock"
+    token = str(uuid4())
+    if not await redis.set(lock, token, nx=True, ex=120):
+        return False
     try:
-        await bot.send_message(chat_id, text, reply_markup=markup)
-    except Exception:
-        await redis.delete(key)
-        raise
+        if not await redis.get(key):
+            await bot.send_message(chat_id, text, reply_markup=markup)
+            await redis.set(key, "sent")
+        return True
+    finally:
+        await redis.eval(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+            "return redis.call('del', KEYS[1]) else return 0 end",
+            1,
+            lock,
+            token,
+        )
 
 
 async def handle_event(data, pool: asyncpg.Pool, redis: Redis, bot: Bot, public_url: str):
@@ -57,24 +69,22 @@ async def handle_event(data, pool: asyncpg.Pool, redis: Redis, bot: Bot, public_
         return
     if status not in ("ready", "failed"):
         return
-    chat_id = await pool.fetchval(LECTURE_CHAT, user_id, lecture_id)
-    if chat_id is None:
+    row = await pool.fetchrow(LECTURE_CHAT, user_id, lecture_id)
+    if row is None:
         return
-    text = "Лекция готова." if status == "ready" else "Не удалось обработать лекцию."
-    await send_once(
-        redis,
-        bot,
-        f"lecture:{lecture_id}:{status}",
-        chat_id,
-        text,
-        open_app_markup(f"{public_url}/lectures/{lecture_id}"),
+    key = f"lecture:{lecture_id}:{status}:{row['updated_at'].isoformat()}"
+    pending = json.dumps(
+        {"chat_id": row["telegram_chat_id"], "status": status, "lecture_id": str(lecture_id)}
     )
+    await redis.hset("bot:pending-lectures", key, pending)
 
 
-async def listen_events(pool: asyncpg.Pool, redis: Redis, bot: Bot, public_url: str):
+async def listen_events(
+    pool: asyncpg.Pool, events_redis: Redis, redis: Redis, bot: Bot, public_url: str
+):
     while True:
         try:
-            async with redis.pubsub() as pubsub:
+            async with events_redis.pubsub() as pubsub:
                 await pubsub.subscribe("lecture-events")
                 async for message in pubsub.listen():
                     if message["type"] == "message":
@@ -85,6 +95,37 @@ async def listen_events(pool: asyncpg.Pool, redis: Redis, bot: Bot, public_url: 
         except (RedisError, OSError):
             logger.exception("Не удалось получать события лекций")
             await asyncio.sleep(5)
+
+
+async def deliver_pending(redis: Redis, bot: Bot, public_url: str):
+    for key, data in (await redis.hgetall("bot:pending-lectures")).items():
+        try:
+            event = json.loads(data)
+            key = key.decode() if isinstance(key, bytes) else key
+            text = (
+                "Лекция готова." if event["status"] == "ready" else "Не удалось обработать лекцию."
+            )
+            delivered = await send_once(
+                redis,
+                bot,
+                key,
+                event["chat_id"],
+                text,
+                open_app_markup(f"{public_url}/lectures/{event['lecture_id']}"),
+            )
+            if delivered:
+                await redis.hdel("bot:pending-lectures", key)
+        except Exception:
+            logger.exception("Не удалось отправить уведомление о лекции")
+
+
+async def delivery_loop(redis: Redis, bot: Bot, public_url: str):
+    while True:
+        try:
+            await deliver_pending(redis, bot, public_url)
+        except (RedisError, OSError):
+            logger.exception("Не удалось получить ожидающие уведомления")
+        await asyncio.sleep(5)
 
 
 async def check_quotas(
