@@ -62,6 +62,21 @@ jobs:
 
   bot:
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lecturo
+          POSTGRES_PASSWORD: lecturo
+          POSTGRES_DB: lecturo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lecturo"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      BOT_SCHEMA_DATABASE_URL: postgresql://lecturo:lecturo@localhost:5432/lecturo
     defaults:
       run:
         working-directory: bot
@@ -71,7 +86,17 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: bot/pyproject.toml
+          cache-dependency-path: |
+            bot/pyproject.toml
+            backend/pyproject.toml
+      - name: Apply backend migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://lecturo:lecturo@localhost:5432/lecturo
+        run: |
+          python -m venv "$RUNNER_TEMP/backend"
+          "$RUNNER_TEMP/backend/bin/pip" install -e .
+          "$RUNNER_TEMP/backend/bin/alembic" upgrade head
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
