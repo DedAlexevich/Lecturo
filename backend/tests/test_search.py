@@ -6,6 +6,7 @@ import pytest
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import (
+    Chapter,
     ChunkKind,
     Course,
     Lecture,
@@ -551,3 +552,52 @@ async def test_search_rate_limit(client, user, auth_headers, monkeypatch):
     assert statuses == [200, 200, 429]
     response = await search(client, auth_headers, q="формула", lecture_id=str(lecture_id))
     assert response.json()["detail"] == "Слишком много поисковых запросов, попробуйте через минуту"
+
+
+async def test_hit_has_description_and_chapter_title(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    await add_chunk(
+        lecture_id,
+        ChunkKind.transcript,
+        QUESTION,
+        start=45.0,
+        end=90.0,
+        description="Какой самолёт на выставке стоит дороже всех",
+    )
+    await add_chunk(lecture_id, ChunkKind.transcript, "Прочность крыла", start=300.0, end=345.0)
+    async with SessionLocal() as session:
+        session.add_all(
+            [
+                Chapter(lecture_id=lecture_id, idx=0, start=0.0, end=120.0, title="Выставка"),
+                Chapter(lecture_id=lecture_id, idx=1, start=120.0, end=240.0, title="Двигатели"),
+            ]
+        )
+        await session.commit()
+
+    by_text = {
+        hit["text"]: hit
+        for q in (QUESTION, "прочность крыла")
+        for hit in (await search(client, auth_headers, q=q, lecture_id=str(lecture_id))).json()
+    }
+
+    assert by_text[QUESTION]["description"] == "Какой самолёт на выставке стоит дороже всех"
+    assert by_text[QUESTION]["chapter_title"] == "Выставка"
+    assert by_text["Прочность крыла"]["description"] is None
+    assert by_text["Прочность крыла"]["chapter_title"] is None
+
+
+async def test_summary_hit_has_no_chapter_title(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Лекция")
+    await add_chunk(lecture_id, ChunkKind.summary, "Свойства интеграла", section=1)
+    async with SessionLocal() as session:
+        session.add(Chapter(lecture_id=lecture_id, idx=0, start=0.0, end=60.0, title="Интеграл"))
+        await session.commit()
+
+    [hit] = [
+        hit
+        for hit in (await search(client, auth_headers, q="интеграл")).json()
+        if hit["lecture_id"] == str(lecture_id)
+    ]
+
+    assert hit["kind"] == "summary"
+    assert hit["chapter_title"] is None
