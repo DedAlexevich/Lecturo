@@ -72,6 +72,8 @@ docker compose exec mail dns-records.sh
 | DMARC, TXT на `_dmarc` | DNS домена | `v=DMARC1; p=none; adkim=r; aspf=r` |
 | PTR для IP сервера | панель хостинга, раздел сети или IP-адресов сервера | домен, например `lecturo.ru` |
 
+Ключ DKIM длиннее 255 символов. Если панель DNS не принимает такую строку, разбейте значение на несколько строк в кавычках подряд: `"v=DKIM1; k=rsa; p=MIIB..." "...остаток"`.
+
 Записи появляются не сразу, обычно в течение часа. Проверка с любого компьютера: `dig +short TXT <домен>`, `dig +short TXT mail._domainkey.<домен>`, `dig +short -x <ip>`.
 
 Тестовое письмо и лог доставки:
@@ -80,6 +82,8 @@ docker compose exec mail dns-records.sh
 docker compose exec api python -c "import asyncio; from app.services.mail import send_mail; asyncio.run(send_mail('<ваш адрес>', 'Проверка', 'Проверка почты'))"
 grep -E "status=|dkim" data/logs/mail.log | tail
 ```
+
+Хостинг может закрывать исходящий порт 25, тогда письма висят в `status=deferred` с `Connection timed out`. Проверка с сервера: `nc -vz gmail-smtp-in.l.google.com 25`. Если соединения нет, порт открывают через поддержку хостинга.
 
 Строка `status=sent` значит, что сервер получателя принял письмо. При `status=deferred` или `status=bounced` в скобках будет ответ сервера получателя с причиной. В заголовках полученного письма («Показать оригинал» в Gmail) должны быть `spf=pass` и `dkim=pass`. Недоставленные письма Postfix повторяет сутки, затем удаляет. Очередь: `docker compose exec mail postqueue -p`.
 
