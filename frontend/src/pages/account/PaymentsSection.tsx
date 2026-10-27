@@ -1,3 +1,4 @@
+import { openExternalLink } from "../../telegram/sdk";
 import { useId } from "react";
 import { EmptyState } from "../../ui/EmptyState";
 import styles from "./AccountPage.module.css";
@@ -55,7 +56,15 @@ export function PaymentsSection() {
                   <span className={styles.status}>
                     <span className={statusClasses[payment.status]}>{statusLabels[payment.status]}</span>
                     {payment.status === "pending" && payment.confirmation_url && (
-                      <a href={payment.confirmation_url}>Оплатить</a>
+                      <a
+                        href={payment.confirmation_url}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          openExternalLink(payment.confirmation_url!);
+                        }}
+                      >
+                        Оплатить
+                      </a>
                     )}
                   </span>
                 </td>

@@ -1,3 +1,4 @@
+import { getWebApp } from "../telegram/sdk";
 import { useTheme, type ThemeChoice } from "./theme";
 import "./ThemeToggle.css";
 
@@ -9,6 +10,7 @@ const options: { value: ThemeChoice; label: string }[] = [
 
 export function ThemeToggle() {
   const { choice, select } = useTheme();
+  if (getWebApp()) return null;
 
   return (
     <div className="theme-toggle" role="radiogroup" aria-label="Тема оформления">
