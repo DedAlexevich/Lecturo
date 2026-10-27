@@ -147,7 +147,7 @@ class EmailIdentityIn(Schema):
 
 
 class AccountDeleteIn(Schema):
-    password: str | None = None
+    password: str | None = Field(default=None, max_length=128)
     telegram: TelegramLoginIn | None = None
     telegram_init_data: str | None = None
 

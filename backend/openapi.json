@@ -3523,7 +3523,8 @@
           "password": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -3631,6 +3632,8 @@
         "properties": {
           "reason": {
             "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
             "title": "Reason"
           },
           "lecture_id": {
@@ -3777,6 +3780,7 @@
           },
           "description": {
             "type": "string",
+            "maxLength": 2000,
             "title": "Description",
             "default": ""
           }
@@ -3854,7 +3858,8 @@
           "description": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2000
               },
               {
                 "type": "null"
@@ -4658,11 +4663,42 @@
         ],
         "title": "LinkLectureOut"
       },
+      "LocalChapterIn": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "title",
+          "summary"
+        ],
+        "title": "LocalChapterIn"
+      },
       "LocalResultIn": {
         "properties": {
           "title": {
             "type": "string",
             "maxLength": 300,
+            "minLength": 1,
             "title": "Title"
           },
           "duration_sec": {
@@ -4673,12 +4709,9 @@
           },
           "language": {
             "type": "string",
+            "maxLength": 8,
             "title": "Language",
             "default": "ru"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
           },
           "segments": {
             "items": {
@@ -4689,7 +4722,7 @@
           },
           "chapters": {
             "items": {
-              "$ref": "#/components/schemas/ChapterOut"
+              "$ref": "#/components/schemas/LocalChapterIn"
             },
             "type": "array",
             "title": "Chapters",
@@ -4698,7 +4731,8 @@
           "summary_md": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100000
               },
               {
                 "type": "null"
@@ -4711,7 +4745,6 @@
         "required": [
           "title",
           "duration_sec",
-          "model",
           "segments"
         ],
         "title": "LocalResultIn"

@@ -100,6 +100,7 @@ class Settings(BaseSettings):
     local_max_segments: int = 20000
     local_max_chapters: int = 500
     local_max_text_chars: int = 5000
+    local_max_total_chars: int = 1_000_000
     local_timecode_tolerance_sec: float = 1.0
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60

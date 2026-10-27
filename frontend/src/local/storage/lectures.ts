@@ -56,7 +56,6 @@ export function toLocalResultPayload(lecture: LocalLecture): LocalResultPayload 
     title: lecture.title,
     duration_sec: lecture.durationSec,
     language: lecture.language,
-    model: lecture.model,
     segments: lecture.segments,
     chapters: lecture.chapters,
     summary_md: lecture.summaryMd,

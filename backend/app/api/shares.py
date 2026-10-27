@@ -216,12 +216,7 @@ async def complain(token: str, body: ComplaintIn, request: Request, session: Ses
     )
     if lecture_id is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_NOT_FOUND)
-    reason = body.reason.strip()
-    if not reason or len(reason) > 5000:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "Укажите причину жалобы до 5000 символов"
-        )
-    complaint = Complaint(lecture_id=lecture_id, reason=reason)
+    complaint = Complaint(lecture_id=lecture_id, reason=body.reason)
     session.add(complaint)
     await session.commit()
     logger.warning(
