@@ -6,7 +6,7 @@ import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
 import { highlight } from "./highlight";
 import { buildMatcher } from "./matcher";
-import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch } from "./queries";
+import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
 
 export function momentsCount(count: number) {
@@ -65,7 +65,7 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
         {active && search.isPending && <p className="search__note">Ищем…</p>}
         {active && search.isError && !hits && (
           <div className="search__error" role="alert">
-            <p>Поиск не сработал. Проверьте соединение и попробуйте ещё раз.</p>
+            <p>{searchErrorText(search.error)}</p>
             <Button variant="secondary" size="sm" onClick={() => void search.refetch()}>
               Повторить
             </Button>
