@@ -2953,6 +2953,15 @@
         ],
         "title": "ChapterOut"
       },
+      "ChunkKind": {
+        "type": "string",
+        "enum": [
+          "transcript",
+          "chapter",
+          "summary"
+        ],
+        "title": "ChunkKind"
+      },
       "ComplaintIn": {
         "properties": {
           "reason": {
@@ -4229,13 +4238,41 @@
             "type": "string",
             "title": "Lecture Title"
           },
+          "kind": {
+            "$ref": "#/components/schemas/ChunkKind"
+          },
           "start": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Start"
           },
           "end": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "End"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
           },
           "text": {
             "type": "string",
@@ -4250,8 +4287,10 @@
         "required": [
           "lecture_id",
           "lecture_title",
+          "kind",
           "start",
           "end",
+          "section",
           "text",
           "score"
         ],

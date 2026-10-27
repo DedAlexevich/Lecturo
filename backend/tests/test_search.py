@@ -3,7 +3,15 @@ import uuid
 import pytest
 
 from app.core.db import SessionLocal
-from app.models import Course, Lecture, SearchChunk, SourceType, User, course_lectures
+from app.models import (
+    ChunkKind,
+    Course,
+    Lecture,
+    SearchChunk,
+    SourceType,
+    User,
+    course_lectures,
+)
 from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import StubEmbeddings
 from app.services import search as search_service
@@ -161,11 +169,14 @@ async def test_foreign_lecture_and_course_are_hidden(client, auth_headers, stran
     assert by_course.status_code == 404
 
 
-@pytest.mark.parametrize("both", [True, False])
-async def test_requires_exactly_one_scope(client, auth_headers, both):
-    params = {"lecture_id": str(uuid.uuid4()), "course_id": str(uuid.uuid4())} if both else {}
-
-    response = await search(client, auth_headers, q="интеграл", **params)
+async def test_rejects_both_scopes(client, auth_headers):
+    response = await search(
+        client,
+        auth_headers,
+        q="интеграл",
+        lecture_id=str(uuid.uuid4()),
+        course_id=str(uuid.uuid4()),
+    )
 
     assert response.status_code == 422
 
@@ -218,3 +229,78 @@ async def test_short_word_matches_exactly(client, user, auth_headers, monkeypatc
     response = await search(client, auth_headers, q="мат", lecture_id=str(lecture_id))
 
     assert [hit["text"] for hit in response.json()] == ["Мат в три хода"]
+
+
+async def add_chunk(lecture_id: uuid.UUID, kind: ChunkKind, text: str, **fields) -> None:
+    [vector] = await StubEmbeddings().embed_documents([text])
+    async with SessionLocal() as session:
+        session.add(
+            SearchChunk(lecture_id=lecture_id, kind=kind, text=text, embedding=vector, **fields)
+        )
+        await session.commit()
+
+
+async def test_global_search_covers_all_own_lectures_and_kinds(client, user, auth_headers):
+    first = await create_lecture(user.id, "Первая", "Несобственный интеграл")
+    second = await create_lecture(user.id, "Вторая", "Пределы последовательностей")
+    await add_chunk(second, ChunkKind.chapter, "Интеграл Римана", start=60.0, end=120.0)
+    await add_chunk(second, ChunkKind.summary, "Свойства интеграла", section=2)
+
+    response = await search(client, auth_headers, q="интеграл")
+
+    assert response.status_code == 200
+    hits = {(hit["lecture_id"], hit["kind"]): hit for hit in response.json()}
+    assert set(hits) >= {
+        (str(first), "transcript"),
+        (str(second), "chapter"),
+        (str(second), "summary"),
+    }
+    chapter = hits[(str(second), "chapter")]
+    assert (chapter["start"], chapter["end"], chapter["section"]) == (60.0, 120.0, None)
+    summary = hits[(str(second), "summary")]
+    assert (summary["start"], summary["section"], summary["lecture_title"]) == (None, 2, "Вторая")
+
+
+async def test_global_search_hides_foreign_lectures(client, user, auth_headers, stranger):
+    own = await create_lecture(user.id, "Своя", "Интеграл по контуру")
+    foreign = await create_lecture(stranger.id, "Чужая", "Интеграл по контуру")
+    await add_chunk(foreign, ChunkKind.summary, "Интеграл по контуру", section=0)
+
+    response = await search(client, auth_headers, q="интеграл по контуру")
+
+    lecture_ids = {hit["lecture_id"] for hit in response.json()}
+    assert str(own) in lecture_ids
+    assert str(foreign) not in lecture_ids
+
+
+async def test_scoped_search_returns_only_transcript(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Лекция", "Интеграл Лебега")
+    await add_chunk(lecture_id, ChunkKind.chapter, "Интеграл Римана", start=0.0, end=60.0)
+    await add_chunk(lecture_id, ChunkKind.summary, "Интеграл Стилтьеса", section=0)
+    course_id = await create_course(user.id, lecture_id)
+
+    by_lecture = await search(client, auth_headers, q="интеграл", lecture_id=str(lecture_id))
+    by_course = await search(client, auth_headers, q="интеграл", course_id=str(course_id))
+
+    for response in (by_lecture, by_course):
+        assert [(hit["kind"], hit["text"]) for hit in response.json()] == [
+            ("transcript", "Интеграл Лебега")
+        ]
+
+
+async def test_global_search_finds_meaning_without_shared_words(
+    client, user, auth_headers, monkeypatch
+):
+    lecture_id = await create_lecture(user.id, "Матанализ", "Скорость изменения функции")
+    await add_chunk(lecture_id, ChunkKind.chapter, "Ряды Фурье", start=0.0, end=60.0)
+    [target] = await StubEmbeddings().embed_documents(["Скорость изменения функции"])
+
+    class MeaningEmbeddings(StubEmbeddings):
+        async def embed_query(self, text: str) -> list[float]:
+            return target
+
+    monkeypatch.setattr(search_service, "get_embeddings", MeaningEmbeddings)
+
+    response = await search(client, auth_headers, q="производная")
+
+    assert response.json()[0]["text"] == "Скорость изменения функции"
