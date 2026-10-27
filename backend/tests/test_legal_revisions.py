@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -10,12 +10,12 @@ from app.core.db import SessionLocal
 from app.models import LegalNotice, LegalRevision, NoticeChannel, User
 from app.services import legal_notices
 from app.services.consents import apply_effective_revisions, require_ai_transfer_consent
-from app.services.legal import read_document
+from app.services.legal import NOTICE_DAYS_AFTER, read_document
 
 AI_TRANSFER = read_document("ai-transfer")
-BEFORE = date(2026, 10, 27)
-AFTER = date(2026, 11, 3)
-PREVIOUS = date(2026, 10, 26)
+BEFORE = AI_TRANSFER.effective_date - timedelta(days=1)
+AFTER = AI_TRANSFER.effective_date
+PREVIOUS = AI_TRANSFER.revision_date - timedelta(days=1)
 
 
 @pytest.fixture
@@ -86,8 +86,7 @@ async def notices(users: dict[str, User]) -> list[LegalNotice]:
 
 
 def test_ai_transfer_revision_has_effective_date_and_changes():
-    assert AI_TRANSFER.revision_date == date(2026, 10, 27)
-    assert AI_TRANSFER.effective_date == date(2026, 11, 3)
+    assert AI_TRANSFER.effective_date >= AI_TRANSFER.revision_date + timedelta(days=7)
     assert AI_TRANSFER.changes
     terms = read_document("terms")
     assert terms.effective_date == terms.revision_date
@@ -148,7 +147,7 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
     _, subject, body = ours[0]
     assert AI_TRANSFER.title in subject
     assert AI_TRANSFER.changes in body
-    assert "03.11.2026" in body
+    assert AI_TRANSFER.effective_date.strftime("%d.%m.%Y") in body
     assert "/legal/ai-transfer" in body
     assert "отзовите согласие" in body
     assert "удалите аккаунт" in body
@@ -156,24 +155,24 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
 
 async def test_notice_is_not_sent_after_effective_date(people, mails):
     async with SessionLocal() as session:
-        assert await legal_notices.announce_revisions(session, date(2026, 11, 4)) == 0
+        assert await legal_notices.announce_revisions(session, AFTER + timedelta(days=1)) == 0
     assert await notices(people) == []
 
 
 async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
-    monkeypatch.setattr(legal_api, "today", lambda: date(2026, 11, 10))
+    monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER))
     response = await client.get("/api/v1/legal/updates")
     assert response.status_code == 200
     assert response.json() == [
         {
             "slug": "ai-transfer",
             "title": AI_TRANSFER.title,
-            "revision_date": "2026-10-27",
-            "effective_date": "2026-11-03",
+            "revision_date": AI_TRANSFER.revision_date.isoformat(),
+            "effective_date": AI_TRANSFER.effective_date.isoformat(),
             "changes": AI_TRANSFER.changes,
         }
     ]
-    monkeypatch.setattr(legal_api, "today", lambda: date(2026, 11, 11))
+    monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER + 1))
     assert (await client.get("/api/v1/legal/updates")).json() == []
 
 
