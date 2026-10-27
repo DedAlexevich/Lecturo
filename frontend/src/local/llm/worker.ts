@@ -23,6 +23,7 @@ self.onmessage = async (event: MessageEvent<{ segments: LocalSegment[] }>) => {
         temperature: 0.2,
         max_tokens: 512,
       });
+      if (response.choices[0]?.finish_reason === "length") throw new Error("Ответ модели не поместился целиком. Попробуйте создать конспект ещё раз.");
       const content = response.choices[0]?.message.content?.trim();
       if (!content) throw new Error("Модель вернула пустой ответ");
       const [first, ...rest] = content.split("\n");
