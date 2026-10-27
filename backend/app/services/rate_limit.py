@@ -102,3 +102,30 @@ async def enforce_mail_rate_limit(request: Request, subject: str, per_ip: bool =
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов писем, попробуйте позже"
         )
+
+
+async def charge_budget(
+    redis_url: str, key: str, amount: int, limit: int, window_seconds: int
+) -> bool:
+    redis = Redis.from_url(redis_url)
+    try:
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.incrby(key, amount)
+            pipe.expire(key, window_seconds, nx=True)
+            total, _ = await pipe.execute()
+        if total > limit:
+            await redis.decrby(key, amount)
+            return False
+        return True
+    finally:
+        await redis.aclose()
+
+
+async def refund_budget(redis_url: str, key: str, amount: int) -> None:
+    redis = Redis.from_url(redis_url)
+    try:
+        await redis.decrby(key, amount)
+    except (OSError, RedisError):
+        logger.warning("Не удалось вернуть лимит %s", key, exc_info=True)
+    finally:
+        await redis.aclose()

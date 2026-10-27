@@ -53,3 +53,24 @@ class PublicCourseOut(Schema):
 class PublicShareOut(Schema):
     lecture: PublicLectureOut | None = None
     course: PublicCourseOut | None = None
+
+
+class CopyIn(Schema):
+    lecture_id: uuid.UUID | None = None
+
+
+class CopyOut(Schema):
+    lecture_id: uuid.UUID | None
+    course_id: uuid.UUID | None
+    lecture_ids: list[uuid.UUID]
+    created: bool
+
+
+class CopyConflictDetail(Schema):
+    message: str
+    lecture_id: uuid.UUID | None = None
+    course_id: uuid.UUID | None = None
+
+
+class CopyConflictOut(Schema):
+    detail: CopyConflictDetail
