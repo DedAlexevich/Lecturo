@@ -17,7 +17,7 @@ dependencies = [
     "arq>=0.26",
     "redis>=5.2",
     "httpx>=0.28",
-    "yt-dlp>=2024.11.18",
+    "yt-dlp[default,deno]>=2026.10.26",
     "weasyprint>=66",
     "markdown-it-py>=3.0",
 ]
