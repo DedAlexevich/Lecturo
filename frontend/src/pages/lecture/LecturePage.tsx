@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
+import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
@@ -194,7 +195,10 @@ export function LecturePage() {
     <div className="lecture">
       <header className="lecture__header">
         <BackLink />
-        <h1 className="lecture__title">{data.title}</h1>
+        <div className="lecture__title-row">
+          <h1 className="lecture__title">{data.title}</h1>
+          <LectureActions lecture={data} />
+        </div>
         <LectureMeta lecture={data} />
         <ExportActions
           lectureId={data.id}

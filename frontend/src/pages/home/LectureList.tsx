@@ -1,3 +1,4 @@
+import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { Link } from "react-router";
 import { Progress } from "../../ui/Progress";
 import { formatDate, formatDuration, runningStep, statusLabels } from "./format";
@@ -39,7 +40,10 @@ function LectureRow({ lecture, progress }: { lecture: Lecture; progress?: Lectur
           </div>
         )}
       </div>
-      <LectureStatusMark lecture={lecture} progress={progress} />
+      <div className="lecture-row__aside">
+        <LectureStatusMark lecture={lecture} progress={progress} />
+        <LectureActions lecture={lecture} />
+      </div>
     </li>
   );
 }
