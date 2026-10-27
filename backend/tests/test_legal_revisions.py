@@ -93,28 +93,37 @@ def test_ai_transfer_revision_has_effective_date_and_changes():
     assert terms.changes is None
 
 
-async def test_previous_revision_applies_until_effective_date(people):
+async def apply_after_announcement(day):
     async with SessionLocal() as session:
-        await apply_effective_revisions(session, BEFORE)
+        await legal_notices.announce_revisions(session, BEFORE)
+        await apply_effective_revisions(session, day)
         await session.commit()
+
+
+async def test_previous_revision_applies_until_effective_date(people, mails):
+    await apply_after_announcement(BEFORE)
     previous = await stored(people["previous"])
     assert previous.ai_transfer_revision == PREVIOUS
     require_ai_transfer_consent(previous)
 
 
-async def test_new_revision_accepted_by_default_from_effective_date(people):
-    async with SessionLocal() as session:
-        await apply_effective_revisions(session, AFTER)
-        await session.commit()
+async def test_new_revision_accepted_by_default_from_effective_date(people, mails):
+    await apply_after_announcement(AFTER)
     previous = await stored(people["previous"])
     assert previous.ai_transfer_revision == AI_TRANSFER.revision_date
     require_ai_transfer_consent(previous)
 
 
-async def test_revoked_consent_is_not_accepted_by_default(people):
+async def test_unannounced_revision_is_not_accepted_by_default(people):
     async with SessionLocal() as session:
         await apply_effective_revisions(session, AFTER)
         await session.commit()
+    previous = await stored(people["previous"])
+    assert previous.ai_transfer_revision == PREVIOUS
+
+
+async def test_revoked_consent_is_not_accepted_by_default(people, mails):
+    await apply_after_announcement(AFTER)
     revoked = await stored(people["revoked"])
     assert revoked.ai_transfer_accepted_at is None
     assert revoked.ai_transfer_revision is None

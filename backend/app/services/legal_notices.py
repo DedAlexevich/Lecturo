@@ -140,6 +140,7 @@ async def send_email_notices(session: AsyncSession) -> int:
 async def process_legal_revisions(ctx: dict) -> int:
     day = today()
     async with SessionLocal() as session:
-        await apply_effective_revisions(session, day)
         await announce_revisions(session, day)
+        await apply_effective_revisions(session, day)
+        await session.commit()
         return await send_email_notices(session)

@@ -3,11 +3,11 @@ from functools import cache
 
 from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
-from app.services.legal import load_document, read_document
+from app.models import LegalRevision, User
+from app.services.legal import read_document
 
 CONSENT_REQUIRED = (
     "Для создания аккаунта нужно принять пользовательское соглашение "
@@ -58,18 +58,17 @@ def ai_transfer_given(accepted_at: datetime | None, revision: date | None) -> bo
 
 
 async def apply_effective_revisions(session: AsyncSession, today: date) -> None:
-    for slug, (accepted_at, revision) in ACCEPTANCES.items():
-        doc = load_document(slug)
-        if today < doc.effective_date:
-            continue
+    announced = await session.execute(
+        select(LegalRevision.slug, LegalRevision.revision_date)
+        .where(LegalRevision.effective_date <= today, LegalRevision.slug.in_(ACCEPTANCES))
+        .order_by(LegalRevision.revision_date)
+    )
+    for slug, revision_date in announced.all():
+        accepted_at, revision = ACCEPTANCES[slug]
         await session.execute(
             update(User)
-            .where(
-                accepted_at.is_not(None),
-                revision.is_not(None),
-                revision < doc.revision_date,
-            )
-            .values({revision: doc.revision_date})
+            .where(accepted_at.is_not(None), revision.is_not(None), revision < revision_date)
+            .values({revision: revision_date})
             .execution_options(synchronize_session=False)
         )
 
