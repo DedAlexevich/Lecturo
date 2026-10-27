@@ -137,7 +137,7 @@ jobs:
       - run: test "$(docker compose ps bot --format '{{.State}}')" = running
       - name: Scheduled backup exists and local scripts work
         run: |
-          ls data/backups/lecturo-*.dump
+          timeout 60 sh -c 'until ls data/backups/lecturo-*.dump; do sleep 1; done'
           scripts/backup-db.sh
           echo yes | scripts/restore-db.sh "$(ls data/backups/lecturo-*.dump | tail -n 1)"
           curl -fsS http://localhost/api/v1/health
