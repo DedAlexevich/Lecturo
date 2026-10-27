@@ -1,10 +1,19 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
-import { errorMessage, useCreatePayment, useProducts, type Product } from "./billing";
+import {
+  errorMessage,
+  paymentsQueryKey,
+  quotaQueryKey,
+  useCreatePayment,
+  usePayments,
+  useProducts,
+  type Product,
+} from "./billing";
 import { formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 
@@ -24,7 +33,11 @@ export function PurchaseSection() {
         <h2 id={titleId} className={styles.sectionTitle}>
           Подписка и пакеты часов
         </h2>
-        <p className={styles.muted}>Оплата картой через ЮKassa. После оплаты вы вернётесь в кабинет.</p>
+        <p className={styles.muted}>
+          {getWebApp()
+            ? "Оплата картой через ЮKassa откроется в браузере. После оплаты вернитесь в Telegram, статус обновится здесь."
+            : "Оплата картой через ЮKassa. После оплаты вы вернётесь в кабинет."}
+        </p>
       </div>
       {isPending && <SectionLoading label="Загружаем тарифы" />}
       {isError && <SectionError message="Не удалось загрузить тарифы." onRetry={() => refetch()} />}
@@ -48,8 +61,32 @@ function PurchaseForm({ products }: { products: Product[] }) {
   const idempotenceKey = useRef(crypto.randomUUID());
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
+  const queryClient = useQueryClient();
+  const { data: payments } = usePayments();
   const selected = products.find((product) => product.code === code) ?? products[0];
   const { reset } = createPayment;
+  const createdId = createPayment.data?.id;
+  const settled = payments?.some((payment) => payment.id === createdId && payment.status !== "pending") ?? false;
+
+  useEffect(() => {
+    if (settled) reset();
+  }, [settled, reset]);
+
+  useEffect(() => {
+    const app = getWebApp();
+    if (!app) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      queryClient.invalidateQueries({ queryKey: quotaQueryKey });
+      queryClient.invalidateQueries({ queryKey: paymentsQueryKey });
+    };
+    app.onEvent("activated", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      app.offEvent("activated", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     const onPageShow = (event: PageTransitionEvent) => {
