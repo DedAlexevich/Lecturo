@@ -10,8 +10,8 @@ import { VideoPlayer } from "../lecture/players/VideoPlayer";
 import { usePlayer, videoIdentity } from "../lecture/players/player";
 import { formatDuration } from "../lecture/time";
 import { Transcript } from "../lecture/Transcript";
-import { Markdown } from "../legal/markdown";
 import { localNotes } from "../lecture/localNotes";
+import { SummaryMarkdown } from "../lecture/SummaryMarkdown";
 import { ComplaintDialog } from "./ComplaintDialog";
 import { LocalBadge } from "./LocalBadge";
 import "../lecture/lecture.css";
@@ -114,7 +114,7 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
                 label: "Конспект",
                 panel: summary ? (
                   <div className="lecture__scroll summary">
-                    <Markdown source={summary} />
+                    <SummaryMarkdown source={summary} />
                   </div>
                 ) : (
                   note("summary")

@@ -152,6 +152,8 @@ def test_pdf_renders_formula_with_embedded_fonts():
     result = render_pdf(html)
 
     assert 'class="summary-callout summary-callout--theorem"' in html
+    assert 'class="katex-display"' in html
+    assert 'class="mfrac"' in html
     assert result.startswith(b"%PDF")
     objects = pdf_objects(result)
     assert b"KaTeX" in objects
