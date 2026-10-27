@@ -5,7 +5,7 @@ import { useToken } from "../../app/session";
 import { extractAudio } from "../../local/audio";
 import { pickedFileOf } from "../../local/pickedFiles";
 import { disposeWhisper, transcribe } from "../../local/whisper";
-import { generateNotes, NO_GPU_MESSAGE, supportsWebGPU } from "../../local/llm";
+import { generateNotes, markWebGPUUnsupported, NoGpuError, supportsWebGPU } from "../../local/llm";
 import { saveLocalLecture, updateLocalNotes } from "../../local/storage";
 import type { LocalLecture } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
@@ -151,9 +151,12 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
       setLibraryVersion((value) => value + 1);
     } catch (reason) {
       if (!abort.signal.aborted) {
-        const message = reason instanceof Error ? reason.message : "Не удалось построить конспект";
-        if (message === NO_GPU_MESSAGE) setWebgpu(false);
-        else setNotesError(message);
+        if (reason instanceof NoGpuError) {
+          markWebGPUUnsupported();
+          setWebgpu(false);
+        } else {
+          setNotesError(reason instanceof Error ? reason.message : "Не удалось построить конспект");
+        }
       }
     } finally {
       savingNotes.current = false;
@@ -295,7 +298,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {stage === "done" && saved && segments.length > 0 && webgpu === true && !saved.summaryMd && <p className="local-note">При первом запуске модель конспекта загружается из интернета. Для работы ей требуется около 2 ГБ видеопамяти. Текст обрабатывается на устройстве.</p>}
           {stage === "done" && saved && segments.length > 0 && webgpu === false && !busy && (
             <div className="local-source local-source--notice" role="status">
-              <p>{NO_GPU_MESSAGE}</p>
+              <p>{new NoGpuError().message}</p>
               <SaveToAccount key={saved.id} lecture={saved} />
             </div>
           )}

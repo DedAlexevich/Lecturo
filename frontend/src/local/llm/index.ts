@@ -1,7 +1,7 @@
-import { friendlyNotesError } from "./gpu";
+import { notesError } from "./gpu";
 import type { LocalChapter, LocalSegment } from "../storage";
 
-export { NO_GPU_MESSAGE, supportsWebGPU } from "./gpu";
+export { markWebGPUUnsupported, NoGpuError, supportsWebGPU } from "./gpu";
 
 export type NotesProgress = { type: "loading"; value: number } | { type: "generating"; value: number };
 export type Notes = { chapters: LocalChapter[]; summaryMd: string };
@@ -29,11 +29,11 @@ export function generateNotes(segments: LocalSegment[], onProgress: (progress: N
       }
       cleanup();
       if (message.type === "done") resolve({ chapters: message.chapters, summaryMd: message.summaryMd });
-      else reject(new Error(friendlyNotesError(message.message)));
+      else reject(notesError(message.message));
     };
     worker.onerror = (event) => {
       cleanup();
-      reject(new Error(friendlyNotesError(event.message || "Не удалось запустить модель")));
+      reject(notesError(event.message || "Не удалось запустить модель"));
     };
     worker.postMessage({ segments });
   });

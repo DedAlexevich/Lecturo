@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { NO_GPU_MESSAGE, REQUIRED_LIMITS, assessAdapter, friendlyNotesError } from "../src/local/llm/gpu.ts";
+import { NO_GPU_MESSAGE, NoGpuError, REQUIRED_LIMITS, assessAdapter, notesError } from "../src/local/llm/gpu.ts";
 
 const goodLimits = { ...REQUIRED_LIMITS };
 const adapter = (overrides = {}) => ({ isFallbackAdapter: false, features: new Set(), limits: goodLimits, ...overrides });
@@ -25,8 +25,16 @@ test("rejects adapters with too small buffer limits", () => {
   assert.deepEqual(assessAdapter(adapter({ limits: {} })), { ok: false, reason: "limits" });
 });
 
-test("turns GPU errors from the worker into a clear message", () => {
-  assert.equal(friendlyNotesError("Unable to find a compatible GPU. This issue might be because your computer doesn't have a GPU."), NO_GPU_MESSAGE);
-  assert.equal(friendlyNotesError("WebGPU is not supported in your current environment"), NO_GPU_MESSAGE);
-  assert.equal(friendlyNotesError("Модель вернула пустой ответ"), "Модель вернула пустой ответ");
+test("turns missing GPU errors from the worker into NoGpuError", () => {
+  const error = notesError("Unable to find a compatible GPU. This issue might be because your computer doesn't have a GPU.");
+  assert.ok(error instanceof NoGpuError);
+  assert.equal(error.message, NO_GPU_MESSAGE);
+  assert.ok(notesError("WebGPU is not supported in your current environment") instanceof NoGpuError);
+});
+
+test("keeps other worker errors unchanged", () => {
+  const error = notesError("Модель вернула пустой ответ");
+  assert.ok(!(error instanceof NoGpuError));
+  assert.equal(error.message, "Модель вернула пустой ответ");
+  assert.ok(!(notesError("GPUDevice was lost") instanceof NoGpuError));
 });
