@@ -10,7 +10,7 @@ import { ShareButton } from "../../features/share/ShareButton";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
-import { Markdown } from "../legal/markdown";
+import { SummaryMarkdown } from "./SummaryMarkdown";
 import { Chapters } from "./Chapters";
 import { ExportActions } from "./ExportActions";
 import { EmbedPlayer } from "./players/EmbedPlayer";
@@ -238,7 +238,7 @@ export function LecturePage() {
           label: "Конспект",
           panel: summary ? (
             <div className="lecture__scroll summary" ref={summaryRef}>
-              <Markdown source={summary} />
+              <SummaryMarkdown source={summary} />
             </div>
           ) : (
             <PanelEmpty kind="summary" status={data.status} />

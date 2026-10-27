@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from app.core.db import SessionLocal
 from app.models import Chapter, Lecture, SourceType, Summary, User
-from app.services.pdf import format_timecode, lecture_html
+from app.services.pdf import format_timecode, lecture_html, render_pdf
 
 
 def pdf_objects(content: bytes) -> bytes:
@@ -136,3 +136,23 @@ def test_format_timecode():
     assert format_timecode(5) == "0:05"
     assert format_timecode(754.6) == "12:34"
     assert format_timecode(3725) == "1:02:05"
+
+
+def test_pdf_renders_formula_with_embedded_fonts():
+    lecture = Lecture(
+        id=uuid.uuid4(),
+        title="Линейная алгебра",
+        source_type=SourceType.upload,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        chapters=[],
+        summary=Summary(content_md=":::theorem\nФормула $x^2$\n:::\n\n$$\\frac{a}{b}$$"),
+    )
+
+    html = lecture_html(lecture, "https://lecturo.test")
+    result = render_pdf(html)
+
+    assert 'class="summary-callout summary-callout--theorem"' in html
+    assert result.startswith(b"%PDF")
+    objects = pdf_objects(result)
+    assert b"KaTeX" in objects
+    assert b"DejaVu" in objects or b"Inter" in objects
