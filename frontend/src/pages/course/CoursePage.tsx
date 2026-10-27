@@ -103,6 +103,11 @@ export function CoursePage() {
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
           </div>
           <div className="course__actions">
+            {!isEmpty && (
+              <Link to={`/courses/${data.id}/exam-sheet`} className="course__text-action">
+                Памятка к экзамену
+              </Link>
+            )}
             <ShareButton target={{ courseId: data.id }} title={data.title} />
             <button type="button" className="course__text-action" onClick={() => setDialog("rename")}>
               Переименовать
