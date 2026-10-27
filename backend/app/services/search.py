@@ -40,7 +40,9 @@ async def semantic_search(
     else:
         candidates = set(keyword) | set(await vector_ids(session, scope, vector))
         scores = relevant(await similarities(session, candidates, vector), keyword.keys())
-    top = sorted(scores, key=scores.__getitem__, reverse=True)[:LIMIT]
+    top = sorted(
+        scores, key=lambda chunk_id: (scores[chunk_id], keyword.get(chunk_id, 0.0)), reverse=True
+    )[:LIMIT]
     if not top:
         return []
     rows = await session.execute(
@@ -69,14 +71,16 @@ def relevant(similarity: dict[int, float], keyword: Collection[int]) -> dict[int
         chunk_id: value + (KEYWORD_BONUS if chunk_id in keyword else 0.0)
         for chunk_id, value in similarity.items()
     }
-    if not scores:
-        return {}
-    threshold = max(scores.values()) - MARGIN
-    return {
+    threshold = max(scores.values(), default=0.0) - MARGIN
+    kept = {
         chunk_id: score
         for chunk_id, score in scores.items()
         if score >= threshold and (chunk_id in keyword or similarity[chunk_id] >= MIN_SIMILARITY)
     }
+    for chunk_id in keyword:
+        if chunk_id not in similarity:
+            kept[chunk_id] = MIN_SIMILARITY + KEYWORD_BONUS
+    return kept
 
 
 async def similarities(
@@ -84,8 +88,12 @@ async def similarities(
 ) -> dict[int, float]:
     if not ids:
         return {}
-    similarity = func.coalesce(1 - SearchChunk.embedding.cosine_distance(vector), 0.0)
-    rows = await session.execute(select(SearchChunk.id, similarity).where(SearchChunk.id.in_(ids)))
+    similarity = 1 - SearchChunk.embedding.cosine_distance(vector)
+    rows = await session.execute(
+        select(SearchChunk.id, similarity).where(
+            SearchChunk.id.in_(ids), SearchChunk.embedding.is_not(None)
+        )
+    )
     return {chunk_id: float(value) for chunk_id, value in rows}
 
 

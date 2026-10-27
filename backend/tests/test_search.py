@@ -343,3 +343,20 @@ async def test_meaning_outranks_keyword_noise(client, user, auth_headers, monkey
     response = await search(client, auth_headers, q="производная", lecture_id=str(lecture_id))
 
     assert [hit["text"] for hit in response.json()] == ["Скорость изменения функции"]
+
+
+def test_relevant_keeps_keyword_hits_without_embedding():
+    scores = relevant({1: 0.9}, {2})
+
+    assert set(scores) == {1, 2}
+
+
+async def test_finds_keyword_chunk_without_embedding(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Лекция", "Пределы последовательностей")
+    async with SessionLocal() as session:
+        session.add(SearchChunk(lecture_id=lecture_id, text="Определённые интегралы"))
+        await session.commit()
+
+    response = await search(client, auth_headers, q="интеграл", lecture_id=str(lecture_id))
+
+    assert [hit["text"] for hit in response.json()] == ["Определённые интегралы"]
