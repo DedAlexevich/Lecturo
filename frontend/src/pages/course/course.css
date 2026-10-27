@@ -317,3 +317,7 @@
     min-height: var(--tap-target);
   }
 }
+
+a.course__text-action {
+  text-decoration: none;
+}
