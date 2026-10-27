@@ -62,7 +62,9 @@ def headers(user: User) -> dict[str, str]:
 async def notifications_state(client, user: User) -> str:
     response = await client.get("/api/v1/me", headers=headers(user))
     assert response.status_code == 200
-    assert "telegram_chat_id" not in response.json()
+    for identity in user.identities:
+        if identity.provider == AuthProvider.telegram:
+            assert identity.provider_user_id not in response.text
     return response.json()["telegram_notifications"]
 
 
