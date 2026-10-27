@@ -3,6 +3,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import delete, select, update
 
 from app.core.config import get_settings
@@ -65,14 +66,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def register(body: RegisterIn, session: SessionDep, request: Request) -> TokenOut:
     settings = get_settings()
     ip = request.client.host if request.client else "unknown"
-    await enforce_rate_limit(
-        settings.redis_url,
-        f"rate:register:{ip}",
-        settings.register_rate_limit,
-        settings.register_rate_window_seconds,
-    )
-    require_signup_consents(body.accept_terms, body.accept_personal_data)
-    user = await register_user(session, body.email, body.password, body.display_name)
+    ip_key = f"rate:register:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.register_rate_limit)
+    try:
+        require_signup_consents(body.accept_terms, body.accept_personal_data)
+        user = await register_user(session, body.email, body.password, body.display_name)
+    except (HTTPException, RequestValidationError):
+        await count_failure(settings.redis_url, ip_key, settings.register_rate_window_seconds)
+        raise
     return TokenOut(access_token=create_access_token(user.id))
 
 

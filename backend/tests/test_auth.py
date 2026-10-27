@@ -160,8 +160,16 @@ async def test_login_rejects_too_long_password(client, email):
     assert await login(client, email, "x" * 129) == 422
 
 
-async def test_register_is_rate_limited_per_ip(client, email, monkeypatch):
-    monkeypatch.setattr(get_settings(), "register_rate_limit", 1)
-    first = await client.post("/api/v1/auth/register", json=register_body(email))
-    second = await client.post("/api/v1/auth/register", json=register_body(f"second-{email}"))
-    assert [first.status_code, second.status_code] == [201, 429]
+async def test_register_ip_limit_counts_only_failures(client, email, monkeypatch):
+    monkeypatch.setattr(get_settings(), "register_rate_limit", 2)
+    second = f"second-{email}"
+    try:
+        statuses = [
+            (await client.post("/api/v1/auth/register", json=register_body(address))).status_code
+            for address in (email, second, email, email.upper(), f"third-{email}")
+        ]
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(User).where(User.email == second))
+            await session.commit()
+    assert statuses == [201, 201, 409, 409, 429]
