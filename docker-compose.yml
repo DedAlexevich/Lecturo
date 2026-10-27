@@ -17,6 +17,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
+    volumes:
+      - redisdata:/data
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
@@ -114,5 +117,6 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   storage:
   caddy_data:
