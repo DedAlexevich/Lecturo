@@ -50,7 +50,11 @@ MARK_LEGAL_NOTICE_FAILED = (
 
 DROP_LEGAL_NOTICE = "UPDATE legal_notices SET attempts = $2, attempted_at = now() WHERE id = $1"
 
-LEGAL_NOTICE_PAUSE_SECONDS = 0.05
+SEND_PAUSE_SECONDS = 0.05
+
+LEGAL_NOTICE_TTL = timedelta(days=30)
+
+QUOTA_NOTICE_TTL = timedelta(days=14)
 
 LECTURE_NOTICE_PAUSE_SECONDS = 0.05
 
@@ -123,7 +127,15 @@ WHERE user_id = $1 AND source = 'weekly' AND created_at >= $2
 """
 
 
-async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, markup=None):
+async def send_once(
+    redis: Redis,
+    bot: Bot,
+    key: str,
+    chat_id: int,
+    text: str,
+    ttl: timedelta,
+    markup=None,
+):
     key = f"bot:notification:{key}"
     if await redis.get(key):
         return True
@@ -132,10 +144,10 @@ async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, m
     if not await redis.set(lock, token, nx=True, ex=120):
         return False
     try:
-        if not await redis.get(key):
-            await bot.send_message(chat_id, text, reply_markup=markup)
-            await redis.set(key, "sent")
-        return True
+        if await redis.get(key):
+            return True
+        await bot.send_message(chat_id, text, reply_markup=markup)
+        await redis.set(key, "sent", ex=ttl)
     finally:
         await redis.eval(
             "if redis.call('get', KEYS[1]) == ARGV[1] then "
@@ -144,6 +156,8 @@ async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, m
             lock,
             token,
         )
+    await asyncio.sleep(SEND_PAUSE_SECONDS)
+    return True
 
 
 def lecture_notice(row, public_url: str) -> tuple[str, InlineKeyboardMarkup | None]:
@@ -215,6 +229,7 @@ async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> i
                 f"legal:{row['id']}",
                 row["telegram_chat_id"],
                 row["text"],
+                LEGAL_NOTICE_TTL,
                 open_app_markup(row["link"]),
             )
         except TelegramRetryAfter as error:
@@ -228,7 +243,6 @@ async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> i
             continue
         if delivered:
             await pool.execute(MARK_LEGAL_NOTICE_SENT, row["id"])
-        await asyncio.sleep(LEGAL_NOTICE_PAUSE_SECONDS)
     return 0
 
 
@@ -266,6 +280,7 @@ async def check_quotas(
                     f"quota-low:{user_id}:{week_start.isoformat()}",
                     row["telegram_chat_id"],
                     "Осталось меньше 15 минут обработки.",
+                    QUOTA_NOTICE_TTL,
                 )
             if week_start > row["created_at"]:
                 await send_once(
@@ -274,6 +289,7 @@ async def check_quotas(
                     f"quota-reset:{user_id}:{week_start.isoformat()}",
                     row["telegram_chat_id"],
                     "Недельный лимит обработки обновлён.",
+                    QUOTA_NOTICE_TTL,
                 )
             if until and now < until <= now + timedelta(days=3):
                 await send_once(
@@ -282,6 +298,7 @@ async def check_quotas(
                     f"subscription:{user_id}:{until.isoformat()}",
                     row["telegram_chat_id"],
                     "Подписка закончится в течение трёх дней.",
+                    until + timedelta(days=7) - now,
                 )
         except Exception:
             logger.exception("Не удалось проверить уведомления пользователя %s", row["id"])

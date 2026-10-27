@@ -37,6 +37,7 @@ from app.notifications import (
 class FakeRedis:
     def __init__(self):
         self.keys = {}
+        self.ttl = {}
 
     async def get(self, key):
         return self.keys.get(key)
@@ -45,6 +46,7 @@ class FakeRedis:
         if nx and key in self.keys:
             return False
         self.keys[key] = value
+        self.ttl[key] = ex
         return True
 
     async def eval(self, script, count, key, token):
@@ -56,10 +58,16 @@ async def test_failed_send_can_retry():
     redis, bot = FakeRedis(), AsyncMock()
     bot.send_message.side_effect = [RuntimeError(), None]
     with pytest.raises(RuntimeError):
-        await send_once(redis, bot, "test", 1, "message")
-    await send_once(redis, bot, "test", 1, "message")
-    await send_once(redis, bot, "test", 1, "message")
+        await send_once(redis, bot, "test", 1, "message", timedelta(days=1))
+    await send_once(redis, bot, "test", 1, "message", timedelta(days=1))
+    await send_once(redis, bot, "test", 1, "message", timedelta(days=1))
     assert bot.send_message.await_count == 2
+
+
+async def test_sent_keys_expire():
+    redis, bot = FakeRedis(), AsyncMock()
+    await send_once(redis, bot, "test", 1, "message", timedelta(days=14))
+    assert redis.ttl["bot:notification:test"] == timedelta(days=14)
 
 
 async def test_periodic_notifications_respect_users_cycles_and_packages():
