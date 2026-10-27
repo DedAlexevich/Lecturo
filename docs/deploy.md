@@ -12,7 +12,7 @@ scp infra/server-setup.sh root@<ip>:
 ssh root@<ip> "bash server-setup.sh <домен> '$(cat ~/.ssh/id_ed25519.pub)'"
 ```
 
-Скрипт ставит Docker, ufw (22, 80, 443), fail2ban, swap, создаёт пользователя `deploy` для GitHub Actions, клонирует репозиторий в `/opt/lecturo` и создаёт `.env` со случайными `SECRET_KEY` и `POSTGRES_PASSWORD`. Вход по паролю выключается, root входит только по ключу. Перед тем как закрыть текущую сессию, проверьте вход по ключу в новом окне: `ssh root@<ip>`.
+Скрипт ставит Docker, ufw (22, 80, 443), fail2ban, swap, создаёт пользователя `deploy` для GitHub Actions, клонирует репозиторий в `/opt/lecturo` и создаёт `.env` со случайными `SECRET_KEY` и `POSTGRES_PASSWORD`. Для администратора создаётся пользователь `admin`, он входит только по ключу. Вход root по ssh и вход по паролю выключаются, права root берутся через `su -` с паролем root. Перед тем как закрыть текущую сессию, проверьте вход в новом окне: `ssh admin@<ip>`.
 
 В конце скрипт печатает значения для GitHub Secrets (Settings → Secrets and variables → Actions):
 
@@ -31,7 +31,8 @@ ssh root@<ip> "bash server-setup.sh <домен> '$(cat ~/.ssh/id_ed25519.pub)'"
 Заполните в `/opt/lecturo/.env` ключи провайдеров, бота, OAuth, ЮKassa и SMTP (описание в [env.md](env.md)), затем первый запуск:
 
 ```sh
-ssh root@<ip>
+ssh admin@<ip>
+su -
 su - deploy -c /opt/lecturo/infra/deploy.sh
 ```
 
@@ -39,4 +40,4 @@ su - deploy -c /opt/lecturo/infra/deploy.sh
 
 ## Автодеплой
 
-Workflow `Deploy` запускается после зелёного CI на `main`: заходит на сервер как `deploy` и выполняет `infra/deploy.sh <sha>`. Скрипт обновляет код и пересобирает контейнеры, миграции применяются при старте api. Если контейнеры не стали healthy, миграции откатываются (`alembic downgrade` до прежней ревизии), код возвращается на прошлый коммит и поднимается заново, а workflow становится красным. Поэтому у каждой миграции должен работать `downgrade`. Коммит старее уже выложенного не выкладывается. Ручной запуск выкладывает свежий `main`. Запуск вручную: Actions → Deploy → Run workflow.
+Workflow `Deploy` запускается после зелёного CI на `main`: заходит на сервер как `deploy` и выполняет `infra/deploy.sh <sha>`. Скрипт обновляет код и пересобирает контейнеры, миграции применяются при старте api. Если контейнеры не стали healthy, миграции откатываются (`alembic downgrade` до прежней ревизии), код возвращается на прошлый коммит и поднимается заново, а workflow становится красным. Поэтому у каждой миграции должен работать `downgrade`. Коммит старее уже выложенного не выкладывается. Ручной запуск (Actions → Deploy → Run workflow) выкладывает свежий `main`.
