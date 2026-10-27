@@ -1,7 +1,9 @@
 import asyncio
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response, status
+from fastapi.responses import FileResponse
 from redis.exceptions import RedisError
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +32,7 @@ from app.pipeline.tasks import (
     enqueue_quiz,
     quiz_job_active,
 )
-from app.pipeline.video_access import is_valid_signature, signed_video_url
+from app.pipeline.video_access import is_valid_signature, signed_audio_url, signed_video_url
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -47,6 +49,7 @@ router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
 VIDEO_FORBIDDEN = "Нет доступа к видео"
+AUDIO_FORBIDDEN = "Нет доступа к аудио"
 
 
 async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
@@ -87,7 +90,33 @@ async def get_lecture(
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
     video_url = signed_video_url(lecture.id) if lecture.video_path else None
-    return LectureDetail.model_validate(lecture).model_copy(update={"video_url": video_url})
+    audio_only = is_audio_only(lecture)
+    audio_url = signed_audio_url(lecture.id) if audio_only and lecture.audio_path else None
+    return LectureDetail.model_validate(lecture).model_copy(
+        update={"video_url": video_url, "audio_only": audio_only, "audio_url": audio_url}
+    )
+
+
+def is_audio_only(lecture: Lecture) -> bool:
+    if lecture.source_type != SourceType.upload or lecture.video_expires_at is not None:
+        return False
+    return any(
+        step.step == StepName.video and step.status == StepStatus.done for step in lecture.steps
+    )
+
+
+@router.get("/{lecture_id}/audio")
+async def audio_file(
+    lecture_id: uuid.UUID, session: SessionDep, expires: str = "", signature: str = ""
+) -> FileResponse:
+    if not expires.isdecimal() or not is_valid_signature(
+        lecture_id, int(expires), signature, None, "audio"
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, AUDIO_FORBIDDEN)
+    audio_path = await session.scalar(select(Lecture.audio_path).where(Lecture.id == lecture_id))
+    if audio_path is None or not await asyncio.to_thread(Path(audio_path).is_file):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Аудио не найдено")
+    return FileResponse(audio_path, media_type="audio/ogg")
 
 
 @router.get("/{lecture_id}/video-access")
