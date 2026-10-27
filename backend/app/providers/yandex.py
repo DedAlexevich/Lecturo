@@ -2,6 +2,9 @@ import asyncio
 import contextlib
 import hashlib
 import hmac
+import logging
+import shutil
+import tempfile
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -13,15 +16,18 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import Settings
-from app.models import EMBEDDING_DIM, StepName
-from app.pipeline.estimate import expected_seconds
+from app.models import EMBEDDING_DIM
+from app.pipeline.estimate import is_chunked, recognition_seconds
 from app.providers.base import RecognitionProgress, Segment
+from app.providers.chunks import ChunkingError, Part, merge_segments, split_audio
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
     OpenAICompatibleError,
     require_settings,
 )
 from app.providers.retry import RetryPolicy, request_with_retry
+
+logger = logging.getLogger(__name__)
 
 RECOGNIZE_URL = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize"
 OPERATION_URL = "https://operation.api.cloud.yandex.net/operations/{operation_id}"
@@ -125,27 +131,110 @@ class YandexSpeechToText:
         language_code = LANGUAGE_CODES.get(language)
         if language_code is None:
             raise ValueError(f"Язык не поддерживается SpeechKit: {language}")
-        key = f"stt/{uuid.uuid4().hex}{suffix}"
+        if is_chunked(duration, self.settings):
+            segments = await self._transcribe_parts(
+                audio_path, language_code, duration, on_progress
+            )
+            if segments is not None:
+                return segments
         async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
-            await self._notify(on_progress, "upload", 0.0)
-            await self._upload(client, audio_path, key)
-            try:
-                await self._notify(on_progress, "recognize", UPLOAD_SHARE)
-                operation_id = await self._start(client, key, encoding, language_code)
-                response = await self._wait(client, operation_id, duration, on_progress)
-            finally:
-                await self._delete(client, key)
+            return await self._recognize_file(
+                client, audio_path, encoding, language_code, duration, on_progress
+            )
+
+    async def _recognize_file(
+        self,
+        client: httpx.AsyncClient,
+        audio_path: Path,
+        encoding: str,
+        language_code: str,
+        duration: float | None,
+        on_progress: RecognitionProgress | None,
+    ) -> list[Segment]:
+        key = f"stt/{uuid.uuid4().hex}{audio_path.suffix.lower()}"
+        await self._notify(on_progress, "upload", 0.0)
+        await self._upload(client, audio_path, key)
+        try:
+            await self._notify(on_progress, "recognize", UPLOAD_SHARE)
+            operation_id = await self._start(client, key, encoding, language_code)
+            response = await self._wait(client, operation_id, duration, on_progress)
+        finally:
+            await asyncio.shield(self._delete(client, key))
         await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
         return parse_recognition(response)
+
+    async def _transcribe_parts(
+        self,
+        audio_path: Path,
+        language_code: str,
+        duration: float,
+        on_progress: RecognitionProgress | None,
+    ) -> list[Segment] | None:
+        tmp_dir = self.settings.storage_dir / "tmp"
+        await asyncio.to_thread(tmp_dir.mkdir, parents=True, exist_ok=True)
+        workdir = Path(await asyncio.to_thread(tempfile.mkdtemp, prefix="stt-", dir=tmp_dir))
+        try:
+            await self._notify(on_progress, "upload", 0.0)
+            try:
+                parts = await split_audio(
+                    audio_path, duration, workdir, target=self.settings.stt_chunk_target_seconds
+                )
+            except ChunkingError as error:
+                logger.warning("Нарезка аудио не удалась, распознаю целиком: %s", error)
+                return None
+            results = await self._recognize_parts(parts, language_code, on_progress)
+        finally:
+            await asyncio.to_thread(shutil.rmtree, workdir, ignore_errors=True)
+        await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
+        return merge_segments(results, duration)
+
+    async def _recognize_parts(
+        self,
+        parts: list[tuple[Part, Path]],
+        language_code: str,
+        on_progress: RecognitionProgress | None,
+    ) -> list[tuple[Part, list[Segment]]]:
+        fractions = [0.0] * len(parts)
+        gate = asyncio.Semaphore(max(1, self.settings.stt_parallel_parts))
+        report_lock = asyncio.Lock()
+
+        async def part_progress(index: int, stage: str, fraction: float) -> None:
+            async with report_lock:
+                fractions[index] = fraction
+                started = any(value >= UPLOAD_SHARE for value in fractions)
+                await self._notify(
+                    on_progress,
+                    "recognize" if started else "upload",
+                    sum(fractions) / len(fractions),
+                )
+
+        async def recognize(
+            client: httpx.AsyncClient, part: Part, file: Path
+        ) -> tuple[Part, list[Segment]]:
+            async def report(stage: str, fraction: float) -> None:
+                await part_progress(part.index, stage, fraction)
+
+            async with gate:
+                segments = await self._recognize_file(
+                    client, file, "OGG_OPUS", language_code, part.duration, report
+                )
+            return part, segments
+
+        async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
+            try:
+                async with asyncio.TaskGroup() as group:
+                    tasks = [
+                        group.create_task(recognize(client, part, file)) for part, file in parts
+                    ]
+            except ExceptionGroup as error:
+                raise error.exceptions[0] from None
+        return [task.result() for task in tasks]
 
     async def _notify(
         self, on_progress: RecognitionProgress | None, stage: str, fraction: float
     ) -> None:
         if on_progress is not None:
             await on_progress(stage, fraction)
-
-    def expected_seconds(self, duration: float | None) -> float | None:
-        return expected_seconds(StepName.transcribe, duration, self.settings)
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, key: str) -> None:
         content = await asyncio.to_thread(audio_path.read_bytes)
@@ -199,7 +288,7 @@ class YandexSpeechToText:
     ) -> dict[str, Any]:
         started = time.monotonic()
         deadline = started + self.timeout
-        expected = self.expected_seconds(duration)
+        expected = None if not duration else recognition_seconds(duration, self.settings)
         url = OPERATION_URL.format(operation_id=operation_id)
         while True:
             operation = await self._fetch_operation(client, url)

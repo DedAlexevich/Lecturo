@@ -230,8 +230,6 @@ bubblewrap build --skipPwaValidation
 | [@vamaria06-ux](https://github.com/vamaria06-ux) | разработка |
 | [@elizazha](https://github.com/elizazha) | разработка |
 
-Кто за какую часть отвечает, написано в issue [«Зоны и ответственные»](https://github.com/DedAlexevich/Lecturo/issues/1).
-
 ## Лицензия
 
 AGPL-3.0, см. [LICENSE](LICENSE). Если вы запускаете изменённую версию Lecturo как сервис, исходники изменений нужно открыть пользователям этого сервиса.

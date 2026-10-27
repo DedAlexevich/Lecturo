@@ -1,5 +1,7 @@
 import uuid
 
+import pytest
+
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.models import Lecture, SourceType, User
@@ -42,6 +44,36 @@ async def test_course_crud(client, auth_headers):
     assert deleted.status_code == 204
     missing = await client.get(f"/api/v1/courses/{course['id']}", headers=auth_headers)
     assert missing.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"title": ""},
+        {"title": "   "},
+        {"title": "я" * 201},
+        {"title": "Курс", "description": "я" * 2001},
+    ],
+)
+async def test_course_input_limits(client, auth_headers, body):
+    response = await client.post("/api/v1/courses", json=body, headers=auth_headers)
+    assert response.status_code == 422
+
+
+async def test_course_title_stripped(client, auth_headers):
+    course = await create_course(client, auth_headers, "  Матанализ  ")
+    assert course["title"] == "Матанализ"
+
+    for body in ({"title": "   "}, {"description": "я" * 2001}):
+        response = await client.patch(
+            f"/api/v1/courses/{course['id']}", json=body, headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    renamed = await client.patch(
+        f"/api/v1/courses/{course['id']}", json={"title": " Алгебра "}, headers=auth_headers
+    )
+    assert renamed.json()["title"] == "Алгебра"
 
 
 async def test_lecture_in_several_courses(client, user, auth_headers):

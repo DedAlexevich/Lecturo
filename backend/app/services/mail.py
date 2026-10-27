@@ -2,10 +2,25 @@ import asyncio
 import logging
 import smtplib
 from email.message import EmailMessage
+from urllib.parse import urlsplit
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def mask_email(address: str) -> str:
+    name, _, domain = address.rpartition("@")
+    if not name:
+        return "***"
+    return f"{name[0]}***@{domain}"
+
+
+def is_local_public_url() -> bool:
+    host = urlsplit(get_settings().public_url).hostname or ""
+    return host in LOCAL_HOSTS or host.endswith(".localhost")
 
 
 def deliver(message: EmailMessage) -> None:
@@ -29,7 +44,10 @@ def login_and_send(smtp: smtplib.SMTP, message: EmailMessage) -> None:
 async def deliver_mail(to: str, subject: str, body: str) -> None:
     settings = get_settings()
     if not settings.smtp_host:
-        logger.info("Письмо для %s: %s\n%s", to, subject, body)
+        if is_local_public_url():
+            logger.info("Письмо для %s: %s\n%s", to, subject, body)
+        else:
+            logger.info("Письмо для %s: %s", mask_email(to), subject)
         return
     message = EmailMessage()
     message["From"] = settings.smtp_from or settings.smtp_user
@@ -43,7 +61,7 @@ async def send_mail(to: str, subject: str, body: str) -> None:
     try:
         await deliver_mail(to, subject, body)
     except Exception:
-        logger.exception("Не удалось отправить письмо для %s", to)
+        logger.exception("Не удалось отправить письмо для %s", mask_email(to))
 
 
 async def send_verification_mail(to: str, token: str) -> None:

@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.config import Settings
-from app.schemas.lecture import ChapterOut, LocalResultIn, SegmentOut
+from app.schemas.lecture import LocalChapterIn, LocalResultIn, SegmentOut
 from app.services.local_validation import LocalResultInvalid, validate_local_result
 
 TEXT = "слово " * 40
@@ -11,7 +11,6 @@ def make_body(**overrides) -> LocalResultIn:
     fields = {
         "title": "Матанализ",
         "duration_sec": 120.0,
-        "model": "whisper-small",
         "segments": [
             SegmentOut(start=0.0, end=60.0, text=TEXT),
             SegmentOut(start=60.0, end=120.0, text=TEXT),
@@ -40,15 +39,15 @@ def test_bad_segment_timecodes(segments):
 
 
 def test_chapter_beyond_duration():
-    chapters = [ChapterOut(start=0.0, end=500.0, title="Глава", summary="")]
+    chapters = [LocalChapterIn(start=0.0, end=500.0, title="Глава", summary="")]
     with pytest.raises(LocalResultInvalid):
         validate_local_result(make_body(chapters=chapters), Settings())
 
 
 def test_chapters_must_ascend():
     chapters = [
-        ChapterOut(start=60.0, end=100.0, title="Б", summary=""),
-        ChapterOut(start=0.0, end=60.0, title="А", summary=""),
+        LocalChapterIn(start=60.0, end=100.0, title="Б", summary=""),
+        LocalChapterIn(start=0.0, end=60.0, title="А", summary=""),
     ]
     with pytest.raises(LocalResultInvalid):
         validate_local_result(make_body(chapters=chapters), Settings())
@@ -71,3 +70,14 @@ def test_too_many_segments_rejected():
     segments = [SegmentOut(start=0.0, end=1.0, text=TEXT)] * 3
     with pytest.raises(LocalResultInvalid):
         validate_local_result(make_body(segments=segments), Settings(local_max_segments=2))
+
+
+def test_total_text_limit():
+    body = make_body(
+        chapters=[LocalChapterIn(start=0.0, end=60.0, title="Глава", summary="я" * 100)],
+        summary_md="я" * 100,
+    )
+    settings = Settings(local_max_total_chars=2 * len(TEXT) + 204)
+    with pytest.raises(LocalResultInvalid):
+        validate_local_result(body, settings)
+    validate_local_result(body, Settings(local_max_total_chars=2 * len(TEXT) + 205))
