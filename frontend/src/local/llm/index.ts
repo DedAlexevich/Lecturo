@@ -1,7 +1,7 @@
 import { notesError } from "./gpu";
 import type { LocalChapter, LocalSegment } from "../storage";
 
-export { markWebGPUUnsupported, NoGpuError, supportsWebGPU } from "./gpu";
+export { markWebGPUUnsupported, NO_GPU_MESSAGE, NoGpuError, supportsWebGPU } from "./gpu";
 
 export type NotesProgress = { type: "loading"; value: number } | { type: "generating"; value: number };
 export type Notes = { chapters: LocalChapter[]; summaryMd: string };

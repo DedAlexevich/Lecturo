@@ -5,7 +5,7 @@ import { useToken } from "../../app/session";
 import { extractAudio } from "../../local/audio";
 import { pickedFileOf } from "../../local/pickedFiles";
 import { disposeWhisper, transcribe } from "../../local/whisper";
-import { generateNotes, markWebGPUUnsupported, NoGpuError, supportsWebGPU } from "../../local/llm";
+import { generateNotes, markWebGPUUnsupported, NO_GPU_MESSAGE, NoGpuError, supportsWebGPU } from "../../local/llm";
 import { getLocalMedia, saveLocalLecture, saveLocalMedia, updateLocalNotes } from "../../local/storage";
 import type { LocalLecture, LocalMedia } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
@@ -351,7 +351,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {stage === "done" && saved && segments.length > 0 && webgpu === true && !saved.summaryMd && <p className="local-note">При первом запуске модель конспекта загружается из интернета. Для работы ей требуется около 2 ГБ видеопамяти. Текст обрабатывается на устройстве.</p>}
           {stage === "done" && saved && segments.length > 0 && webgpu === false && !busy && (
             <div className="local-source local-source--notice" role="status">
-              <p>{new NoGpuError().message}</p>
+              <p>{NO_GPU_MESSAGE}</p>
               <SaveToAccount key={saved.id} lecture={saved} />
             </div>
           )}
@@ -360,7 +360,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {saved?.summaryMd && <section><h2>Конспект</h2><div className="summary"><Markdown source={saved.summaryMd} /></div></section>}
           {saved && saved.chapters.length > 0 && <section><h2>Главы</h2><Chapters chapters={saved.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} /></section>}
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
-          {stage === "done" && saved && !busy && !(webgpu === false && segments.length > 0) && <SaveToAccount key={saved.id} lecture={saved} />}
+          {stage === "done" && saved && !busy && (webgpu === true || segments.length === 0) && <SaveToAccount key={saved.id} lecture={saved} />}
           {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
           {stage === "done" && file && !released && !lecture.isFetching && !lecture.isError && queued?.status === "waiting_quota" && (
             <QueueRelease lecture={queued} onReleased={() => setReleased(true)} />
