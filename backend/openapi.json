@@ -2538,6 +2538,58 @@
         }
       }
     },
+    "/api/v1/public/{token}/lectures/{lecture_id}": {
+      "get": {
+        "tags": [
+          "shares"
+        ],
+        "summary": "Get Public Course Lecture",
+        "operationId": "get_public_course_lecture_api_v1_public__token__lectures__lecture_id__get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          },
+          {
+            "name": "lecture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lecture Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicLectureOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/public/{token}/complaints": {
       "post": {
         "tags": [
@@ -2997,6 +3049,18 @@
           "reason": {
             "type": "string",
             "title": "Reason"
+          },
+          "lecture_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lecture Id"
           }
         },
         "type": "object",
@@ -4146,17 +4210,6 @@
           "processed_locally": {
             "type": "boolean",
             "title": "Processed Locally"
-          },
-          "share_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Share Token"
           }
         },
         "type": "object",
@@ -4164,8 +4217,7 @@
           "id",
           "title",
           "duration_sec",
-          "processed_locally",
-          "share_token"
+          "processed_locally"
         ],
         "title": "PublicLectureSummary"
       },
