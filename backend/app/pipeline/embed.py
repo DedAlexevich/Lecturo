@@ -9,7 +9,15 @@ from dataclasses import dataclass, replace
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Chapter, ChunkKind, Lecture, SearchChunk, Summary, TranscriptSegment
+from app.models import (
+    Chapter,
+    ChunkKind,
+    Lecture,
+    SearchChunk,
+    SourceType,
+    Summary,
+    TranscriptSegment,
+)
 from app.pipeline.runner import Report
 from app.pipeline.stages import load_segments, require_ai_transfer
 from app.pipeline.summarize import load_prompt, parse_json
@@ -41,8 +49,9 @@ class Chunk:
 
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
+    local = lecture.processed_locally or lecture.source_type == SourceType.local
     chunks = await describe_chunks(
-        get_llm(),
+        None if local else get_llm(),
         [
             *split_into_chunks(await load_segments(session, lecture)),
             *await load_section_chunks(session, lecture.id),
@@ -77,26 +86,31 @@ def to_search_chunk(
     )
 
 
+DescriptionKey = tuple[ChunkKind, float | None, str]
+
+
 async def known_descriptions(
     session: AsyncSession, lecture_id: uuid.UUID
-) -> dict[tuple[ChunkKind, float | None], str]:
+) -> dict[DescriptionKey, str]:
     rows = await session.execute(
-        select(SearchChunk.kind, SearchChunk.start, SearchChunk.description).where(
-            SearchChunk.lecture_id == lecture_id, SearchChunk.description.is_not(None)
-        )
+        select(
+            SearchChunk.kind, SearchChunk.start, SearchChunk.text, SearchChunk.description
+        ).where(SearchChunk.lecture_id == lecture_id, SearchChunk.description.is_not(None))
     )
-    return {(kind, start): description for kind, start, description in rows}
+    return {(kind, start, text): description for kind, start, text, description in rows}
 
 
 async def describe_chunks(
-    llm: LLM, chunks: list[Chunk], known: dict[tuple[ChunkKind, float | None], str]
+    llm: LLM | None, chunks: list[Chunk], known: dict[DescriptionKey, str]
 ) -> list[Chunk]:
     chunks = [
-        replace(chunk, description=known.get((chunk.kind, chunk.start)))
+        replace(chunk, description=known.get((chunk.kind, chunk.start, chunk.text)))
         if chunk.kind == ChunkKind.transcript
         else chunk
         for chunk in chunks
     ]
+    if llm is None:
+        return chunks
     pending = [
         index
         for index, chunk in enumerate(chunks)

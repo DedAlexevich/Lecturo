@@ -348,3 +348,40 @@ def test_parse_descriptions_skips_bad_items_and_shortens():
 def test_parse_descriptions_rejects_wrong_shape():
     with pytest.raises(ValueError):
         parse_descriptions('{"text": "что-то"}', 2)
+
+
+async def test_local_lecture_is_not_sent_to_llm(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(120, 10))
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.source_type = SourceType.local
+        stored.processed_locally = True
+        session.add(Chapter(lecture_id=lecture.id, idx=0, start=0, end=120, title="Пределы"))
+        await session.commit()
+
+    await run_embed(lecture.id)
+
+    chunks = await load_chunks(lecture.id)
+    assert llm.requests == []
+    assert {c.kind: c.description for c in chunks if c.kind == ChunkKind.chapter} == {
+        ChunkKind.chapter: "Пределы"
+    }
+    assert all(c.description is None for c in chunks if c.kind == ChunkKind.transcript)
+
+
+async def test_changed_text_gets_new_description(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(60, 10), text="старое")
+    await run_embed(lecture.id)
+    async with SessionLocal() as session:
+        for segment in await session.scalars(
+            select(TranscriptSegment).where(TranscriptSegment.lecture_id == lecture.id)
+        ):
+            segment.text = segment.text.replace("старое", "новое")
+        await session.commit()
+    llm.requests.clear()
+
+    await run_embed(lecture.id)
+
+    [chunk] = await load_chunks(lecture.id)
+    assert len(llm.requests) == 1
+    assert chunk.description == "О чём новое 0 ново"
