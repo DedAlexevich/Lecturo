@@ -22,6 +22,7 @@ from app.models.lecture import (
     Summary,
     TranscriptSegment,
 )
+from app.models.legal import LegalNotice, LegalRevision, NoticeChannel
 from app.models.notification import NotificationEvent, NotificationKind, NotificationOutcome
 from app.models.search import ChunkKind, SearchChunk
 from app.models.share import Complaint, ShareLink
@@ -42,6 +43,9 @@ __all__ = [
     "HourPackage",
     "Lecture",
     "LectureStatus",
+    "LegalNotice",
+    "LegalRevision",
+    "NoticeChannel",
     "NotificationEvent",
     "NotificationKind",
     "NotificationOutcome",

@@ -18,6 +18,7 @@ from app.pipeline.tasks import (
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings
 from app.providers.yandex import YandexEmbeddings
+from app.services.legal_notices import process_legal_revisions
 
 STARTUP_CHECK_TIMEOUT_SECONDS = 15
 
@@ -48,4 +49,7 @@ class WorkerSettings:
     max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
-    cron_jobs = [cron(delete_expired_videos, minute=0)]
+    cron_jobs = [
+        cron(delete_expired_videos, minute=0),
+        cron(process_legal_revisions, minute=set(range(0, 60, 10))),
+    ]
