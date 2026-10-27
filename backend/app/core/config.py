@@ -116,6 +116,11 @@ class Settings(BaseSettings):
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60
     regenerate_summary_rate_window_seconds: int = 300
+    exam_sheet_rate_window_seconds: int = 300
+    exam_sheet_failure_ttl_seconds: int = 7 * 24 * 3600
+    link_rate_limit: int = 10
+    link_rate_window_seconds: int = 60
+    link_inspect_timeout_seconds: float = 90.0
     complaints_rate_limit: int = 5
     complaints_rate_window_seconds: int = 3600
     public_copy_daily_limit: int = 20
