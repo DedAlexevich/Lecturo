@@ -2684,11 +2684,13 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3016,6 +3018,8 @@ export interface operations {
             /** @description Successful Response */
             200: {
                 headers: {
+                    /** @description Новый токен доступа, старые токены больше не действуют */
+                    "X-Access-Token"?: string;
                     [name: string]: unknown;
                 };
                 content: {

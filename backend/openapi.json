@@ -610,8 +610,15 @@
           "required": true
         },
         "responses": {
-          "204": {
-            "description": "Successful Response"
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -977,6 +984,14 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "headers": {
+              "X-Access-Token": {
+                "description": "Новый токен доступа, старые токены больше не действуют",
+                "schema": {
+                  "type": "string"
                 }
               }
             }

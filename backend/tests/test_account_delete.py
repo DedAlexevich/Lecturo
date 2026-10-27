@@ -62,7 +62,7 @@ async def account() -> AsyncIterator[User]:
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 async def add_lecture(user: User, storage: Path) -> tuple[Lecture, list[Path]]:
