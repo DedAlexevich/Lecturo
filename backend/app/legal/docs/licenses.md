@@ -213,7 +213,23 @@
 >
 > THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-5.4. Тексты лицензий приведены на языке оригинала.
+5.4. Тексты файлов NOTICE, воспроизводимые в соответствии с подпунктом (d) пункта 4 Apache License 2.0:
+
+5.4.1. Apache TVM — файл NOTICE из [github.com/apache/tvm, тег v0.28.dev0](https://github.com/apache/tvm/blob/v0.28.dev0/NOTICE) (коммит 5398c27e76c7c858d7fae655496e68b297fc99fc). Точный коммит, из которого собран пакет `@mlc-ai/web-runtime` версии 0.28.0-dev0, в пакете не указан; использован ближайший тег, на дату редакции Документа текст файла в основной ветке совпадает:
+
+> Apache TVM
+>
+> Copyright 2019-2023 The Apache Software Foundation
+>
+> This product includes software developed at The Apache Software Foundation (http://www.apache.org/).
+
+5.4.2. XGrammar — файл NOTICE из [github.com/mlc-ai/xgrammar, коммит ace2321a29471130f3f64fb1882741a5547c6f36](https://github.com/mlc-ai/xgrammar/blob/ace2321a29471130f3f64fb1882741a5547c6f36/NOTICE), из которого собран пакет `@mlc-ai/web-xgrammar` версии 0.1.27:
+
+> XGrammar
+>
+> Copyright (c) 2024 by XGrammar Contributors
+
+5.5. Тексты лицензий приведены на языке оригинала.
 
 ## 6. Заключительные положения
 
