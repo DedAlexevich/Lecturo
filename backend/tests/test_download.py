@@ -8,10 +8,21 @@ import pytest
 
 from app.models import Lecture, SourceType
 from app.pipeline import download
-from app.pipeline.download import LinkError, build_embed_url, inspect_link
+from app.pipeline.download import (
+    LinkError,
+    build_embed_url,
+    inspect_link,
+    link_key,
+    with_scheme,
+    yandex_disk_resource,
+)
 
 RUTUBE_ID = "0123456789abcdef0123456789abcdef"
 DISK_URL = "https://disk.yandex.ru/i/AbCdEf"
+DISK_FOLDER_FILE_URL = (
+    "https://disk.yandex.ru/d/JdCCuy4h8fR75A/"
+    "%D0%9B%D0%B5%D0%BA%D1%86%D0%B8%D1%8F%2003%202025-09-10%2010-20-00.mp4"
+)
 
 
 @pytest.mark.parametrize(
@@ -51,6 +62,101 @@ DISK_URL = "https://disk.yandex.ru/i/AbCdEf"
 )
 def test_build_embed_url(url, expected):
     assert build_embed_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("disk.yandex.ru/d/AbCdEf", "https://disk.yandex.ru/d/AbCdEf"),
+        ("  youtu.be/dQw4w9WgXcQ ", "https://youtu.be/dQw4w9WgXcQ"),
+        ("www.youtube.com/watch?v=dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+        ("//rutube.ru/video/1/", "https://rutube.ru/video/1/"),
+        ("http://vk.com/video-1_2", "http://vk.com/video-1_2"),
+        ("https://vk.com/video-1_2", "https://vk.com/video-1_2"),
+    ],
+)
+def test_with_scheme(url, expected):
+    assert with_scheme(url) == expected
+
+
+@pytest.mark.parametrize(
+    ("urls", "expected"),
+    [
+        (
+            [
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "https://youtu.be/dQw4w9WgXcQ?si=abc&t=10",
+                "https://m.youtube.com/watch?v=dQw4w9WgXcQ&feature=share",
+                "https://youtube.com/shorts/dQw4w9WgXcQ",
+                "youtube.com/watch?t=5&v=dQw4w9WgXcQ",
+            ],
+            "youtube:dQw4w9WgXcQ",
+        ),
+        (
+            [
+                f"https://rutube.ru/video/{RUTUBE_ID}/",
+                f"https://rutube.ru/video/{RUTUBE_ID}/?r=wd",
+                f"https://rutube.ru/play/embed/{RUTUBE_ID}",
+            ],
+            f"rutube:{RUTUBE_ID}",
+        ),
+        (
+            [
+                "https://vkvideo.ru/video-12345_456239017",
+                "https://vk.com/video?z=video-12345_456239017%2Fpl_cat_trends",
+                "https://vk.com/video_ext.php?oid=-12345&id=456239017&hash=abc",
+            ],
+            "vk:-12345_456239017",
+        ),
+        (
+            [
+                "https://Files.Lecturo.test/lecture.mp4",
+                "https://files.lecturo.test/lecture.mp4/",
+                "http://www.files.lecturo.test/lecture.mp4#start",
+            ],
+            "files.lecturo.test/lecture.mp4",
+        ),
+        (
+            [
+                DISK_FOLDER_FILE_URL,
+                "disk.yandex.ru/d/JdCCuy4h8fR75A/Лекция 03 2025-09-10 10-20-00.mp4",
+            ],
+            "disk.yandex.ru/d/JdCCuy4h8fR75A/Лекция 03 2025-09-10 10-20-00.mp4",
+        ),
+    ],
+)
+def test_link_key_matches_forms_of_one_link(urls, expected):
+    assert {link_key(url) for url in urls} == {expected}
+
+
+def test_link_key_separates_different_videos():
+    assert link_key("https://youtu.be/dQw4w9WgXcQ") != link_key("https://youtu.be/aaaaaaaaaaa")
+    assert link_key("https://disk.yandex.ru/d/Key/a.mp4") != link_key(
+        "https://disk.yandex.ru/d/Key/b.mp4"
+    )
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        (DISK_URL, (DISK_URL, None)),
+        ("https://disk.yandex.ru/d/AbCdEf", ("https://disk.yandex.ru/d/AbCdEf", None)),
+        ("https://disk.yandex.ru/d/AbCdEf/", ("https://disk.yandex.ru/d/AbCdEf/", None)),
+        (
+            DISK_FOLDER_FILE_URL,
+            (
+                "https://disk.yandex.ru/d/JdCCuy4h8fR75A",
+                "/Лекция 03 2025-09-10 10-20-00.mp4",
+            ),
+        ),
+        (
+            "https://disk.yandex.ru/d/AbCdEf/Курс/Лекция%201.mp4?x=1",
+            ("https://disk.yandex.ru/d/AbCdEf", "/Курс/Лекция 1.mp4"),
+        ),
+    ],
+)
+def test_yandex_disk_resource(url, expected):
+    assert yandex_disk_resource(url) == expected
 
 
 @pytest.fixture
@@ -195,6 +301,29 @@ async def test_resolve_yandex_disk_returns_name_and_direct_link():
     assert name == "Лекция 3.mp4"
     assert href == "https://downloader.disk.yandex.ru/x"
     assert requests == ["/v1/disk/public/resources", "/v1/disk/public/resources/download"]
+
+
+async def test_resolve_yandex_disk_passes_path_inside_folder():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(dict(request.url.params))
+        if request.url.path.endswith("/download"):
+            return httpx.Response(200, json={"href": "https://downloader.disk.yandex.ru/x"})
+        return httpx.Response(
+            200, json={"type": "file", "media_type": "video", "name": "Лекция 03.mp4"}
+        )
+
+    name, href = await download.resolve_yandex_disk(
+        DISK_FOLDER_FILE_URL, httpx.MockTransport(handler)
+    )
+
+    assert (name, href) == ("Лекция 03.mp4", "https://downloader.disk.yandex.ru/x")
+    expected = {
+        "public_key": "https://disk.yandex.ru/d/JdCCuy4h8fR75A",
+        "path": "/Лекция 03 2025-09-10 10-20-00.mp4",
+    }
+    assert requests == [expected, expected]
 
 
 async def test_resolve_yandex_disk_rejects_folder():

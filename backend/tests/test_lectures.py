@@ -251,6 +251,91 @@ async def test_add_link_over_quota_waits_without_queue(
     assert published == [(uuid.UUID(response.json()["id"]), LectureStatus.waiting_quota)]
 
 
+async def test_add_link_accepts_link_without_scheme(client, auth_headers, link_info):
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "disk.yandex.ru/d/AbCdEf"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["source_url"] == "https://disk.yandex.ru/d/AbCdEf"
+
+
+async def test_add_link_returns_existing_lecture_for_same_video(client, auth_headers, link_info):
+    first = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        headers=auth_headers,
+    )
+    course = await client.post("/api/v1/courses", json={"title": "Физика"}, headers=auth_headers)
+    course_id = course.json()["id"]
+
+    again = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "youtu.be/dQw4w9WgXcQ?si=abc&t=10", "course_id": course_id},
+        headers=auth_headers,
+    )
+
+    assert first.status_code == 201
+    assert first.json()["existing"] is False
+    assert again.status_code == 200
+    assert again.json()["id"] == first.json()["id"]
+    assert again.json()["existing"] is True
+    assert link_info["enqueued"] == [uuid.UUID(first.json()["id"])]
+    lectures = await client.get("/api/v1/lectures", headers=auth_headers)
+    assert len(lectures.json()) == 1
+    in_course = await client.get(f"/api/v1/courses/{course_id}/lectures", headers=auth_headers)
+    assert [item["id"] for item in in_course.json()] == [first.json()["id"]]
+
+
+async def test_add_link_creates_new_lecture_after_failed_one(client, user, auth_headers, link_info):
+    async with SessionLocal() as session:
+        session.add(
+            Lecture(
+                owner_id=user.id,
+                title="Упала",
+                source_type=SourceType.link,
+                source_url="https://youtu.be/dQw4w9WgXcQ",
+                status=LectureStatus.failed,
+            )
+        )
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["existing"] is False
+    assert len(link_info["enqueued"]) == 1
+
+
+async def test_add_link_ignores_same_link_of_other_user(client, stranger, auth_headers, link_info):
+    async with SessionLocal() as session:
+        session.add(
+            Lecture(
+                owner_id=stranger.id,
+                title="Чужая",
+                source_type=SourceType.link,
+                source_url="https://youtu.be/dQw4w9WgXcQ",
+                status=LectureStatus.ready,
+            )
+        )
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://youtu.be/dQw4w9WgXcQ"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["existing"] is False
+
+
 @pytest.fixture
 def cancelled(monkeypatch):
     calls = []
