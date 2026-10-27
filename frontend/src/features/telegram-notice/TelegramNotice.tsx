@@ -1,9 +1,9 @@
 import { useState, type MouseEvent } from "react";
 import type { components } from "../../api/schema";
 import { useMe } from "../../app/useMe";
-import { telegramBotUrl, telegramEnabled } from "../../pages/auth/TelegramButton";
 import { LinkTelegram } from "../../pages/account/IdentitiesList";
 import { getMiniAppInitData } from "../../pages/account/miniApp";
+import { telegramBotUrl } from "../../telegram/bot";
 import { getWebApp } from "../../telegram/sdk";
 import { Button } from "../../ui/Button";
 import "./TelegramNotice.css";
@@ -18,9 +18,15 @@ const readyWhen: Record<NoticeSubject, string> = {
 
 type TelegramState = components["schemas"]["TelegramNotifications"];
 
+function offerAvailable(state: TelegramState) {
+  if (state === "ready") return false;
+  if (state === "not_linked") return Boolean(getMiniAppInitData()) || telegramBotUrl !== null;
+  return telegramBotUrl !== null;
+}
+
 export function afterStartNote(state: TelegramState | undefined) {
   if (state === "ready") return " Можно закрыть страницу, пришлём уведомление в Telegram, когда лекция будет готова.";
-  if (state && (telegramEnabled || getMiniAppInitData())) return " Уведомление в Telegram можно включить на странице лекции.";
+  if (state && offerAvailable(state)) return " Уведомление в Telegram можно включить на странице лекции.";
   return "";
 }
 
@@ -36,6 +42,15 @@ function wasDismissed(lectureId: string) {
   }
 }
 
+function rememberDismissed(lectureId: string) {
+  try {
+    localStorage.setItem(storageKey(lectureId), new Date().toISOString());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function openBot(event: MouseEvent<HTMLAnchorElement>) {
   const app = getWebApp();
   if (!app?.openTelegramLink || !telegramBotUrl) return;
@@ -45,7 +60,7 @@ function openBot(event: MouseEvent<HTMLAnchorElement>) {
 
 export function TelegramNotice({ lectureId, subject }: { lectureId: string; subject: NoticeSubject }) {
   const { data: me } = useMe({ refetchOnWindowFocus: true });
-  const [dismissed, setDismissed] = useState(() => wasDismissed(lectureId));
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
 
   if (!me) return null;
   const state = me.telegram_notifications;
@@ -58,16 +73,11 @@ export function TelegramNotice({ lectureId, subject }: { lectureId: string; subj
     );
   }
 
-  const canLink = Boolean(getMiniAppInitData()) || telegramEnabled;
-  if (dismissed || (state === "not_linked" ? !canLink : !telegramBotUrl)) return null;
+  if (dismissedId === lectureId || wasDismissed(lectureId) || !offerAvailable(state)) return null;
 
   const dismiss = () => {
-    setDismissed(true);
-    try {
-      localStorage.setItem(storageKey(lectureId), new Date().toISOString());
-    } catch {
-      return;
-    }
+    setDismissedId(lectureId);
+    rememberDismissed(lectureId);
   };
 
   const text =

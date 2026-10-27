@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { telegramBotUsername } from "../../telegram/bot";
 import type { TelegramUser } from "./useAuthRequests";
 
 declare global {
@@ -7,11 +8,9 @@ declare global {
   }
 }
 
-const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
+const botUsername = telegramBotUsername;
 
 export const telegramEnabled = Boolean(botUsername);
-
-export const telegramBotUrl = botUsername ? `https://t.me/${botUsername}?start=notify` : null;
 
 export function TelegramButton({ onAuth }: { onAuth: (user: TelegramUser) => void }) {
   const container = useRef<HTMLDivElement>(null);
