@@ -282,7 +282,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
             <audio ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ))}
           {stage === "done" && segments.length > 0 ? (
-            <Transcript segments={segments} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
+            <Transcript segments={segments} chapters={saved?.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
           {stage === "done" && saved && segments.length > 0 && webgpu && <div className="local-actions">
             <Button disabled={busy} onClick={() => void makeNotes()}>{saved.summaryMd ? "Обновить конспект и главы" : "Создать конспект и главы"}</Button>

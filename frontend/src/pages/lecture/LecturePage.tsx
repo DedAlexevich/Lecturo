@@ -233,6 +233,7 @@ export function LecturePage() {
             segments.length > 0 ? (
               <Transcript
                 segments={segments}
+                chapters={chapters}
                 currentTime={hasPlayer ? currentTime : null}
                 onSelect={hasPlayer ? playFrom : undefined}
               />
