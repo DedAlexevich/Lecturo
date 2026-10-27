@@ -19,6 +19,7 @@ export function videoIdentity(src: string) {
 export function usePlayer() {
   const playerRef = useRef<Player | null>(null);
   const pendingSeek = useRef<number | null>(null);
+  const pendingPlay = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
 
   const onReady = useCallback((player: Player | null) => {
@@ -27,6 +28,10 @@ export function usePlayer() {
     if (player && pendingSeek.current !== null) {
       player.seek(pendingSeek.current);
       pendingSeek.current = null;
+    }
+    if (player && pendingPlay.current) {
+      pendingPlay.current = false;
+      player.play();
     }
   }, []);
 
@@ -40,7 +45,9 @@ export function usePlayer() {
   const playFrom = useCallback(
     (seconds: number) => {
       seek(seconds);
-      playerRef.current?.play();
+      const player = playerRef.current;
+      if (player) player.play();
+      else pendingPlay.current = true;
     },
     [seek],
   );

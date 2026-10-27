@@ -192,7 +192,7 @@ export function LecturePage() {
   const [tab, setTab] = useState<PanelKind>("summary");
   const [searching, setSearching] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
-  const { currentTime, seek, playFrom, bind } = usePlayer();
+  const { currentTime, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
   const segments = useMemo(
@@ -206,12 +206,13 @@ export function LecturePage() {
   );
 
   useEffect(() => {
-    if (startAt !== null) seek(startAt);
-  }, [startAt, locationKey, seek]);
+    if (startAt !== null) playFrom(startAt);
+  }, [startAt, locationKey, playFrom]);
 
   useEffect(() => {
     if (section !== null) setTab("summary");
-  }, [section, locationKey]);
+    else if (startAt !== null) setTab("transcript");
+  }, [section, startAt, locationKey]);
 
   const summaryReady = Boolean(lecture.data?.summary?.content_md.trim());
 
@@ -236,6 +237,7 @@ export function LecturePage() {
   const audioUrl = videoUrl ? null : (data.audio_url ?? null);
   const embed = videoUrl || audioUrl ? null : resolveEmbed(data.embed_url);
   const hasPlayer = videoUrl !== null || audioUrl !== null || embed !== null;
+  const shownTime = hasPlayer ? currentTime : startAt;
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
@@ -266,7 +268,7 @@ export function LecturePage() {
               <div className="lecture__scroll">
                 <Chapters
                   chapters={chapters}
-                  currentTime={hasPlayer ? currentTime : null}
+                  currentTime={shownTime}
                   onSelect={hasPlayer ? playFrom : undefined}
                 />
               </div>
@@ -282,7 +284,7 @@ export function LecturePage() {
               <Transcript
                 segments={segments}
                 chapters={chapters}
-                currentTime={hasPlayer ? currentTime : null}
+                currentTime={shownTime}
                 onSelect={hasPlayer ? playFrom : undefined}
               />
             ) : (
@@ -367,6 +369,7 @@ export function LecturePage() {
               embed={embed}
               title={data.title}
               start={startAt ?? 0}
+              autoplay={startAt !== null}
               currentTime={currentTime}
               sourceUrl={data.source_url}
               {...bind}
