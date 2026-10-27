@@ -22,7 +22,7 @@ from app.models.lecture import (
     Summary,
     TranscriptSegment,
 )
-from app.models.search import SearchChunk
+from app.models.search import ChunkKind, SearchChunk
 from app.models.share import Complaint, ShareLink
 from app.models.user import AuthIdentity, AuthProvider, AuthToken, AuthTokenKind, User
 
@@ -34,6 +34,7 @@ __all__ = [
     "AuthTokenKind",
     "Base",
     "Chapter",
+    "ChunkKind",
     "Complaint",
     "Course",
     "ExamSheet",
