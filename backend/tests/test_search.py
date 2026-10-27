@@ -10,6 +10,7 @@ from app.models import (
     Lecture,
     SearchChunk,
     SourceType,
+    TranscriptSegment,
     User,
     course_lectures,
 )
@@ -151,9 +152,15 @@ async def test_course_search_covers_only_course_lectures(client, user, auth_head
 
 
 async def test_search_returns_at_most_limit_hits(client, user, auth_headers):
-    lecture_id = await create_lecture(
-        user.id, "Длинная", *(f"интеграл, часть {idx}" for idx in range(LIMIT + 5))
-    )
+    lecture_id = await create_lecture(user.id, "Длинная")
+    for idx in range(LIMIT + 5):
+        await add_chunk(
+            lecture_id,
+            ChunkKind.transcript,
+            f"интеграл, часть {idx}",
+            start=idx * 120.0,
+            end=idx * 120.0 + 45.0,
+        )
 
     response = await search(client, auth_headers, q="интеграл", lecture_id=str(lecture_id))
 
@@ -220,6 +227,10 @@ def test_relevant_drops_hits_far_below_best():
     scores = relevant({1: 0.5, 2: 0.5 - MARGIN - 0.01, 3: 0.1}, {3})
 
     assert set(scores) == {1}
+
+
+def test_relevant_keeps_only_hits_close_to_best():
+    assert set(relevant({1: 0.6, 2: 0.5, 3: 0.55}, set())) == {1, 3}
 
 
 def test_relevant_drops_weak_hits_without_keywords():
@@ -360,3 +371,131 @@ async def test_finds_keyword_chunk_without_embedding(client, user, auth_headers)
     response = await search(client, auth_headers, q="интеграл", lecture_id=str(lecture_id))
 
     assert [hit["text"] for hit in response.json()] == ["Определённые интегралы"]
+
+
+async def add_segments(lecture_id: uuid.UUID, *segments: tuple[float, float, str]) -> None:
+    async with SessionLocal() as session:
+        session.add_all(
+            TranscriptSegment(lecture_id=lecture_id, idx=idx, start=start, end=end, text=text)
+            for idx, (start, end, text) in enumerate(segments)
+        )
+        await session.commit()
+
+
+async def add_spans(lecture_id: uuid.UUID, kind: ChunkKind, *spans: tuple[float, float, str]):
+    for start, end, text in spans:
+        await add_chunk(lecture_id, kind, text, start=start, end=end)
+
+
+QUESTION = "самый дорогой самолёт"
+
+
+async def test_neighbor_chunks_and_chapter_make_one_moment(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    await add_spans(
+        lecture_id,
+        ChunkKind.transcript,
+        (0.0, 45.0, "Вступление о выставке"),
+        (45.0, 90.0, QUESTION),
+        (91.0, 140.0, QUESTION),
+        (140.0, 190.0, "Прочность крыла"),
+    )
+    await add_spans(lecture_id, ChunkKind.chapter, (40.0, 150.0, QUESTION))
+
+    response = await search(client, auth_headers, q=QUESTION)
+
+    hits = response.json()
+    assert [(hit["kind"], hit["start"], hit["end"]) for hit in hits] == [
+        ("transcript", 45.0, 140.0)
+    ]
+    assert hits[0]["score"] == pytest.approx(1.0 + KEYWORD_BONUS)
+
+
+async def test_separate_mentions_make_separate_moments(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    await add_spans(
+        lecture_id,
+        ChunkKind.transcript,
+        (0.0, 45.0, QUESTION),
+        (45.0, 90.0, "Прочность крыла"),
+        (90.0, 135.0, "Расход топлива"),
+        (135.0, 180.0, QUESTION),
+    )
+
+    response = await search(client, auth_headers, q=QUESTION, lecture_id=str(lecture_id))
+
+    assert sorted(hit["start"] for hit in response.json()) == [0.0, 135.0]
+
+
+async def test_chapter_does_not_join_separate_mentions(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    await add_spans(
+        lecture_id,
+        ChunkKind.transcript,
+        (0.0, 45.0, QUESTION),
+        (45.0, 90.0, "Прочность крыла"),
+        (90.0, 135.0, QUESTION),
+    )
+    await add_spans(lecture_id, ChunkKind.chapter, (0.0, 135.0, QUESTION))
+
+    response = await search(client, auth_headers, q=QUESTION)
+
+    assert sorted((hit["kind"], hit["start"]) for hit in response.json()) == [
+        ("transcript", 0.0),
+        ("transcript", 90.0),
+    ]
+
+
+async def test_moments_of_different_lectures_stay_apart(client, user, auth_headers):
+    first = await create_lecture(user.id, "Первая", QUESTION)
+    second = await create_lecture(user.id, "Вторая", QUESTION)
+    course_id = await create_course(user.id, first, second)
+
+    by_course = await search(client, auth_headers, q=QUESTION, course_id=str(course_id))
+    everywhere = await search(client, auth_headers, q=QUESTION)
+
+    for response in (by_course, everywhere):
+        assert sorted(hit["lecture_id"] for hit in response.json()) == sorted(
+            [str(first), str(second)]
+        )
+
+
+async def test_timecode_points_to_closest_segment(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    segments = [
+        (60.0, 70.0, "Дальше про выставку."),
+        (70.0, 82.0, QUESTION),
+        (82.0, 100.0, "Его собирали десять лет."),
+        (100.0, 140.0, "Перейдём к вертолётам."),
+    ]
+    await add_segments(lecture_id, *segments)
+    await add_spans(
+        lecture_id,
+        ChunkKind.transcript,
+        (60.0, 100.0, " ".join(text for _, _, text in segments[:3])),
+        (100.0, 140.0, segments[3][2]),
+    )
+
+    response = await search(client, auth_headers, q=QUESTION, lecture_id=str(lecture_id))
+
+    hits = response.json()
+    assert [(hit["start"], hit["end"]) for hit in hits] == [(70.0, 100.0)]
+    assert hits[0]["text"] == f"{QUESTION} Его собирали десять лет."
+
+
+async def test_timecode_uses_words_when_embeddings_fail(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(search_service, "get_embeddings", BrokenEmbeddings)
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    segments = [
+        (0.0, 15.0, "Начнём с истории."),
+        (15.0, 30.0, "Самолёты стали дороже."),
+        (30.0, 50.0, "Цены растут."),
+    ]
+    await add_segments(lecture_id, *segments)
+    await add_spans(
+        lecture_id, ChunkKind.transcript, (0.0, 50.0, " ".join(text for _, _, text in segments))
+    )
+
+    response = await search(client, auth_headers, q="самолёт", lecture_id=str(lecture_id))
+
+    assert [hit["start"] for hit in response.json()] == [15.0]
