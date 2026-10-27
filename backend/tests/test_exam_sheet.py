@@ -19,7 +19,7 @@ from app.models import (
     course_lectures,
 )
 from app.pipeline import exam
-from app.pipeline.summarize import load_prompt
+from app.pipeline.summarize import MAP_ATTEMPTS, load_prompt
 
 LECTURES = [
     ("Пределы", "## Предел\n- Предел последовательности"),
@@ -152,19 +152,52 @@ async def test_rebuild_replaces_previous_sheet(user, monkeypatch):
     assert (await saved_sheet(course_id))["tickets"] == ["Новый билет"]
 
 
-async def test_broken_reduce_keeps_previous_sheet(user, monkeypatch):
+async def test_broken_reduce_is_retried_then_merges_digests(user, monkeypatch):
     course_id = await create_course(user)
-    await exam.build_exam_sheet({}, str(course_id))
-    before = await saved_sheet(course_id)
+    reduce_calls = []
 
     class BrokenReduceLLM(ScriptedLLM):
         async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
             if system == load_prompt("exam_reduce"):
+                reduce_calls.append(user)
                 return "не JSON"
             return await super().complete(system, user, json_mode=json_mode)
 
     monkeypatch.setattr(exam, "get_llm", BrokenReduceLLM)
-    with pytest.raises(ValueError, match="не в формате JSON"):
+    assert await exam.build_exam_sheet({}, str(course_id)) == "ready"
+
+    assert len(reduce_calls) == MAP_ATTEMPTS
+    assert "Билет: Пределы" in (await saved_sheet(course_id))["tickets"]
+
+
+async def test_reduce_retry_uses_valid_answer(user, monkeypatch):
+    course_id = await create_course(user)
+    answers = iter(["не JSON", json.dumps({"tickets": ["Со второй попытки"]})])
+
+    class FlakyReduceLLM(ScriptedLLM):
+        async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+            if system == load_prompt("exam_reduce"):
+                return next(answers)
+            return await super().complete(system, user, json_mode=json_mode)
+
+    monkeypatch.setattr(exam, "get_llm", FlakyReduceLLM)
+    await exam.build_exam_sheet({}, str(course_id))
+
+    assert (await saved_sheet(course_id))["tickets"] == ["Со второй попытки"]
+
+
+class FailingLLM:
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        raise RuntimeError("провайдер недоступен")
+
+
+async def test_failed_build_keeps_previous_sheet(user, monkeypatch):
+    course_id = await create_course(user)
+    await exam.build_exam_sheet({}, str(course_id))
+    before = await saved_sheet(course_id)
+
+    monkeypatch.setattr(exam, "get_llm", FailingLLM)
+    with pytest.raises(RuntimeError):
         await exam.build_exam_sheet({}, str(course_id))
 
     assert await saved_sheet(course_id) == before
@@ -375,3 +408,66 @@ async def test_sheet_without_lecture_list_is_outdated(client, user, auth_headers
     response = await client.get(f"/api/v1/courses/{course_id}/exam-sheet", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["outdated"] is True
+
+
+async def test_failed_build_is_visible_until_next_start(
+    client, user, auth_headers, enqueued, in_progress, monkeypatch
+):
+    await subscribe(user)
+    course_id = await create_course(user)
+    url = f"/api/v1/courses/{course_id}/exam-sheet"
+    monkeypatch.setattr(exam, "get_llm", FailingLLM)
+
+    with pytest.raises(RuntimeError):
+        await exam.build_exam_sheet({}, str(course_id))
+    response = await client.get(url, headers=auth_headers)
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "exam_sheet_failed"
+
+    in_progress[0] = True
+    response = await client.get(url, headers=auth_headers)
+    assert response.json()["detail"]["code"] == "exam_sheet_processing"
+
+    in_progress[0] = False
+    assert (await client.post(url, headers=auth_headers)).status_code == 202
+    response = await client.get(url, headers=auth_headers)
+    assert response.json()["detail"]["code"] == "exam_sheet_not_found"
+
+
+async def test_exam_sheet_rate_limit(client, user, auth_headers, enqueued, monkeypatch):
+    await subscribe(user)
+    course_id = await create_course(user)
+    url = f"/api/v1/courses/{course_id}/exam-sheet"
+
+    first = await client.post(url, headers=auth_headers)
+    second = await client.post(url, headers=auth_headers)
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+    assert second.json()["detail"] == (
+        "Памятка уже собиралась недавно, повторите через несколько минут"
+    )
+    assert enqueued == [course_id]
+
+
+async def test_exam_sheet_limit_is_released_when_queue_is_down(
+    client, user, auth_headers, monkeypatch
+):
+    await subscribe(user)
+    course_id = await create_course(user)
+    url = f"/api/v1/courses/{course_id}/exam-sheet"
+
+    async def queue_down(course_id: uuid.UUID) -> None:
+        raise RedisConnectionError("нет связи")
+
+    monkeypatch.setattr(exam_api, "enqueue_exam_sheet", queue_down)
+    assert (await client.post(url, headers=auth_headers)).status_code == 503
+
+    calls = []
+
+    async def fake_enqueue(course_id: uuid.UUID) -> None:
+        calls.append(course_id)
+
+    monkeypatch.setattr(exam_api, "enqueue_exam_sheet", fake_enqueue)
+    assert (await client.post(url, headers=auth_headers)).status_code == 202
+    assert calls == [course_id]

@@ -7,6 +7,7 @@ from arq.connections import RedisSettings
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.core.redis import close_redis
 from app.pipeline.exam import build_exam_sheet
 from app.pipeline.retention import delete_expired_videos, delete_stale_uploads
 from app.pipeline.tasks import (
@@ -47,10 +48,15 @@ async def startup(ctx: dict[str, Any]) -> None:
     await resume_interrupted_lectures(ctx["redis"])
 
 
+async def shutdown(ctx: dict[str, Any]) -> None:
+    await close_redis()
+
+
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
     on_startup = startup
+    on_shutdown = shutdown
     max_jobs = get_settings().worker_max_jobs
     job_timeout = LECTURE_TIMEOUT_SEC + 600
     max_tries = 100
