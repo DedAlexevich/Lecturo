@@ -38,11 +38,11 @@ if ! swapon --show | grep -q .; then
   echo "/swapfile none swap sw 0 0" >> /etc/fstab
 fi
 
-id admin >/dev/null 2>&1 || useradd -m -s /bin/bash admin
-install -d -m 700 -o admin -g admin /home/admin/.ssh
+id admin >/dev/null 2>&1 || useradd -m -s /bin/bash -N admin
+install -d -m 700 -o admin -g "$(id -gn admin)" /home/admin/.ssh
 touch /home/admin/.ssh/authorized_keys
 grep -qxF "$admin_key" /home/admin/.ssh/authorized_keys || echo "$admin_key" >> /home/admin/.ssh/authorized_keys
-chown admin:admin /home/admin/.ssh/authorized_keys
+chown admin: /home/admin/.ssh/authorized_keys
 chmod 600 /home/admin/.ssh/authorized_keys
 
 id deploy >/dev/null 2>&1 || useradd -m -s /bin/bash deploy
