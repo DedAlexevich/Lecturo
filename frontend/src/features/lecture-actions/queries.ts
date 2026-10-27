@@ -42,3 +42,20 @@ export function useDeleteLecture(lectureId: string, onDeleted: () => void) {
     },
   });
 }
+
+export function useRegenerateSummary(lectureId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await api.POST("/api/v1/lectures/{lecture_id}/regenerate-summary", {
+        params: { path: { lecture_id: lectureId } },
+      });
+      if (data === undefined) throw new ApiError(response.status, error);
+      return data;
+    },
+    onSuccess: async (status) => {
+      client.setQueryData(["lecture-status", lectureId], status);
+      await client.invalidateQueries({ queryKey: ["lectures", lectureId], exact: true });
+    },
+  });
+}

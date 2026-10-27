@@ -12,6 +12,7 @@ from app.pipeline.tasks import (
     LECTURE_TIMEOUT_SEC,
     process_lecture,
     process_quiz,
+    process_regeneration,
     resume_interrupted_lectures,
 )
 from app.providers import get_embeddings, get_llm
@@ -41,7 +42,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    functions = [process_lecture, process_quiz, build_exam_sheet]
+    functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
     on_startup = startup
     job_timeout = LECTURE_TIMEOUT_SEC + 600
     keep_result = 0
