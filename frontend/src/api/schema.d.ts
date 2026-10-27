@@ -123,6 +123,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/yandex/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Yandex Login */
+        post: operations["start_yandex_login_api_v1_auth_yandex_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/yandex/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login Yandex */
+        post: operations["login_yandex_api_v1_auth_yandex_callback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/verify-email/request": {
         parameters: {
             query?: never;
@@ -288,6 +322,40 @@ export interface paths {
         put?: never;
         /** Link Vk */
         post: operations["link_vk_api_v1_me_identities_vk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/identities/yandex/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Yandex Link */
+        post: operations["start_yandex_link_api_v1_me_identities_yandex_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/identities/yandex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link Yandex */
+        post: operations["link_yandex_api_v1_me_identities_yandex_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1189,6 +1257,8 @@ export interface components {
         ProvidersOut: {
             /** Vk */
             vk: boolean;
+            /** Yandex */
+            yandex: boolean;
         };
         /** PublicCourseOut */
         PublicCourseOut: {
@@ -1552,6 +1622,35 @@ export interface components {
              */
             resets_at: string;
         };
+        /** YandexCallbackIn */
+        YandexCallbackIn: {
+            /** Code */
+            code: string;
+            /** State */
+            state: string;
+            /** Nonce */
+            nonce: string;
+        };
+        /** YandexStartIn */
+        YandexStartIn: {
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms: boolean;
+            /**
+             * Accept Personal Data
+             * @default false
+             */
+            accept_personal_data: boolean;
+        };
+        /** YandexStartOut */
+        YandexStartOut: {
+            /** Url */
+            url: string;
+            /** Nonce */
+            nonce: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1816,6 +1915,121 @@ export interface operations {
                 content?: never;
             };
             /** @description Вход через VK не настроен */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    start_yandex_login_api_v1_auth_yandex_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YandexStartIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YandexStartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Слишком много попыток входа */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Вход через Яндекс не настроен */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    login_yandex_api_v1_auth_yandex_callback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YandexCallbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenOut"];
+                };
+            };
+            /** @description Сессия входа не найдена или устарела */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Яндекс отклонил вход */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Новому пользователю нужны оба согласия */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Яндекс недоступен */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Вход через Яндекс не настроен */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2198,6 +2412,101 @@ export interface operations {
                 content?: never;
             };
             /** @description Вход через VK не настроен */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    start_yandex_link_api_v1_me_identities_yandex_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YandexStartOut"];
+                };
+            };
+            /** @description Вход через Яндекс не настроен */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    link_yandex_api_v1_me_identities_yandex_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["YandexCallbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Сессия привязки не найдена или устарела */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Яндекс отклонил вход */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Яндекс уже привязан к другому аккаунту */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Яндекс недоступен */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Вход через Яндекс не настроен */
             503: {
                 headers: {
                     [name: string]: unknown;

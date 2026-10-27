@@ -4,6 +4,7 @@ import { LegalPage } from "../pages/legal/LegalPage";
 import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { VkCallbackPage } from "../pages/auth/VkCallbackPage";
+import { YandexCallbackPage } from "../pages/auth/YandexCallbackPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
@@ -19,6 +20,7 @@ export const guestRoutes: RouteObject[] = [
 export const publicRoutes: RouteObject[] = [
   { path: "/legal/:slug", element: <LegalPage /> },
   { path: "/auth/vk", element: <VkCallbackPage /> },
+  { path: "/auth/yandex", element: <YandexCallbackPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/ui", element: <UiPage /> },
