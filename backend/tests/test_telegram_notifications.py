@@ -114,7 +114,9 @@ async def test_unlink_telegram_resets_state(client, cleanup):
             )
         )
         await session.commit()
-    assert await notifications_state(client, user) == "start_required"
+    fresh = {"Authorization": f"Bearer {response.headers['X-Access-Token']}"}
+    me = await client.get("/api/v1/me", headers=fresh)
+    assert me.json()["telegram_notifications"] == "start_required"
 
 
 async def create_event(user: User) -> tuple[uuid.UUID, uuid.UUID]:
