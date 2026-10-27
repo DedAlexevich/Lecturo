@@ -6,8 +6,8 @@ import { extractAudio } from "../../local/audio";
 import { pickedFileOf } from "../../local/pickedFiles";
 import { disposeWhisper, transcribe } from "../../local/whisper";
 import { generateNotes, markWebGPUUnsupported, NoGpuError, supportsWebGPU } from "../../local/llm";
-import { saveLocalLecture, updateLocalNotes } from "../../local/storage";
-import type { LocalLecture } from "../../local/storage";
+import { getLocalMedia, saveLocalLecture, saveLocalMedia, updateLocalNotes } from "../../local/storage";
+import type { LocalLecture, LocalMedia } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
 import { Markdown } from "../legal/markdown";
 import { Chapters } from "../lecture/Chapters";
@@ -18,6 +18,7 @@ import { Progress } from "../../ui/Progress";
 import { Spinner } from "../../ui/Spinner";
 import { ExportButtons } from "./ExportButtons";
 import { LocalLibrary } from "./LocalLibrary";
+import { MissingMedia } from "./MissingMedia";
 import { QueueRelease } from "./QueueRelease";
 import { SaveToAccount } from "./SaveToAccount";
 import "../lecture/lecture.css";
@@ -30,6 +31,7 @@ const models: { id: WhisperModel; label: string; size: string; description: stri
 ];
 
 type Stage = "idle" | "extracting" | "loading" | "transcribing" | "done" | "error";
+type MediaState = "none" | "loading" | "ready" | "missing";
 
 export function LocalPage() {
   const [searchParams] = useSearchParams();
@@ -67,6 +69,10 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   const [notesProgress, setNotesProgress] = useState<{ type: "loading" | "generating" | "saving"; value: number } | null>(null);
   const [notesError, setNotesError] = useState("");
   const [libraryVersion, setLibraryVersion] = useState(0);
+  const [savedMedia, setSavedMedia] = useState<LocalMedia | null>(null);
+  const [mediaState, setMediaState] = useState<MediaState>("none");
+  const [mediaSaveError, setMediaSaveError] = useState(false);
+  const openedId = useRef<string | null>(null);
   const player = useRef<HTMLMediaElement | null>(null);
   const controller = useRef<AbortController | null>(null);
   const savingNotes = useRef(false);
@@ -79,12 +85,33 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     return () => { active = false; };
   }, []);
 
+  const media = file ?? savedMedia?.blob ?? null;
+  const mediaType = file ? file.type : savedMedia?.type ?? "";
+
   useEffect(() => {
-    if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
+    if (!media) {
+      setUrl("");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(media);
     setUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
+  }, [media]);
+
+  function resetMedia(id: string | null) {
+    openedId.current = id;
+    setSavedMedia(null);
+    setMediaState("none");
+    setMediaSaveError(false);
+  }
+
+  async function storeMedia(id: string, source: File) {
+    try {
+      await saveLocalMedia(id, source);
+    } catch {
+      if (openedId.current === id) setMediaSaveError(true);
+    }
+  }
 
   useEffect(() => () => {
     controller.current?.abort();
@@ -99,6 +126,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setSegments([]);
     setSaved(null);
     setSaveError(false);
+    resetMedia(null);
     setStage("extracting");
     setProgress(undefined);
     try {
@@ -121,7 +149,9 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           segments: result,
         });
         setSaved(local);
+        openedId.current = local.id;
         setLibraryVersion((value) => value + 1);
+        await storeMedia(local.id, file);
       } catch {
         setSaveError(true);
       }
@@ -177,6 +207,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   }
 
   function selectFile(next: File | null) {
+    resetMedia(null);
     setFile(next);
     setStage("idle");
     setSegments([]);
@@ -190,7 +221,8 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   function openSaved(lecture: LocalLecture) {
     controller.current?.abort();
     setFile(null);
-    setUrl("");
+    resetMedia(lecture.id);
+    setMediaState("loading");
     setSaved(lecture);
     setSaveError(false);
     setNotesError("");
@@ -198,10 +230,29 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setError("");
     setCurrentTime(0);
     setStage("done");
+    getLocalMedia(lecture.id).then(
+      (found) => {
+        if (openedId.current !== lecture.id) return;
+        setSavedMedia(found);
+        setMediaState(found ? "ready" : "missing");
+      },
+      () => {
+        if (openedId.current === lecture.id) setMediaState("missing");
+      },
+    );
+  }
+
+  function relinkMedia(next: File) {
+    if (!saved) return;
+    setSavedMedia({ name: next.name, type: next.type, blob: next });
+    setMediaState("ready");
+    setMediaSaveError(false);
+    void storeMedia(saved.id, next);
   }
 
   function removed(id: string) {
     if (saved?.id !== id) return;
+    resetMedia(null);
     setSaved(null);
     setSegments([]);
     setStage("idle");
@@ -283,11 +334,13 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
         </section>
         <section className="local-result" aria-labelledby="local-result-title">
           <div className="local-result__head"><h2 id="local-result-title">Расшифровка</h2><p>{file ? file.name : saved ? saved.title : "Выберите файл, чтобы начать"}</p></div>
-          {file && url && (file.type.startsWith("video/") ? (
+          {media && url && (mediaType.startsWith("video/") ? (
             <video ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ) : (
             <audio ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ))}
+          {!file && saved && mediaState === "loading" && <p className="local-media-loading"><Spinner size="sm" label="Загружаем запись" /></p>}
+          {!file && saved && mediaState === "missing" && <MissingMedia disabled={busy} onPick={relinkMedia} />}
           {stage === "done" && segments.length > 0 ? (
             <Transcript segments={segments} chapters={saved?.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
@@ -312,6 +365,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {stage === "done" && file && !released && !lecture.isFetching && !lecture.isError && queued?.status === "waiting_quota" && (
             <QueueRelease lecture={queued} onReleased={() => setReleased(true)} />
           )}
+          {stage === "done" && saved && mediaSaveError && <p className="local-note" role="status">Запись не поместилась в хранилище браузера. После перезагрузки страницы её нужно будет выбрать заново.</p>}
           {stage === "done" && saveError && <p className="local-error" role="alert">Не удалось сохранить результат в браузере. Он доступен только до закрытия страницы.</p>}
         </section>
       </div>

@@ -7,6 +7,8 @@ import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import { VkButton } from "../auth/VkButton";
 import { YandexButton } from "../auth/YandexButton";
+import { messageOf } from "../auth/errors";
+import { useRequestEmailVerification } from "../auth/useAuthRequests";
 import { useVkEnabled } from "../auth/vk";
 import { useYandexEnabled } from "../auth/yandex";
 import { validateEmail, validateNewPassword } from "../auth/validation";
@@ -74,9 +76,12 @@ export function IdentitiesList({ me }: { me: Me }) {
               </div>
               {identity ? (
                 <div className={styles.identityAction}>
-                  <Button variant="secondary" size="sm" disabled={onlyOne} onClick={() => setConfirming(provider)}>
-                    Отвязать
-                  </Button>
+                  <div className={styles.identityButtons}>
+                    {provider === "email" && me.email && !me.email_verified && <VerifyEmail email={me.email} />}
+                    <Button variant="secondary" size="sm" disabled={onlyOne} onClick={() => setConfirming(provider)}>
+                      Отвязать
+                    </Button>
+                  </div>
                   {onlyOne && <span className={styles.muted}>Единственный способ входа</span>}
                 </div>
               ) : provider === "telegram" ? (
@@ -121,6 +126,25 @@ export function IdentitiesList({ me }: { me: Me }) {
 function identityNote(me: Me, provider: Provider, createdAt: string) {
   if (provider === "email" && me.email) return `${me.email}${me.email_verified ? "" : ", не подтверждена"}`;
   return `Привязан ${formatDate(createdAt)}`;
+}
+
+function VerifyEmail({ email }: { email: string }) {
+  const request = useRequestEmailVerification();
+  const toast = useToast();
+
+  const send = () => {
+    if (request.isPending) return;
+    request.mutate(undefined, {
+      onSuccess: () => toast.show(`Письмо отправлено на ${email}`, "success"),
+      onError: (error) => toast.show(messageOf(error), "error"),
+    });
+  };
+
+  return (
+    <Button size="sm" loading={request.isPending} onClick={send}>
+      {request.isSuccess ? "Отправить ещё раз" : "Подтвердить почту"}
+    </Button>
+  );
 }
 
 function LinkTelegram() {

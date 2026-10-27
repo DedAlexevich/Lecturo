@@ -557,6 +557,23 @@ export interface paths {
         patch: operations["update_lecture_api_v1_lectures__lecture_id__patch"];
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audio File */
+        get: operations["audio_file_api_v1_lectures__lecture_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{lecture_id}/video-access": {
         parameters: {
             query?: never;
@@ -619,6 +636,23 @@ export interface paths {
         put?: never;
         /** Retry */
         post: operations["retry_api_v1_lectures__lecture_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lectures/{lecture_id}/regenerate-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Summary */
+        post: operations["regenerate_summary_api_v1_lectures__lecture_id__regenerate_summary_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1073,6 +1107,13 @@ export interface components {
             created_at: string;
             /** Video Url */
             video_url?: string | null;
+            /**
+             * Audio Only
+             * @default false
+             */
+            audio_only: boolean;
+            /** Audio Url */
+            audio_url?: string | null;
             /** Steps */
             steps: components["schemas"]["StepOut"][];
             /** Segments */
@@ -3123,6 +3164,40 @@ export interface operations {
             };
         };
     };
+    audio_file_api_v1_lectures__lecture_id__audio_get: {
+        parameters: {
+            query?: {
+                expires?: string;
+                signature?: string;
+            };
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     video_access_api_v1_lectures__lecture_id__video_access_get: {
         parameters: {
             query?: {
@@ -3235,6 +3310,37 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectureStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_summary_api_v1_lectures__lecture_id__regenerate_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -41,3 +41,5 @@
 .local-release { display: grid; gap: var(--space-3); justify-items: start; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--color-surface-sunken); }
 .local-release p { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); }
 .local-release__description { margin: 0; line-height: var(--leading-normal); }
+.local-media-missing__pick { justify-self: start; margin-top: var(--space-2); }
+.local-media-loading { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
