@@ -183,6 +183,7 @@ def merge_segments(
     results: list[tuple[Part, list[Segment]]], duration: float | None = None
 ) -> list[Segment]:
     last = len(results) - 1
+    seams = [part.cut_start for part, _ in results[1:]]
     collected: list[Segment] = []
     for position, (part, segments) in enumerate(results):
         for segment in segments:
@@ -204,7 +205,8 @@ def merge_segments(
         if merged:
             previous = merged[-1]
             same_text = normalize(segment.text) == normalize(previous.text)
-            if same_text and abs(start - previous.start) <= DUPLICATE_START_GAP:
+            at_seam = any(abs(start - seam) <= OVERLAP_SECONDS for seam in seams)
+            if at_seam and same_text and abs(start - previous.start) <= DUPLICATE_START_GAP:
                 continue
             start = max(start, previous.end)
         if end - start < MIN_SEGMENT_SECONDS:
