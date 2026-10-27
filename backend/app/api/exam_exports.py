@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated
@@ -11,14 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.courses import get_own_course
-from app.api.exports import PRIVATE_HEADERS
+from app.api.exports import PDF_RATE_MESSAGE, PRIVATE_HEADERS
 from app.core.config import get_settings
 from app.core.deps import RequireSubscription, SessionDep, bearer, get_current_user
 from app.core.security import ALGORITHM, EXPORT_TOKEN_TTL
 from app.models import Course, ExamSheet, User
 from app.schemas.lecture import ExportLinkOut
-from app.services.pdf import exam_sheet_html, render_pdf
+from app.services.pdf import exam_sheet_html, render_pdf_limited
 from app.services.quota import has_subscription
+from app.services.rate_limit import enforce_rate_limit
 from app.services.subtitles import content_disposition
 
 router = APIRouter(prefix="/courses/{course_id}/exam-sheet", tags=["exports"])
@@ -103,15 +103,27 @@ async def exam_sheet_export_link(
     return ExportLinkOut(url=f"{path}?{urlencode({'token': token})}", expires_at=expires_at)
 
 
-@router.get("/export.pdf", response_class=Response)
+@router.get(
+    "/export.pdf",
+    response_class=Response,
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много выгрузок PDF"}},
+)
 async def export_exam_sheet_pdf(
     course_id: uuid.UUID,
     user: Annotated[User, Depends(exam_sheet_export_user)],
     session: SessionDep,
 ) -> Response:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:export-pdf:{user.id}",
+        settings.pdf_export_rate_limit,
+        settings.pdf_export_rate_window_seconds,
+        PDF_RATE_MESSAGE,
+    )
     course, sheet = await exportable_exam_sheet(session, user, course_id)
-    html = exam_sheet_html(course, sheet.content, get_settings().public_url.rstrip("/"))
-    content = await asyncio.to_thread(render_pdf, html)
+    html = exam_sheet_html(course, sheet.content, settings.public_url.rstrip("/"))
+    content = await render_pdf_limited(html)
     return Response(
         content,
         media_type="application/pdf",

@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.security import ALGORITHM, create_export_token
 from app.models import Course, ExamSheet, User
+from app.services import pdf
 from app.services.pdf import exam_sheet_html
 from tests.test_exam_sheet import subscribe
 from tests.test_export_pdf import pdf_objects
@@ -77,6 +78,20 @@ async def test_pdf_with_bearer(client, user, auth_headers):
 
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
+
+
+async def test_pdf_rate_limit(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "pdf_export_rate_limit", 1)
+    monkeypatch.setattr(pdf, "render_pdf", lambda html: b"%PDF-1.7")
+    await subscribe(user)
+    course = await create_course(user)
+    url = f"/api/v1/courses/{course.id}/exam-sheet/export.pdf"
+
+    first = await client.get(url, headers=auth_headers)
+    second = await client.get(url, headers=auth_headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
 
 
 async def test_link_requires_subscription(client, user, auth_headers):
