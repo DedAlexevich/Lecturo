@@ -44,14 +44,25 @@
 
 .lecture__title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  justify-content: space-between;
   gap: var(--space-3);
 }
 
 .lecture__title-row .lecture__title {
+  flex: 1 1 18rem;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.lecture__title-row .lecture__title-actions {
+  flex-wrap: wrap;
+}
+
+@media (min-width: 40rem) {
+  .lecture__title-row .lecture__title-actions {
+    margin-left: auto;
+  }
 }
 
 .lecture-row__aside {
