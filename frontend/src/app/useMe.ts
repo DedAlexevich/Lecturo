@@ -5,11 +5,12 @@ import { useToken } from "./session";
 
 export const meQueryKey = ["me"] as const;
 
-export function useMe() {
+export function useMe({ refetchOnWindowFocus = false }: { refetchOnWindowFocus?: boolean } = {}) {
   const token = useToken();
   return useQuery({
     queryKey: meQueryKey,
     enabled: token !== null,
+    refetchOnWindowFocus,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/me");
       if (data === undefined) throw new ApiError(response.status, error);
