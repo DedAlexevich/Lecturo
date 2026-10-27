@@ -43,6 +43,33 @@ async def enforce_rate_limit(redis_url: str, key: str, limit: int, window_second
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов")
 
 
+async def ensure_below_limit(redis_url: str, key: str, limit: int) -> None:
+    redis = Redis.from_url(redis_url)
+    try:
+        count = int(await redis.get(key) or 0)
+    except (OSError, RedisError) as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Сервис временно недоступен, попробуйте позже"
+        ) from error
+    finally:
+        await redis.aclose()
+    if count >= limit:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много запросов")
+
+
+async def count_failure(redis_url: str, key: str, window_seconds: int) -> None:
+    redis = Redis.from_url(redis_url)
+    try:
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.incr(key)
+            pipe.expire(key, window_seconds, nx=True)
+            await pipe.execute()
+    except (OSError, RedisError):
+        logger.warning("Не удалось учесть неудачную попытку %s", key, exc_info=True)
+    finally:
+        await redis.aclose()
+
+
 CHECK_AND_INCREMENT = """
 for i = 1, #KEYS do
     local current = tonumber(redis.call('GET', KEYS[i]) or '0')

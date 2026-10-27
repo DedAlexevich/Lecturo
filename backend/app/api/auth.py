@@ -32,8 +32,10 @@ from app.services.auth_tokens import consume_token, issue_token
 from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
 from app.services.rate_limit import (
+    count_failure,
     enforce_mail_rate_limit,
     enforce_rate_limit,
+    ensure_below_limit,
     reset_rate_limit,
 )
 from app.services.telegram_auth import (
@@ -83,19 +85,19 @@ async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOu
     ip = request.client.host if request.client else "unknown"
     email_digest = hashlib.sha256(normalize_email(body.email).encode()).hexdigest()
     email_key = f"rate:login:email:{email_digest}"
-    await enforce_rate_limit(
-        settings.redis_url,
-        f"rate:login:ip:{ip}",
-        settings.login_ip_rate_limit,
-        settings.login_rate_window_seconds,
-    )
+    ip_key = f"rate:login:ip:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.login_ip_rate_limit)
     await enforce_rate_limit(
         settings.redis_url,
         email_key,
         settings.login_rate_limit,
         settings.login_rate_window_seconds,
     )
-    user = await authenticate(session, body.email, body.password)
+    try:
+        user = await authenticate(session, body.email, body.password)
+    except HTTPException:
+        await count_failure(settings.redis_url, ip_key, settings.login_rate_window_seconds)
+        raise
     await reset_rate_limit(settings.redis_url, email_key)
     return TokenOut(access_token=create_access_token(user.id))
 
