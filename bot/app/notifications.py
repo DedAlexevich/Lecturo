@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import asyncpg
 from aiogram import Bot
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -31,16 +31,30 @@ SELECT u.id, u.telegram_chat_id, u.created_at,
 FROM users u WHERE u.telegram_chat_id IS NOT NULL
 """
 
+LEGAL_NOTICE_ATTEMPTS = 5
+
 PENDING_LEGAL_NOTICES = """
 SELECT n.id, u.telegram_chat_id, n.text, n.link FROM legal_notices n
 JOIN users u ON u.id = n.user_id
 WHERE n.channel = 'telegram' AND n.sent_at IS NULL AND u.telegram_chat_id IS NOT NULL
-ORDER BY n.created_at LIMIT 100
+  AND n.attempts < $1
+  AND (n.attempted_at IS NULL OR n.attempted_at < now() - interval '30 minutes')
+ORDER BY n.attempts, n.created_at, n.id LIMIT 100
 """
 
-MARK_LEGAL_NOTICE_SENT = "UPDATE legal_notices SET sent_at = now() WHERE id = $1"
+MARK_LEGAL_NOTICE_SENT = (
+    "UPDATE legal_notices SET sent_at = now(), attempted_at = now() WHERE id = $1"
+)
+
+MARK_LEGAL_NOTICE_FAILED = (
+    "UPDATE legal_notices SET attempts = attempts + 1, attempted_at = now() WHERE id = $1"
+)
+
+DROP_LEGAL_NOTICE = "UPDATE legal_notices SET attempts = $2, attempted_at = now() WHERE id = $1"
 
 LEGAL_NOTICE_PAUSE_SECONDS = 0.05
+
+LEGAL_NOTICE_INTERVAL_SECONDS = 60
 
 WEEKLY_USAGE = """
 SELECT coalesce(sum(seconds), 0) FROM usage_entries
@@ -140,8 +154,8 @@ async def delivery_loop(redis: Redis, bot: Bot, public_url: str):
         await asyncio.sleep(5)
 
 
-async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot):
-    for row in await pool.fetch(PENDING_LEGAL_NOTICES):
+async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> int:
+    for row in await pool.fetch(PENDING_LEGAL_NOTICES, LEGAL_NOTICE_ATTEMPTS):
         try:
             delivered = await send_once(
                 redis,
@@ -151,23 +165,29 @@ async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot):
                 row["text"],
                 open_app_markup(row["link"]),
             )
-        except TelegramForbiddenError:
-            delivered = True
+        except TelegramRetryAfter as error:
+            return error.retry_after
+        except (TelegramForbiddenError, TelegramBadRequest):
+            await pool.execute(DROP_LEGAL_NOTICE, row["id"], LEGAL_NOTICE_ATTEMPTS)
+            continue
         except Exception:
             logger.exception("Не удалось отправить уведомление о новой редакции документа")
+            await pool.execute(MARK_LEGAL_NOTICE_FAILED, row["id"])
             continue
         if delivered:
             await pool.execute(MARK_LEGAL_NOTICE_SENT, row["id"])
         await asyncio.sleep(LEGAL_NOTICE_PAUSE_SECONDS)
+    return 0
 
 
 async def legal_notices_loop(pool: asyncpg.Pool, redis: Redis, bot: Bot):
     while True:
+        pause = 0
         try:
-            await deliver_legal_notices(pool, redis, bot)
+            pause = await deliver_legal_notices(pool, redis, bot)
         except (asyncpg.PostgresError, OSError, RedisError):
             logger.exception("Не удалось получить уведомления о новых редакциях документов")
-        await asyncio.sleep(60)
+        await asyncio.sleep(max(pause, LEGAL_NOTICE_INTERVAL_SECONDS))
 
 
 async def check_quotas(
