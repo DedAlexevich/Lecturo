@@ -10,8 +10,14 @@ from pathlib import Path
 
 import pytest
 from arq import create_pool
-from arq.connections import RedisSettings
-from arq.constants import abort_jobs_ss, default_queue_name, job_key_prefix
+from arq.connections import ArqRedis, RedisSettings
+from arq.constants import (
+    abort_jobs_ss,
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+)
+from arq.jobs import Job, JobStatus
 from arq.worker import Worker
 from arq.worker import func as arq_func
 from redis.asyncio import Redis
@@ -25,6 +31,7 @@ from app.models import (
     Chapter,
     Lecture,
     LectureStatus,
+    ProcessingStep,
     SearchChunk,
     SourceType,
     StepName,
@@ -835,3 +842,90 @@ async def test_cancelled_job_is_not_started():
         await worker.close()
     assert calls == []
     assert not await tasks.cancel_lecture_job(lecture_id)
+
+
+async def interrupted_lecture(user, source: Path, step: StepName) -> Lecture:
+    lecture = await create_lecture(user, source)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.status = LectureStatus.processing
+        session.add(
+            ProcessingStep(
+                lecture_id=lecture.id,
+                step=step,
+                status=StepStatus.running,
+                attempts=1,
+                progress=0.3,
+            )
+        )
+        await session.commit()
+    return lecture
+
+
+@pytest.fixture
+async def arq_redis() -> AsyncIterator[ArqRedis]:
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    yield redis
+    job_ids = await redis.zrange(default_queue_name, 0, -1)
+    for job_id in job_ids:
+        await redis.delete(
+            job_key_prefix + job_id.decode(), in_progress_key_prefix + job_id.decode()
+        )
+    await redis.delete(default_queue_name)
+    await redis.aclose()
+
+
+async def test_orphaned_job_is_released_on_startup(user, sample_video, arq_redis):
+    lecture = await interrupted_lecture(user, sample_video, StepName.audio)
+    job_id = tasks.lecture_job_id(lecture.id)
+    await arq_redis.enqueue_job("process_lecture", str(lecture.id), _job_id=job_id)
+    await arq_redis.set(in_progress_key_prefix + job_id, b"1")
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 0
+
+    assert await Job(job_id, arq_redis).status() == JobStatus.queued
+    assert await arq_redis.zcard(default_queue_name) == 1
+    resumed = await load(lecture.id)
+    step = steps_by_name(resumed)[StepName.audio]
+    assert resumed.status == LectureStatus.queued
+    assert (step.status, step.progress) == (StepStatus.pending, 0.0)
+
+
+async def test_lost_job_is_enqueued_on_startup(user, sample_video, arq_redis):
+    lecture = await interrupted_lecture(user, sample_video, StepName.audio)
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 1
+
+    job_id = tasks.lecture_job_id(lecture.id)
+    assert await Job(job_id, arq_redis).status() == JobStatus.queued
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    steps = steps_by_name(await load(lecture.id))
+    assert steps[StepName.audio].attempts == 2
+    assert all(s.status == StepStatus.done for s in steps.values())
+
+
+async def test_ready_lecture_with_interrupted_video_is_resumed(user, sample_video, arq_redis):
+    lecture = await interrupted_lecture(user, sample_video, StepName.video)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.status = LectureStatus.ready
+        await session.commit()
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 1
+
+    resumed = await load(lecture.id)
+    assert resumed.status == LectureStatus.ready
+    assert steps_by_name(resumed)[StepName.video].status == StepStatus.pending
+
+
+async def test_finished_and_waiting_lectures_are_not_resumed(user, sample_audio, arq_redis):
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    waiting = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, waiting.id)
+        stored.status = LectureStatus.waiting_quota
+        await session.commit()
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 0
+    assert await arq_redis.zcard(default_queue_name) == 0
