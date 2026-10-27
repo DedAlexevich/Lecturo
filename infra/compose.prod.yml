@@ -3,6 +3,9 @@ services:
     ports: !reset []
     restart: always
 
+  db-backup:
+    profiles: ["local"]
+
   redis:
     ports: !reset []
     restart: always

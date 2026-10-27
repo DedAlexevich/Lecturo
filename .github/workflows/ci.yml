@@ -124,7 +124,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: cp .env.example .env
-      - run: docker compose up -d --build --wait --wait-timeout 180 db redis api worker bot frontend tusd caddy
+      - run: docker compose up -d --build --wait --wait-timeout 180 db redis api worker bot frontend tusd caddy db-backup
       - run: curl -fsS http://localhost/api/v1/health
       - run: curl -fsS http://localhost/ | grep -q Lecturo
       - name: Hooks endpoint closed from outside
@@ -135,6 +135,12 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Tus-Resumable: 1.0.0' -H 'Upload-Length: 10' http://localhost/files/)" = 401
       - run: test "$(docker compose ps worker --format '{{.State}}')" = running
       - run: test "$(docker compose ps bot --format '{{.State}}')" = running
+      - name: Scheduled backup exists and local scripts work
+        run: |
+          timeout 60 sh -c 'until ls data/backups/lecturo-*.dump; do sleep 1; done'
+          scripts/backup-db.sh
+          echo yes | scripts/restore-db.sh "$(ls data/backups/lecturo-*.dump | tail -n 1)"
+          curl -fsS http://localhost/api/v1/health
       - name: Backup, check and restore database
         run: |
           infra/backup/backup.sh

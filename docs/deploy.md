@@ -75,6 +75,8 @@ infra/status.sh
 
 ## Бэкапы базы
 
+На сервере бэкапы делает таймер systemd. Контейнер `db-backup` из `docker-compose.yml` нужен для локального стенда ([backups.md](backups.md)) и здесь не запускается: в `infra/compose.prod.yml` он вынесен в профиль `local`.
+
 Раз в сутки (около 03:30 UTC) таймер systemd `lecturo-backup.timer` от пользователя `deploy` запускает `infra/backup/backup.sh`, а затем `infra/backup/check.sh`.
 
 - `backup.sh` делает `pg_dump` в формате custom из контейнера `db` и кладёт файл `lecturo-<дата>-<время>.dump` в папку `BACKUP_DIR` на хосте (по умолчанию `/opt/lecturo/backups`), то есть вне контейнера и вне `data/postgres`. Файл сначала пишется во временный, проверяется через `pg_restore --list` и только потом переименовывается. Хранятся последние `BACKUP_KEEP` копий (по умолчанию 7), старые удаляются. Папка и файлы доступны только `deploy` (права `700` и `600`).
