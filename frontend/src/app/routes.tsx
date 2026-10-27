@@ -8,7 +8,6 @@ import { YandexCallbackPage } from "../pages/auth/YandexCallbackPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
-import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
 import { LocalPage } from "../pages/local/LocalPage";
 import { CoursePage } from "../pages/course/CoursePage";
@@ -28,7 +27,7 @@ export const publicRoutes: RouteObject[] = [
   { path: "/auth/yandex", element: <YandexCallbackPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
-  { path: "/ui", element: <UiPage /> },
+  ...(import.meta.env.DEV ? [{ path: "/ui", lazy: () => import("../ui/UiPage").then(({ UiPage }) => ({ Component: UiPage })) }] : []),
   { path: "/s/:token", element: <PublicSharePage /> },
   { path: "/s/:token/:lectureId", element: <PublicSharePage /> },
 ];
