@@ -38,8 +38,8 @@ async def index_sections() -> int:
         for lecture_id in lecture_ids:
             chunks = await load_section_chunks(session, lecture_id)
             session.add_all(to_search_chunk(lecture_id, chunk) for chunk in chunks)
+            await session.commit()
             total += len(chunks)
-        await session.commit()
     return total
 
 
