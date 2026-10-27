@@ -63,6 +63,13 @@ cp .env.example .env
 | `STT_RETRY_BASE_SECONDS` | Пауза перед первым повтором, секунды | нет | `2` | `backend/app/providers/retry.py` |
 | `STT_RETRY_FACTOR` | Во сколько раз растёт пауза после каждой неудачи. При значениях по умолчанию паузы около 2, 6, 18 и 54 секунд, к каждой добавляется случайный разброс до 20% | нет | `3` | `backend/app/providers/retry.py` |
 | `STT_RETRY_MAX_SECONDS` | Верхняя граница одной паузы, секунды | нет | `60` | `backend/app/providers/retry.py` |
+| `STT_POLL_SECONDS` | Как часто опрашивать операцию распознавания SpeechKit, секунды | нет | `3` | `backend/app/providers/yandex.py` |
+| `STT_EXPECTED_RATIO` | Ожидаемая длительность распознавания как доля длительности записи. По ней считаются прогресс шага «Распознавание речи» и оценка оставшегося времени. Не больше 95% до ответа провайдера | нет | `0.3` | `backend/app/providers/yandex.py, backend/app/pipeline/estimate.py` |
+| `STT_EXPECTED_MIN_SECONDS` | Нижняя граница ожидаемой длительности распознавания, секунды | нет | `45` | `backend/app/pipeline/estimate.py` |
+| `ETA_DOWNLOAD_RATIO` | Ожидаемая длительность скачивания как доля длительности записи, для оценки оставшегося времени | нет | `0.1` | `backend/app/pipeline/estimate.py` |
+| `ETA_AUDIO_RATIO` | То же для извлечения звука | нет | `0.01` | `backend/app/pipeline/estimate.py` |
+| `ETA_SUMMARIZE_RATIO` | То же для шага «Главы и конспект» | нет | `0.05` | `backend/app/pipeline/estimate.py` |
+| `ETA_EMBED_RATIO` | То же для подготовки к поиску | нет | `0.01` | `backend/app/pipeline/estimate.py` |
 
 ### Yandex Cloud: SpeechKit и Object Storage
 

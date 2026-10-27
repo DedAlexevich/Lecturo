@@ -188,7 +188,7 @@ async def return_to_queue(lecture_ids: list[uuid.UUID]) -> None:
                 ProcessingStep.step.in_(LECTURE_STEPS),
                 ProcessingStep.status == StepStatus.running,
             )
-            .values(status=StepStatus.pending, progress=0.0)
+            .values(status=StepStatus.pending, progress=0.0, stage=None)
         )
         await session.execute(
             update(Lecture)

@@ -97,6 +97,7 @@ class ProcessingStep(UUIDPk, CreatedAt, Base):
         Enum(StepStatus, name="step_status"), default=StepStatus.pending
     )
     progress: Mapped[float] = mapped_column(Float, default=0.0)
+    stage: Mapped[str | None] = mapped_column(String(32))
     error: Mapped[str | None] = mapped_column(Text)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

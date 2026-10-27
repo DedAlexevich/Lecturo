@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     stt_retry_base_seconds: float = 2.0
     stt_retry_factor: float = 3.0
     stt_retry_max_seconds: float = 60.0
+    stt_poll_seconds: float = 3.0
+    stt_expected_ratio: float = 0.3
+    stt_expected_min_seconds: float = 45.0
+    eta_download_ratio: float = 0.1
+    eta_audio_ratio: float = 0.01
+    eta_summarize_ratio: float = 0.05
+    eta_embed_ratio: float = 0.01
 
     llm_provider: str = "stub"
     llm_base_url: str = "https://api.deepseek.com"

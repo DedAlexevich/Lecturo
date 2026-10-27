@@ -14,7 +14,7 @@ import httpx
 
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
-from app.providers.base import Segment
+from app.providers.base import RecognitionProgress, Segment
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
     OpenAICompatibleError,
@@ -30,6 +30,8 @@ QUERY_MODEL = "text-search-query"
 EMBEDDINGS_CONCURRENCY = 4
 STORAGE_HOST = "storage.yandexcloud.net"
 STORAGE_REGION = "ru-central1"
+UPLOAD_SHARE = 0.05
+RECOGNIZE_LIMIT = 0.95
 
 AUDIO_ENCODINGS = {".opus": "OGG_OPUS", ".ogg": "OGG_OPUS", ".oga": "OGG_OPUS", ".mp3": "MP3"}
 LANGUAGE_CODES = {
@@ -83,7 +85,7 @@ class YandexSpeechToText:
         self,
         settings: Settings,
         *,
-        poll_interval: float = 5.0,
+        poll_interval: float | None = None,
         timeout: float = 6 * 3600,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
@@ -101,12 +103,21 @@ class YandexSpeechToText:
         self.bucket = settings.yandex_storage_bucket
         self.access_key = settings.yandex_storage_access_key
         self.secret_key = settings.yandex_storage_secret_key
-        self.poll_interval = poll_interval
+        self.poll_interval = settings.stt_poll_seconds if poll_interval is None else poll_interval
+        self.expected_ratio = settings.stt_expected_ratio
+        self.expected_min_seconds = settings.stt_expected_min_seconds
         self.timeout = timeout
         self.transport = transport
         self.retry = RetryPolicy.from_settings(settings)
 
-    async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]:
+    async def transcribe(
+        self,
+        audio_path: Path,
+        language: str = "ru",
+        *,
+        duration: float | None = None,
+        on_progress: RecognitionProgress | None = None,
+    ) -> list[Segment]:
         suffix = audio_path.suffix.lower()
         encoding = AUDIO_ENCODINGS.get(suffix)
         if encoding is None:
@@ -116,13 +127,27 @@ class YandexSpeechToText:
             raise ValueError(f"Язык не поддерживается SpeechKit: {language}")
         key = f"stt/{uuid.uuid4().hex}{suffix}"
         async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
+            await self._notify(on_progress, "upload", 0.0)
             await self._upload(client, audio_path, key)
             try:
+                await self._notify(on_progress, "recognize", UPLOAD_SHARE)
                 operation_id = await self._start(client, key, encoding, language_code)
-                response = await self._wait(client, operation_id)
+                response = await self._wait(client, operation_id, duration, on_progress)
             finally:
                 await self._delete(client, key)
+        await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
         return parse_recognition(response)
+
+    async def _notify(
+        self, on_progress: RecognitionProgress | None, stage: str, fraction: float
+    ) -> None:
+        if on_progress is not None:
+            await on_progress(stage, fraction)
+
+    def expected_seconds(self, duration: float | None) -> float | None:
+        if not duration or duration <= 0:
+            return None
+        return max(duration * self.expected_ratio, self.expected_min_seconds)
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, key: str) -> None:
         content = await asyncio.to_thread(audio_path.read_bytes)
@@ -167,8 +192,16 @@ class YandexSpeechToText:
         self._raise_for_status(response, "запуск распознавания")
         return response.json()["id"]
 
-    async def _wait(self, client: httpx.AsyncClient, operation_id: str) -> dict[str, Any]:
-        deadline = time.monotonic() + self.timeout
+    async def _wait(
+        self,
+        client: httpx.AsyncClient,
+        operation_id: str,
+        duration: float | None = None,
+        on_progress: RecognitionProgress | None = None,
+    ) -> dict[str, Any]:
+        started = time.monotonic()
+        deadline = started + self.timeout
+        expected = self.expected_seconds(duration)
         url = OPERATION_URL.format(operation_id=operation_id)
         while True:
             operation = await self._fetch_operation(client, url)
@@ -181,6 +214,13 @@ class YandexSpeechToText:
                 return operation.get("response", {})
             if time.monotonic() > deadline:
                 raise YandexSpeechKitError(f"Распознавание не завершилось: {operation_id}")
+            if expected is not None:
+                share = min((time.monotonic() - started) / expected, 1.0)
+                await self._notify(
+                    on_progress,
+                    "recognize",
+                    UPLOAD_SHARE + (RECOGNIZE_LIMIT - UPLOAD_SHARE) * share,
+                )
             await asyncio.sleep(self.poll_interval)
 
     async def _fetch_operation(self, client: httpx.AsyncClient, url: str) -> dict[str, Any]:
