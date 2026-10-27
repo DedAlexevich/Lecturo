@@ -142,6 +142,7 @@ Gmail:
 | `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
 | `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
 | `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
+| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/health-alert.sh` |
 
 Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
