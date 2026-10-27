@@ -6,6 +6,7 @@ import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { ApiError } from "../../app/queryClient";
 import { detailOf } from "../upload/errors";
+import { CoursesDialog } from "./CoursesDialog";
 import { placeMenu } from "./placement";
 import { useDeleteLecture, useRegenerateSummary, useRenameLecture } from "./queries";
 import "./lecture-actions.css";
@@ -30,7 +31,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
   const panelId = useId();
   const formId = useId();
   const [expanded, setExpanded] = useState(false);
-  const [action, setAction] = useState<"rename" | "delete" | "regenerate" | null>(null);
+  const [action, setAction] = useState<"rename" | "courses" | "delete" | "regenerate" | null>(null);
   const [title, setTitle] = useState(lecture.title);
   const [touched, setTouched] = useState(false);
   const rename = useRenameLecture(lecture.id);
@@ -69,7 +70,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
     return () => window.removeEventListener("resize", place);
   }, [expanded, lecture.status]);
 
-  function open(next: "rename" | "delete" | "regenerate") {
+  function open(next: "rename" | "courses" | "delete" | "regenerate") {
     setExpanded(false);
     trigger.current?.focus();
     setTitle(lecture.title);
@@ -80,20 +81,20 @@ export function LectureActions({ lecture }: LectureActionsProps) {
     setAction(next);
   }
 
-  function finishRename() {
+  function finishAction() {
     setAction(null);
     requestAnimationFrame(() => trigger.current?.focus());
   }
 
   function close() {
-    if (!pending) finishRename();
+    if (!pending) finishAction();
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
     if (pending || title.trim() === "") return;
-    rename.mutate(title.trim(), { onSuccess: finishRename });
+    rename.mutate(title.trim(), { onSuccess: finishAction });
   }
 
   return (
@@ -130,6 +131,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
       {expanded && (
         <div id={panelId} ref={panel} className="lecture-actions__panel">
           <Button variant="ghost" onClick={() => open("rename")}>Переименовать</Button>
+          <Button variant="ghost" onClick={() => open("courses")}>В курс…</Button>
           {lecture.status === "ready" && (
             <Button variant="ghost" onClick={() => open("regenerate")}>Пересоздать главы и конспект</Button>
           )}
@@ -173,6 +175,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
           </form>
         </Dialog>
       )}
+      {action === "courses" && <CoursesDialog lecture={lecture} onClose={finishAction} />}
       {action === "regenerate" && (
         <Dialog
           open
@@ -185,7 +188,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
               <Button
                 loading={regenerate.isPending}
                 onClick={() => {
-                  if (!pending) regenerate.mutate(undefined, { onSuccess: finishRename });
+                  if (!pending) regenerate.mutate(undefined, { onSuccess: finishAction });
                 }}
               >
                 Пересоздать

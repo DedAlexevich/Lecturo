@@ -136,3 +136,28 @@ async def test_foreign_course_and_lecture_hidden(client, user, auth_headers):
         async with SessionLocal() as session:
             await session.delete(await session.get(User, stranger.id))
             await session.commit()
+
+
+async def test_list_courses_of_lecture(client, user, auth_headers):
+    first_lecture, second_lecture = await create_lectures(user.id, "Пределы", "Ряды")
+    first = await create_course(client, auth_headers, "Матанализ")
+    second = await create_course(client, auth_headers, "Подготовка к экзамену")
+    await create_course(client, auth_headers, "Физика")
+    for course_id in (first["id"], second["id"]):
+        await client.post(
+            f"/api/v1/courses/{course_id}/lectures",
+            json={"lecture_id": str(first_lecture)},
+            headers=auth_headers,
+        )
+
+    listed = await client.get(
+        "/api/v1/courses", params={"lecture_id": str(first_lecture)}, headers=auth_headers
+    )
+    assert listed.status_code == 200
+    assert {item["id"] for item in listed.json()} == {first["id"], second["id"]}
+    assert all(item["lecture_count"] == 1 for item in listed.json())
+
+    empty = await client.get(
+        "/api/v1/courses", params={"lecture_id": str(second_lecture)}, headers=auth_headers
+    )
+    assert empty.json() == []

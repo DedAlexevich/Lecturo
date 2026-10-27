@@ -35,12 +35,15 @@ async def course_out(session: AsyncSession, course: Course) -> CourseOut:
 
 
 @router.get("")
-async def list_courses(user: CurrentUser, session: SessionDep) -> list[CourseOut]:
-    rows = await session.execute(
-        select(Course, lecture_count)
-        .where(Course.owner_id == user.id)
-        .order_by(Course.created_at.desc())
-    )
+async def list_courses(
+    user: CurrentUser, session: SessionDep, lecture_id: uuid.UUID | None = None
+) -> list[CourseOut]:
+    query = select(Course, lecture_count).where(Course.owner_id == user.id)
+    if lecture_id is not None:
+        query = query.join(course_lectures, course_lectures.c.course_id == Course.id).where(
+            course_lectures.c.lecture_id == lecture_id
+        )
+    rows = await session.execute(query.order_by(Course.created_at.desc()))
     return [
         CourseOut.model_validate(course).model_copy(update={"lecture_count": count})
         for course, count in rows
