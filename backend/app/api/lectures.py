@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, RequireSubscription, SessionDep
 from app.models import (
     Lecture,
@@ -26,10 +27,13 @@ from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
 from app.pipeline.tasks import (
+    REGENERATION_STEPS,
     cancel_lecture_job,
     cancel_quiz_job,
+    cancel_regeneration_job,
     enqueue_lecture,
     enqueue_quiz,
+    enqueue_regeneration,
     quiz_job_active,
 )
 from app.pipeline.video_access import is_valid_signature, signed_audio_url, signed_video_url
@@ -44,6 +48,7 @@ from app.schemas.lecture import (
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 from app.services.consents import require_ai_transfer_consent
+from app.services.rate_limit import is_rate_limited, reset_rate_limit
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -219,6 +224,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     try:
         await cancel_lecture_job(lecture_id)
         await cancel_quiz_job(lecture_id)
+        await cancel_regeneration_job(lecture_id)
     except (OSError, RedisError):
         pass
     await asyncio.to_thread(remove_files, files)
@@ -286,6 +292,79 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         .execution_options(populate_existing=True)
     )
     return LectureStatusOut.model_validate(lecture)
+
+
+@router.post("/{lecture_id}/regenerate-summary", status_code=status.HTTP_202_ACCEPTED)
+async def regenerate_summary(
+    lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> LectureStatusOut:
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .with_for_update()
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    if lecture.status != LectureStatus.ready:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Пересоздать главы и конспект можно у обработанной лекции, пока она не обрабатывается",
+        )
+    if lecture.processed_locally or lecture.source_type == SourceType.local:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Лекция обработана на устройстве, пересоздать главы и конспект на сервере нельзя",
+        )
+    require_ai_transfer_consent(user)
+    settings = get_settings()
+    limit_key = f"rate:regenerate-summary:{lecture_id}"
+    try:
+        limited = await is_rate_limited(
+            settings.redis_url,
+            limit_key,
+            1,
+            settings.regenerate_summary_rate_window_seconds,
+        )
+    except (OSError, RedisError) as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
+    if limited:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Главы и конспект уже пересоздавались недавно, повторите через несколько минут",
+        )
+    for name in REGENERATION_STEPS:
+        step = await get_step(session, lecture.id, name)
+        step.status = StepStatus.pending
+        step.progress = 0.0
+        step.error = None
+    lecture.status = LectureStatus.processing
+    await session.commit()
+    await publish_status(lecture.id, user.id, LectureStatus.processing)
+
+    try:
+        await enqueue_regeneration(lecture.id)
+    except (OSError, RedisError) as error:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+            )
+            .values(status=StepStatus.done, progress=1.0)
+        )
+        lecture.status = LectureStatus.ready
+        await session.commit()
+        await reset_rate_limit(settings.redis_url, limit_key)
+        await publish_status(lecture.id, user.id, LectureStatus.ready, QUEUE_UNAVAILABLE)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
+
+    refreshed = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id)
+        .options(selectinload(Lecture.steps))
+        .execution_options(populate_existing=True)
+    )
+    return LectureStatusOut.model_validate(refreshed)
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)

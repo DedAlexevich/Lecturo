@@ -22,6 +22,16 @@ async def is_rate_limited(redis_url: str, key: str, limit: int, window_seconds: 
     return count > limit
 
 
+async def reset_rate_limit(redis_url: str, key: str) -> None:
+    redis = Redis.from_url(redis_url)
+    try:
+        await redis.delete(key)
+    except (OSError, RedisError):
+        logger.warning("Не удалось сбросить лимит %s", key, exc_info=True)
+    finally:
+        await redis.aclose()
+
+
 async def enforce_rate_limit(redis_url: str, key: str, limit: int, window_seconds: int) -> None:
     try:
         limited = await is_rate_limited(redis_url, key, limit, window_seconds)
