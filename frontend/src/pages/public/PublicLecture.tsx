@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { Button } from "../../ui/Button";
 import { Tabs } from "../../ui/Tabs";
@@ -26,10 +27,11 @@ const emptyNotes: Record<PanelKind, string> = {
 type PublicLectureProps = {
   token: string;
   lecture: Lecture;
+  courseLink?: string;
   refreshVideo: () => Promise<string | null>;
 };
 
-export function PublicLecture({ token, lecture, refreshVideo }: PublicLectureProps) {
+export function PublicLecture({ token, lecture, courseLink, refreshVideo }: PublicLectureProps) {
   const [tab, setTab] = useState<PanelKind>("summary");
   const [complaining, setComplaining] = useState(false);
   const { currentTime, playFrom, bind } = usePlayer();
@@ -45,6 +47,11 @@ export function PublicLecture({ token, lecture, refreshVideo }: PublicLecturePro
   return (
     <article className="lecture">
       <header className="lecture__header">
+        {courseLink && (
+          <Link to={courseLink} className="lecture__back">
+            Все лекции курса
+          </Link>
+        )}
         <div className="lecture__title-row">
           <h1 className="lecture__title">{lecture.title}</h1>
           <Button variant="ghost" size="sm" className="public__report" onClick={() => setComplaining(true)}>
@@ -139,7 +146,7 @@ export function PublicLecture({ token, lecture, refreshVideo }: PublicLecturePro
           />
         </section>
       </div>
-      {complaining && <ComplaintDialog token={token} title={lecture.title} onClose={() => setComplaining(false)} />}
+      {complaining && <ComplaintDialog token={token} lectureId={lecture.id} title={lecture.title} onClose={() => setComplaining(false)} />}
     </article>
   );
 }
