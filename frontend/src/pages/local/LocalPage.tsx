@@ -163,8 +163,9 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   }
 
   const queued = lecture.data;
-  const fromLink = queued?.source_type === "link";
-  const lostFile = queued?.source_type === "upload" && queued.status === "waiting_quota" && queuedFile === null;
+  const waitingLecture = queued?.status === "waiting_quota" ? queued : undefined;
+  const fromLink = waitingLecture?.source_type === "link";
+  const lostFile = waitingLecture?.source_type === "upload" && queuedFile === null && file === null;
   const selectedModel = models.find((item) => item.id === model)!;
   const stageLabel = stage === "extracting" ? "Извлечение звука" : stage === "loading" ? "Загрузка модели" : "Распознавание речи";
 
@@ -176,19 +177,19 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
       </header>
       <div className="local-page__layout">
         <section className="local-setup" aria-labelledby="local-setup-title">
-          <h2 id="local-setup-title">{queued || usingQueued ? "Лекция из очереди" : "Новая запись"}</h2>
+          <h2 id="local-setup-title">{waitingLecture || usingQueued ? "Лекция из очереди" : "Новая запись"}</h2>
           {lectureId && !usingQueued && lecture.isLoading && (
             <p className="local-source__status"><Spinner size="sm" label="Загружаем лекцию" />Загружаем лекцию</p>
           )}
           {fromLink && (
             <div className="local-source local-source--notice" role="status">
-              <p className="local-source__title">«{queued.title}» добавлена по ссылке</p>
+              <p className="local-source__title">«{waitingLecture.title}» добавлена по ссылке</p>
               <p>На устройстве обрабатывается только файл с записью. Если он у вас есть, выберите его ниже. Иначе лекция дождётся лимита и обработается на сервере.</p>
             </div>
           )}
           {lostFile && !usingQueued && (
             <div className="local-source local-source--notice" role="status">
-              <p className="local-source__title">«{queued.title}»</p>
+              <p className="local-source__title">«{waitingLecture.title}»</p>
               <p>Выберите файл этой лекции: в этой вкладке браузера его уже нет.</p>
             </div>
           )}
