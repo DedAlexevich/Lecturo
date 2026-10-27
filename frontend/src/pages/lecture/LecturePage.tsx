@@ -19,7 +19,7 @@ import { usePlayer, videoIdentity } from "./players/player";
 import { Processing } from "./Processing";
 import { formatDuration, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
-import { fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
+import { awaitsVideo, fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
 import "./lecture.css";
 
 type Lecture = components["schemas"]["LectureDetail"];
@@ -50,6 +50,9 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   if (isPending(lecture.status) && !external) {
     title = "Видео ещё обрабатывается";
     description = "Плеер появится здесь, когда обработка закончится.";
+  } else if (awaitsVideo(lecture)) {
+    title = "Видео ещё сжимается";
+    description = "Расшифровка и конспект уже готовы, плеер появится здесь чуть позже.";
   } else if (external) {
     title = "Видео на сайте источника";
     description = "Запись хранится на площадке, откуда её добавили.";
