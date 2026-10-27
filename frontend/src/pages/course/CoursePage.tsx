@@ -103,7 +103,7 @@ export function CoursePage() {
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
           </div>
           <div className="course__actions">
-            {!isEmpty && (
+            {items && items.length > 0 && (
               <Link to={`/courses/${data.id}/exam-sheet`} className="course__text-action">
                 Памятка к экзамену
               </Link>

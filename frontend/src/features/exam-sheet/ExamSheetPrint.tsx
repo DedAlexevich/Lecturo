@@ -12,8 +12,8 @@ export function ExamSheetPrint({ courseTitle, sheet, definitions }: ExamSheetPri
   return createPortal(
     <article className="exam-print">
       <header className="exam-print__head">
-        <h1>{courseTitle}</h1>
-        <p>Памятка к экзамену</p>
+        <h1>{courseTitle || "Памятка к экзамену"}</h1>
+        {courseTitle && <p>Памятка к экзамену</p>}
       </header>
       <section className="exam-print__section">
         <h2>Билеты</h2>

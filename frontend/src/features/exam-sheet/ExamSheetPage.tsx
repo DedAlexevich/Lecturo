@@ -10,7 +10,7 @@ import { useAiTransferConsent } from "../consent/useAiTransferConsent";
 import { Cheatsheet, DefinitionList, TicketList } from "./ExamSheetContent";
 import { ExamSheetPrint } from "./ExamSheetPrint";
 import { definitionsCount, ticketsCount } from "./format";
-import { definitionsOf, errorCode, errorMessage, useCreateExamSheet, useExamSheet, type ExamSheet } from "./queries";
+import { definitionsOf, errorCode, errorMessage, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
 import "./exam-sheet.css";
 
 const sheetStates = ["subscription_required", "exam_sheet_processing", "exam_sheet_not_found"];
@@ -38,7 +38,7 @@ function SheetSkeleton() {
 
 function Processing() {
   return (
-    <div className="exam-sheet__processing" role="status">
+    <div className="exam-sheet__processing">
       <Spinner size="md" label="Собираем памятку" />
       <div>
         <h2 className="exam-sheet__state-title">Собираем памятку</h2>
@@ -50,8 +50,7 @@ function Processing() {
   );
 }
 
-function SheetTabs({ sheet }: { sheet: ExamSheet }) {
-  const definitions = definitionsOf(sheet);
+function SheetTabs({ sheet, definitions }: { sheet: ExamSheet; definitions: Definition[] }) {
   return (
     <Tabs
       label="Разделы памятки"
@@ -75,6 +74,7 @@ export function ExamSheetPage() {
   const knownState = code !== null && sheetStates.includes(code);
   const courseMissing = sheet.error instanceof ApiError && sheet.error.status === 404 && !knownState;
   const data = sheet.data;
+  const definitions = data ? definitionsOf(data) : [];
   const courseTitle = course.data?.title ?? "";
   const [sawProcessing, setSawProcessing] = useState(false);
 
@@ -97,7 +97,7 @@ export function ExamSheetPage() {
           <h1 className="exam-sheet__title">Памятка к экзамену</h1>
           {data && (
             <p className="exam-sheet__summary">
-              {ticketsCount(data.tickets.length)} · {definitionsCount(definitionsOf(data).length)}
+              {ticketsCount(data.tickets.length)} · {definitionsCount(definitions.length)}
             </p>
           )}
         </div>
@@ -165,8 +165,8 @@ export function ExamSheetPage() {
         </div>
       )}
 
-      {data && <SheetTabs sheet={data} />}
-      {data && <ExamSheetPrint courseTitle={courseTitle} sheet={data} definitions={definitionsOf(data)} />}
+      {data && <SheetTabs sheet={data} definitions={definitions} />}
+      {data && <ExamSheetPrint courseTitle={courseTitle} sheet={data} definitions={definitions} />}
       {consentDialog}
     </div>
   );
