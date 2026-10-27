@@ -15,7 +15,7 @@ from app.models import (
     TranscriptSegment,
     User,
 )
-from app.pipeline import stages, summarize, tasks
+from app.pipeline import embed, stages, summarize, tasks
 
 
 async def revoke_consent(user: User) -> None:
@@ -118,13 +118,13 @@ async def test_pipeline_without_consent_fails_before_server_processing(user, mon
 
 
 async def test_embed_requires_consent(user, monkeypatch):
-    monkeypatch.setattr(stages, "get_embeddings", ForbiddenEmbeddings)
+    monkeypatch.setattr(embed, "get_embeddings", ForbiddenEmbeddings)
     await revoke_consent(user)
     lecture = await create_local_lecture(user)
     async with SessionLocal() as session:
         stored = await session.get(Lecture, lecture.id)
         with pytest.raises(stages.ConsentMissing):
-            await stages.embed(session, stored, report)
+            await embed.embed(session, stored, report)
 
 
 async def test_local_lecture_with_consent_is_embedded(user):
@@ -142,7 +142,7 @@ async def test_local_lecture_with_consent_is_embedded(user):
 
 
 async def test_local_lecture_without_consent_is_not_embedded(user, monkeypatch):
-    monkeypatch.setattr(stages, "get_embeddings", ForbiddenEmbeddings)
+    monkeypatch.setattr(embed, "get_embeddings", ForbiddenEmbeddings)
     await revoke_consent(user)
     lecture = await create_local_lecture(user)
 

@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
-from app.pipeline import download, media, stages, summarize
+from app.pipeline import download, embed, media, stages, summarize
 from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 from app.services import quota
@@ -23,7 +23,7 @@ HANDLERS: dict[StepName, StepHandler] = {
     StepName.video: media.transcode_video,
     StepName.transcribe: stages.transcribe,
     StepName.summarize: summarize.summarize,
-    StepName.embed: stages.embed,
+    StepName.embed: embed.embed,
 }
 
 PLANS: dict[SourceType, list[StepName]] = {
