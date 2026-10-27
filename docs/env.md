@@ -35,6 +35,7 @@ cp .env.example .env
 | `POSTGRES_PASSWORD` | Пароль пользователя `lecturo` в Postgres. Из него же собираются `DATABASE_URL` для `api`, `worker` и `bot` | на сервере | `lecturo` | `docker-compose.yml` (db, api, worker, bot) |
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
+| `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
 
 `DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
 

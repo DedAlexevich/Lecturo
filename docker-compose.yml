@@ -8,7 +8,7 @@ services:
     ports:
       - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ${DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lecturo"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
     volumes:
-      - botredisdata:/data
+      - ${DATA_DIR:-./data}/bot-redis:/data
     restart: unless-stopped
 
   api:
@@ -37,7 +37,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
       REDIS_URL: redis://redis:6379/0
     volumes:
-      - storage:/data/storage
+      - ${DATA_DIR:-./data}/storage:/data/storage
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 5s
@@ -59,7 +59,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
       REDIS_URL: redis://redis:6379/0
     volumes:
-      - storage:/data/storage
+      - ${DATA_DIR:-./data}/storage:/data/storage
     depends_on:
       - api
     restart: unless-stopped
@@ -76,7 +76,7 @@ services:
       - -hooks-enabled-events=pre-create,pre-finish
       - -hooks-http-forward-headers=Authorization
     volumes:
-      - storage:/data/storage
+      - ${DATA_DIR:-./data}/storage:/data/storage
     restart: unless-stopped
 
   bot:
@@ -109,8 +109,8 @@ services:
       - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
-      - storage:/srv/storage:ro
-      - caddy_data:/data
+      - ${DATA_DIR:-./data}/storage:/srv/storage:ro
+      - ${DATA_DIR:-./data}/caddy:/data
     depends_on:
       api:
         condition: service_healthy
@@ -119,9 +119,3 @@ services:
       tusd:
         condition: service_started
     restart: unless-stopped
-
-volumes:
-  pgdata:
-  botredisdata:
-  storage:
-  caddy_data:

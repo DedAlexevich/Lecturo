@@ -10,3 +10,4 @@ dist/
 storage/
 !frontend/src/local/storage/
 *.tsbuildinfo
+/data/
