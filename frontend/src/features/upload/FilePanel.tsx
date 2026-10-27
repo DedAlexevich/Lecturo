@@ -10,7 +10,7 @@ type FilePanelProps = {
   onPick: (file: File) => void;
   ready: boolean;
   courseField: ReactNode;
-  onStart: (file: File) => void;
+  onStart: (file: File, audioOnly: boolean) => void;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
@@ -33,13 +33,14 @@ const statusText: Partial<Record<UploadState["phase"], string>> = {
 function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<FilePanelProps, "ready" | "courseField" | "onStart" | "file" | "onPick">) {
   const percent = state.total > 0 ? (state.sent / state.total) * 100 : 0;
   const finishing = state.phase === "finishing";
+  const extracting = state.phase === "extracting";
   const message = state.phase === "failed" ? state.error : statusText[state.phase];
 
   return (
     <div className="add-lecture__upload">
       <p className="add-lecture__file-name">{state.file?.name}</p>
       <Progress
-        label={finishing ? "Проверяем файл" : `${formatBytes(state.sent)} из ${formatBytes(state.total)}`}
+        label={extracting ? "Извлекаем звук" : finishing ? "Проверяем файл" : `${formatBytes(state.sent)} из ${formatBytes(state.total)}`}
         value={finishing ? undefined : percent}
       />
       {message && (
@@ -67,6 +68,7 @@ function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<Fi
 export function FilePanel(props: FilePanelProps) {
   const { state, file, ready, courseField, onStart, onPick, onClose } = props;
   const [dragging, setDragging] = useState(false);
+  const [audioOnly, setAudioOnly] = useState(false);
   const hintId = useId();
   const problem = file ? problemOf(file) : null;
   const message = file ? problem : state.error;
@@ -88,7 +90,7 @@ export function FilePanel(props: FilePanelProps) {
       className="add-lecture__form"
       onSubmit={(event) => {
         event.preventDefault();
-        if (file && !problem) onStart(file);
+        if (file && !problem) onStart(file, audioOnly);
       }}
     >
       <label
@@ -128,6 +130,10 @@ export function FilePanel(props: FilePanelProps) {
           {message}
         </p>
       )}
+      <label className="add-lecture__audio-only">
+        <input type="checkbox" checked={audioOnly} onChange={(event) => setAudioOnly(event.target.checked)} />
+        <span>Загрузить только звук</span>
+      </label>
       {courseField}
       <div className="dialog__actions">
         <Button variant="ghost" onClick={onClose}>

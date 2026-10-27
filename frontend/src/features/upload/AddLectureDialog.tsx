@@ -91,10 +91,10 @@ export function AddLectureDialog() {
     });
   }, [phase, file, lectureId, open, tab, close, refreshLists, reset, resetLink, setQuotaDialogOpen, toast, waitsForQuota]);
 
-  const startUpload = (picked: File) => {
+  const startUpload = (picked: File, audioOnly: boolean) => {
     const course = selectedCourse || null;
     requireConsent(() => {
-      upload.start(picked, course);
+      void upload.start(picked, course, audioOnly);
       setPickedFile(null);
     });
   };
