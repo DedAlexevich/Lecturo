@@ -1879,6 +1879,16 @@
               }
             }
           },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkLectureOut"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {

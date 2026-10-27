@@ -3278,6 +3278,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkLectureOut"];
+                };
+            };
             /** @description Successful Response */
             201: {
                 headers: {

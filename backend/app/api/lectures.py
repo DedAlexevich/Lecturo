@@ -178,7 +178,11 @@ async def add_existing_to_course(
         await add_to_course(session, course_id, lecture_id)
 
 
-@router.post("/link", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/link",
+    status_code=status.HTTP_201_CREATED,
+    responses={status.HTTP_200_OK: {"model": LinkLectureOut}},
+)
 async def add_link(
     body: LinkIn, user: CurrentUser, session: SessionDep, response: Response
 ) -> LinkLectureOut:
