@@ -2,9 +2,9 @@ import { useId, useState, type FormEvent } from "react";
 import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
+import { Field } from "../../ui/Field";
 import { useToast } from "../../ui/Toast";
 import { useComplaint } from "./queries";
-import "../../ui/Field.css";
 import "../../ui/Input.css";
 
 const reasonLimit = 5000;
@@ -27,7 +27,6 @@ type ComplaintDialogProps = {
 
 export function ComplaintDialog({ token, title, onClose }: ComplaintDialogProps) {
   const formId = useId();
-  const fieldId = useId();
   const toast = useToast();
   const complaint = useComplaint(token);
   const [reason, setReason] = useState("");
@@ -73,28 +72,20 @@ export function ComplaintDialog({ token, title, onClose }: ComplaintDialogProps)
           Лекция «{title}». Опишите, что с ней не так: нарушены авторские права, оскорбления, личные данные или
           другое.
         </p>
-        <div className="field">
-          <label className="field__label" htmlFor={fieldId}>
-            Причина
-          </label>
-          <textarea
-            id={fieldId}
-            className="input complaint__reason"
-            value={reason}
-            rows={5}
-            maxLength={reasonLimit}
-            autoFocus
-            disabled={complaint.isPending}
-            aria-invalid={invalid || undefined}
-            aria-describedby={invalid ? `${fieldId}-error` : undefined}
-            onChange={(event) => setReason(event.target.value)}
-          />
-          {invalid && (
-            <p className="field__error" id={`${fieldId}-error`}>
-              Напишите причину жалобы
-            </p>
+        <Field label="Причина" error={invalid ? "Напишите причину жалобы" : undefined}>
+          {(control) => (
+            <textarea
+              {...control}
+              className="input complaint__reason"
+              value={reason}
+              rows={5}
+              maxLength={reasonLimit}
+              autoFocus
+              disabled={complaint.isPending}
+              onChange={(event) => setReason(event.target.value)}
+            />
           )}
-        </div>
+        </Field>
         {complaint.isError && (
           <p className="complaint__error" role="alert">
             {complaintError(complaint.error)}
