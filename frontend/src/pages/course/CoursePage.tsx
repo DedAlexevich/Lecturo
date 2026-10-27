@@ -5,6 +5,7 @@ import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { EmptyState } from "../../ui/EmptyState";
 import { useToast } from "../../ui/Toast";
+import { ShareButton } from "../../features/share/ShareButton";
 import { lecturesCount } from "../home/format";
 import { useLectures } from "../home/queries";
 import { AddLecturesDialog } from "./AddLecturesDialog";
@@ -101,6 +102,7 @@ export function CoursePage() {
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
           </div>
           <div className="course__actions">
+            <ShareButton target={{ courseId: data.id }} title={data.title} />
             <button type="button" className="course__text-action" onClick={() => setDialog("rename")}>
               Переименовать
             </button>
