@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMe } from "../../app/useMe";
+import { rememberPickedFile } from "../../local/pickedFiles";
 import { Dialog } from "../../ui/Dialog";
 import { Tabs } from "../../ui/Tabs";
 import { useToast } from "../../ui/Toast";
@@ -23,6 +24,7 @@ export function AddLectureDialog() {
   const [courseId, setCourseId] = useState("");
   const [linkKey, setLinkKey] = useState(0);
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const uploadedOriginal = useRef<File | null>(null);
   const { data: me } = useMe();
   const courses = useCourseOptions(open);
   const upload = useTusUpload(me?.id);
@@ -75,10 +77,13 @@ export function AddLectureDialog() {
   useEffect(() => {
     if (phase !== "done") return;
     const name = file?.name ?? "";
+    const original = uploadedOriginal.current ?? file;
+    uploadedOriginal.current = null;
     refreshLists();
     reset();
     void waitsForQuota(lectureId).then((waiting) => {
       if (waiting) {
+        if (lectureId !== null && original !== null) rememberPickedFile(lectureId, original);
         toast.show(`Запись «${name}» загружена, но лимита на неё не хватает`);
         if (open && tab === "file") {
           resetLink();
@@ -94,6 +99,7 @@ export function AddLectureDialog() {
   const startUpload = (picked: File, audioOnly: boolean) => {
     const course = selectedCourse || null;
     requireConsent(() => {
+      uploadedOriginal.current = picked;
       void upload.start(picked, course, audioOnly);
       setPickedFile(null);
     });
