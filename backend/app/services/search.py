@@ -1,7 +1,6 @@
 import logging
 import re
-from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Collection
 
 from sqlalchemy import ColumnElement, Text, cast, func, literal, select, text
 from sqlalchemy.dialects.postgresql import REGCONFIG
@@ -14,10 +13,12 @@ from app.schemas.search import SearchHit
 
 logger = logging.getLogger(__name__)
 
-RRF_K = 60
 CANDIDATES = 50
 LIMIT = 20
 MIN_PREFIX_LENGTH = 4
+MIN_SIMILARITY = 0.2
+MARGIN = 0.15
+KEYWORD_BONUS = 0.03
 LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
 
 
@@ -30,13 +31,15 @@ async def embed_query(q: str) -> list[float] | None:
     return vector
 
 
-async def hybrid_search(
+async def semantic_search(
     session: AsyncSession, scope: ColumnElement[bool], q: str, vector: list[float] | None
 ) -> list[SearchHit]:
-    ranked_lists = [await fulltext_ids(session, scope, q)]
-    if vector is not None:
-        ranked_lists.append(await vector_ids(session, scope, vector))
-    scores = rrf(ranked_lists)
+    keyword = await fulltext_ranks(session, scope, q)
+    if vector is None:
+        scores = keyword
+    else:
+        candidates = set(keyword) | set(await vector_ids(session, scope, vector))
+        scores = relevant(await similarities(session, candidates, vector), keyword.keys())
     top = sorted(scores, key=scores.__getitem__, reverse=True)[:LIMIT]
     if not top:
         return []
@@ -61,20 +64,48 @@ async def hybrid_search(
     return [hits[chunk_id] for chunk_id in top]
 
 
-async def fulltext_ids(session: AsyncSession, scope: ColumnElement[bool], q: str) -> list[int]:
+def relevant(similarity: dict[int, float], keyword: Collection[int]) -> dict[int, float]:
+    scores = {
+        chunk_id: value + (KEYWORD_BONUS if chunk_id in keyword else 0.0)
+        for chunk_id, value in similarity.items()
+    }
+    if not scores:
+        return {}
+    threshold = max(scores.values()) - MARGIN
+    return {
+        chunk_id: score
+        for chunk_id, score in scores.items()
+        if score >= threshold and (chunk_id in keyword or similarity[chunk_id] >= MIN_SIMILARITY)
+    }
+
+
+async def similarities(
+    session: AsyncSession, ids: Collection[int], vector: list[float]
+) -> dict[int, float]:
+    if not ids:
+        return {}
+    similarity = func.coalesce(1 - SearchChunk.embedding.cosine_distance(vector), 0.0)
+    rows = await session.execute(select(SearchChunk.id, similarity).where(SearchChunk.id.in_(ids)))
+    return {chunk_id: float(value) for chunk_id, value in rows}
+
+
+async def fulltext_ranks(
+    session: AsyncSession, scope: ColumnElement[bool], q: str
+) -> dict[int, float]:
     stemmed = await session.scalar(
         select(cast(func.websearch_to_tsquery(literal("russian", REGCONFIG), q), Text))
     )
     if not stemmed:
-        return []
+        return {}
     query = func.to_tsquery(literal("simple", REGCONFIG), add_prefixes(stemmed))
-    rows = await session.scalars(
-        select(SearchChunk.id)
+    rank = func.ts_rank_cd(SearchChunk.tsv, query)
+    rows = await session.execute(
+        select(SearchChunk.id, rank)
         .where(scope, SearchChunk.tsv.op("@@")(query))
-        .order_by(func.ts_rank_cd(SearchChunk.tsv, query).desc(), SearchChunk.id)
+        .order_by(rank.desc(), SearchChunk.id)
         .limit(CANDIDATES)
     )
-    return list(rows)
+    return {chunk_id: float(value) for chunk_id, value in rows}
 
 
 def add_prefixes(tsquery: str) -> str:
@@ -96,11 +127,3 @@ async def vector_ids(
         .limit(CANDIDATES)
     )
     return list(rows)
-
-
-def rrf(ranked_lists: Sequence[Sequence[int]]) -> dict[int, float]:
-    scores: dict[int, float] = defaultdict(float)
-    for ranked in ranked_lists:
-        for rank, chunk_id in enumerate(ranked, start=1):
-            scores[chunk_id] += 1 / (RRF_K + rank)
-    return dict(scores)

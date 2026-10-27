@@ -7,7 +7,7 @@ from app.api.courses import get_own_course
 from app.core.deps import CurrentUser, SessionDep
 from app.models import ChunkKind, Lecture, SearchChunk, course_lectures
 from app.schemas.search import SearchHit
-from app.services.search import embed_query, hybrid_search
+from app.services.search import embed_query, semantic_search
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -28,7 +28,7 @@ async def search(
     vector = await embed_query(q)
     if lecture_id is None and course_id is None:
         scope = SearchChunk.lecture_id.in_(select(Lecture.id).where(Lecture.owner_id == user.id))
-        return await hybrid_search(session, scope, q, vector)
+        return await semantic_search(session, scope, q, vector)
     if lecture_id is not None:
         found = await session.scalar(
             select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
@@ -44,4 +44,4 @@ async def search(
             .where(course_lectures.c.course_id == course_id, Lecture.owner_id == user.id)
         )
     transcript_only = scope & (SearchChunk.kind == ChunkKind.transcript)
-    return await hybrid_search(session, transcript_only, q, vector)
+    return await semantic_search(session, transcript_only, q, vector)
