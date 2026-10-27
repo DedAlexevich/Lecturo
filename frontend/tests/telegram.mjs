@@ -258,7 +258,60 @@ try {
     assert.equal(browserPage.requests.length, 0);
     await browserPage.context.close();
   }
-  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors");
+  for (const platform of ["android", undefined]) {
+    const { context, page, errors } = await setup(platform, 200, !platform);
+    const lectureId = "00000000-0000-4000-8000-000000000002";
+    const exportPath = `/api/v1/lectures/${lectureId}/export.pdf`;
+    const linkRequests = [];
+    const downloads = [];
+    let linkStatus = 200;
+    await page.route((url) => url.pathname.startsWith(`/api/v1/lectures/${lectureId}`), (route) => new URL(route.request().url()).pathname !== `/api/v1/lectures/${lectureId}`
+      ? route.fulfill({ status: 404, json: { detail: "Не найдено" } })
+      : route.fulfill({ json: {
+      id: lectureId, title: "Лекция для экспорта", source_type: "upload", source_url: null, embed_url: null,
+      duration_sec: 120, status: "ready", processed_locally: false, video_expires_at: null,
+      created_at: "2026-10-27T00:00:00Z", video_url: null, audio_only: false, audio_url: null, steps: [],
+      segments: [{ start: 0, end: 2, text: "Первая фраза." }], chapters: [], summary: { content_md: "Конспект" },
+    } }));
+    await page.route((url) => url.pathname.startsWith(`/api/v1/lectures/${lectureId}/exports/`), (route) => {
+      linkRequests.push({ path: new URL(route.request().url()).pathname, method: route.request().method(), auth: route.request().headers().authorization });
+      return linkStatus === 200
+        ? route.fulfill({ json: { url: `${exportPath}?token=signed-export`, expires_at: "2026-10-27T00:02:00Z" } })
+        : route.fulfill({ status: linkStatus, json: { detail: "Расшифровки ещё нет" } });
+    });
+    await page.route((url) => url.pathname === exportPath, (route) => {
+      downloads.push(route.request().url());
+      return route.fulfill({ body: "%PDF-1.4", headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="lecture.pdf"' } });
+    });
+    if (platform) {
+      await page.goto(base + "/login");
+      await page.waitForURL(base + "/");
+    }
+    await page.goto(base + `/lectures/${lectureId}`);
+    const pdf = page.getByRole("button", { name: "PDF", exact: true });
+    if (platform) {
+      await pdf.click();
+      await page.waitForFunction(() => window.mock.links.length === 1);
+      assert.deepEqual(await page.evaluate(() => window.mock.links), [`${base}${exportPath}?token=signed-export`]);
+      assert.deepEqual(downloads, []);
+    } else {
+      const [download] = await Promise.all([page.waitForEvent("download"), pdf.click()]);
+      assert.equal(download.suggestedFilename(), "lecture.pdf");
+      assert.deepEqual(downloads, [`${base}${exportPath}?token=signed-export`]);
+      assert.equal(page.url(), base + `/lectures/${lectureId}`);
+    }
+    assert.equal(linkRequests[0].path, `/api/v1/lectures/${lectureId}/exports/pdf/link`);
+    assert.equal(linkRequests[0].method, "POST");
+    assert.match(linkRequests[0].auth, /^Bearer \S+-token$/);
+    linkStatus = 409;
+    await page.getByRole("button", { name: "SRT", exact: true }).click();
+    await page.getByText("Файл ещё не готов, попробуйте позже.").waitFor();
+    assert.equal(linkRequests.length, 2);
+    assert.equal(downloads.length, platform ? 0 : 1);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors, export links");
 } finally {
   await browser.close();
 }
