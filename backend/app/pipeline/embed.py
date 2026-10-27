@@ -28,7 +28,7 @@ async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None
     vectors: list[list[float]] = []
     for offset in range(0, len(chunks), BATCH_SIZE):
         batch = chunks[offset : offset + BATCH_SIZE]
-        vectors.extend(await embeddings.embed([chunk.text for chunk in batch]))
+        vectors.extend(await embeddings.embed_documents([chunk.text for chunk in batch]))
         await report(len(vectors) / len(chunks))
     await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))
     session.add_all(

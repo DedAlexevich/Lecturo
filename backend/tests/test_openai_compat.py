@@ -149,7 +149,7 @@ async def test_embeddings_batches_and_order():
     embeddings = OpenAICompatibleEmbeddings(
         SETTINGS, transport=httpx.MockTransport(handler), batch_size=2
     )
-    vectors = await embeddings.embed(["а", "бб", "ввв", "гггг", "д"])
+    vectors = await embeddings.embed_documents(["а", "бб", "ввв", "гггг", "д"])
 
     assert batches == [["а", "бб"], ["ввв", "гггг"], ["д"]]
     assert [vector[0] for vector in vectors] == [1.0, 2.0, 3.0, 4.0, 1.0]
@@ -160,14 +160,14 @@ async def test_embeddings_wrong_dimension_from_model():
     transport = httpx.MockTransport(lambda request: embeddings_response(request, dimension=768))
     embeddings = OpenAICompatibleEmbeddings(SETTINGS, transport=transport)
     with pytest.raises(OpenAICompatibleError):
-        await embeddings.embed(["текст"])
+        await embeddings.embed_documents(["текст"])
 
 
 async def test_embeddings_malformed_response():
     transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"error": "oops"}))
     embeddings = OpenAICompatibleEmbeddings(SETTINGS, transport=transport)
     with pytest.raises(OpenAICompatibleError):
-        await embeddings.embed(["текст"])
+        await embeddings.embed_documents(["текст"])
 
 
 async def test_non_json_response():

@@ -56,8 +56,11 @@ class StubLLM:
 class StubEmbeddings:
     dimension = EMBEDDING_DIM
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self._vector(text) for text in texts]
+
+    async def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
 
     def _vector(self, text: str) -> list[float]:
         seed = hashlib.sha256(text.encode()).digest()
