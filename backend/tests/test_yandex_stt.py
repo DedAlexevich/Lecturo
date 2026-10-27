@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import pytest
 
 from app.core.config import Settings
 from app.providers import Segment, get_speech_to_text
+from app.providers.audio_chunks import CHUNK_CONCURRENCY, AudioChunkError
 from app.providers.yandex import (
     RECOGNIZE_URL,
     YandexSpeechKitError,
@@ -233,3 +235,65 @@ async def test_transcribe_rejects_unknown_language(tmp_path: Path):
     with pytest.raises(ValueError, match="xx"):
         await provider.transcribe(audio, "xx")
     assert requests == []
+
+
+async def test_long_recording_transcribes_parts_with_bounded_concurrency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS-audio")
+    chunks = [(tmp_path / f"chunk-{index}.opus", index * 480.0) for index in range(7)]
+
+    async def split_audio(audio_path, duration, target_dir):
+        return chunks
+
+    monkeypatch.setattr("app.providers.yandex.split_audio", split_audio)
+    provider = YandexSpeechToText(yandex_settings())
+    active = 0
+    maximum = 0
+
+    async def transcribe_file(client, path, encoding, language_code, duration, on_progress):
+        nonlocal active, maximum
+        active += 1
+        maximum = max(maximum, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return [Segment(0.5, 1.0, path.stem)]
+
+    monkeypatch.setattr(provider, "_transcribe_file", transcribe_file)
+    progress = []
+
+    async def report(stage, fraction):
+        progress.append((stage, fraction))
+
+    segments = await provider.transcribe(audio, duration=25 * 60, on_progress=report)
+
+    assert maximum == CHUNK_CONCURRENCY
+    assert [segment.start for segment in segments] == [index * 480.0 + 0.5 for index in range(7)]
+    recognition_progress = [value for stage, value in progress if stage == "recognize"]
+    assert recognition_progress == sorted(recognition_progress)
+    assert recognition_progress[-1] == pytest.approx(0.95)
+
+
+async def test_long_recording_falls_back_to_full_audio_when_splitting_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS-audio")
+    provider = YandexSpeechToText(yandex_settings())
+    called = []
+
+    async def split_audio(audio_path, duration, target_dir):
+        raise AudioChunkError("split failed")
+
+    async def transcribe_file(client, path, encoding, language_code, duration, on_progress):
+        called.append((path, duration))
+        return [Segment(2.0, 3.0, "Успешно")]
+
+    monkeypatch.setattr("app.providers.yandex.split_audio", split_audio)
+    monkeypatch.setattr(provider, "_transcribe_file", transcribe_file)
+
+    segments = await provider.transcribe(audio, duration=25 * 60)
+
+    assert called == [(audio, 25 * 60)]
+    assert segments == [Segment(2.0, 3.0, "Успешно")]

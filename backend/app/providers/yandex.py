@@ -2,12 +2,15 @@ import asyncio
 import contextlib
 import hashlib
 import hmac
+import logging
+import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from tempfile import TemporaryDirectory
+from typing import Any, cast
 from urllib.parse import quote
 
 import httpx
@@ -15,6 +18,12 @@ import httpx
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM, StepName
 from app.pipeline.estimate import expected_seconds
+from app.providers.audio_chunks import (
+    CHUNK_CONCURRENCY,
+    MAX_CHUNK_SECONDS,
+    AudioChunkError,
+    split_audio,
+)
 from app.providers.base import RecognitionProgress, Segment
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
@@ -33,6 +42,7 @@ STORAGE_HOST = "storage.yandexcloud.net"
 STORAGE_REGION = "ru-central1"
 UPLOAD_SHARE = 0.05
 RECOGNIZE_LIMIT = 0.95
+logger = logging.getLogger(__name__)
 
 AUDIO_ENCODINGS = {".opus": "OGG_OPUS", ".ogg": "OGG_OPUS", ".oga": "OGG_OPUS", ".mp3": "MP3"}
 LANGUAGE_CODES = {
@@ -81,6 +91,33 @@ def parse_recognition(response: dict[str, Any]) -> list[Segment]:
     return sorted(segments, key=lambda segment: (segment.start, segment.end))
 
 
+def merge_chunk_segments(chunks: list[tuple[float, list[Segment]]]) -> list[Segment]:
+    segments = sorted(
+        (
+            Segment(segment.start + offset, segment.end + offset, segment.text)
+            for offset, chunk in chunks
+            for segment in chunk
+        ),
+        key=lambda segment: (segment.start, segment.end),
+    )
+    merged: list[Segment] = []
+    last_by_text: dict[str, int] = {}
+    for segment in segments:
+        normalized = re.sub(r"\W+", "", segment.text.casefold())
+        duplicate = last_by_text.get(normalized)
+        if duplicate is not None and not (
+            merged[duplicate].end >= segment.start - 0.75
+            and merged[duplicate].start <= segment.end + 0.75
+        ):
+            duplicate = None
+        if duplicate is None:
+            merged.append(segment)
+            last_by_text[normalized] = len(merged) - 1
+        elif segment.end - segment.start > merged[duplicate].end - merged[duplicate].start:
+            merged[duplicate] = segment
+    return sorted(merged, key=lambda segment: (segment.start, segment.end))
+
+
 class YandexSpeechToText:
     def __init__(
         self,
@@ -125,16 +162,81 @@ class YandexSpeechToText:
         language_code = LANGUAGE_CODES.get(language)
         if language_code is None:
             raise ValueError(f"Язык не поддерживается SpeechKit: {language}")
-        key = f"stt/{uuid.uuid4().hex}{suffix}"
         async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
-            await self._notify(on_progress, "upload", 0.0)
-            await self._upload(client, audio_path, key)
-            try:
-                await self._notify(on_progress, "recognize", UPLOAD_SHARE)
-                operation_id = await self._start(client, key, encoding, language_code)
-                response = await self._wait(client, operation_id, duration, on_progress)
-            finally:
-                await self._delete(client, key)
+            if duration is not None and duration > MAX_CHUNK_SECONDS:
+                with TemporaryDirectory(prefix="lecturo-stt-", dir=audio_path.parent) as temp_dir:
+                    await self._notify(on_progress, "split", 0.0)
+                    try:
+                        chunks = await split_audio(audio_path, duration, Path(temp_dir))
+                    except AudioChunkError:
+                        logger.warning(
+                            "Не удалось разделить аудио; отправляем запись целиком", exc_info=True
+                        )
+                        chunks = []
+                    if chunks:
+                        await self._notify(on_progress, "upload", UPLOAD_SHARE)
+                        results = await self._transcribe_chunks(
+                            client, chunks, encoding, language_code, on_progress
+                        )
+                        await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
+                        return merge_chunk_segments(results)
+            return await self._transcribe_file(
+                client, audio_path, encoding, language_code, duration, on_progress
+            )
+
+    async def _transcribe_chunks(
+        self,
+        client: httpx.AsyncClient,
+        chunks: list[tuple[Path, float]],
+        encoding: str,
+        language_code: str,
+        on_progress: RecognitionProgress | None,
+    ) -> list[tuple[float, list[Segment]]]:
+        semaphore = asyncio.Semaphore(CHUNK_CONCURRENCY)
+        progress_lock = asyncio.Lock()
+        completed = 0
+
+        async def transcribe_chunk(path: Path, offset: float) -> tuple[float, list[Segment]]:
+            nonlocal completed
+            async with semaphore:
+                segments = await self._transcribe_file(
+                    client, path, encoding, language_code, None, None
+                )
+            async with progress_lock:
+                completed += 1
+                await self._notify(
+                    on_progress,
+                    "recognize",
+                    UPLOAD_SHARE + (RECOGNIZE_LIMIT - UPLOAD_SHARE) * completed / len(chunks),
+                )
+            return offset, segments
+
+        results = await asyncio.gather(
+            *(transcribe_chunk(path, offset) for path, offset in chunks), return_exceptions=True
+        )
+        error = next((result for result in results if isinstance(result, BaseException)), None)
+        if error is not None:
+            raise error
+        return cast(list[tuple[float, list[Segment]]], results)
+
+    async def _transcribe_file(
+        self,
+        client: httpx.AsyncClient,
+        audio_path: Path,
+        encoding: str,
+        language_code: str,
+        duration: float | None,
+        on_progress: RecognitionProgress | None,
+    ) -> list[Segment]:
+        key = f"stt/{uuid.uuid4().hex}{audio_path.suffix.lower()}"
+        await self._notify(on_progress, "upload", 0.0)
+        await self._upload(client, audio_path, key)
+        try:
+            await self._notify(on_progress, "recognize", UPLOAD_SHARE)
+            operation_id = await self._start(client, key, encoding, language_code)
+            response = await self._wait(client, operation_id, duration, on_progress)
+        finally:
+            await self._delete(client, key)
         await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
         return parse_recognition(response)
 
