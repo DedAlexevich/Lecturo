@@ -9,6 +9,7 @@ export type WaitingLecture = components["schemas"]["WaitingLectureOut"];
 export const waitingQueryKey = ["billing", "waiting"] as const;
 
 const pollInterval = 20_000;
+const idlePollInterval = 60_000;
 
 export async function fetchWaiting() {
   const { data, error, response } = await api.GET("/api/v1/billing/waiting");
@@ -20,7 +21,7 @@ export function useWaiting() {
   return useQuery({
     queryKey: waitingQueryKey,
     queryFn: fetchWaiting,
-    refetchInterval: pollInterval,
+    refetchInterval: (query) => (query.state.data?.lectures.length ? pollInterval : idlePollInterval),
     refetchOnWindowFocus: true,
   });
 }
