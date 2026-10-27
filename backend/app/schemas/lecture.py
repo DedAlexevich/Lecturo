@@ -109,3 +109,8 @@ class LectureStatusOut(Schema):
     status: LectureStatus
     queue_position: int | None
     steps: list[StepOut]
+
+
+class ExportLinkOut(Schema):
+    url: str
+    expires_at: datetime

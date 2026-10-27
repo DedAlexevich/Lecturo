@@ -305,7 +305,6 @@ export function LecturePage() {
         <LectureMeta lecture={data} />
         <ExportActions
           lectureId={data.id}
-          title={data.title}
           ready={data.status === "ready"}
           hasSegments={segments.length > 0}
         />

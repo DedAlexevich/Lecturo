@@ -2172,6 +2172,68 @@
         }
       }
     },
+    "/api/v1/lectures/{lecture_id}/exports/{export_format}/link": {
+      "post": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Export Link",
+        "operationId": "export_link_api_v1_lectures__lecture_id__exports__export_format__link_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lecture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lecture Id"
+            }
+          },
+          {
+            "name": "export_format",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "pdf",
+                "srt",
+                "vtt"
+              ],
+              "type": "string",
+              "title": "Export Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportLinkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lectures/{lecture_id}/export.srt": {
       "get": {
         "tags": [
@@ -2193,6 +2255,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Lecture Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],
@@ -2235,6 +2313,22 @@
               "format": "uuid",
               "title": "Lecture Id"
             }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
           }
         ],
         "responses": {
@@ -2275,6 +2369,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Lecture Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
             }
           }
         ],
@@ -3249,6 +3359,25 @@
           "cheatsheet_md"
         ],
         "title": "ExamSheetOut"
+      },
+      "ExportLinkOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "expires_at"
+        ],
+        "title": "ExportLinkOut"
       },
       "HTTPValidationError": {
         "properties": {
