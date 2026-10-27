@@ -41,7 +41,7 @@ export function VkCallbackPage() {
       return;
     }
     setFlow(stored);
-    const body = { code, state, device_id: deviceId };
+    const body = { code, state, device_id: deviceId, nonce: stored.nonce };
     if (stored.mode === "link") {
       linkVk(body, {
         onSuccess: () => {

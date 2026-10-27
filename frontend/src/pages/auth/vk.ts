@@ -6,6 +6,7 @@ import { signIn } from "../../app/session";
 
 export type VkMode = "login" | "link";
 export type VkFlow = { mode: VkMode; redirect: string };
+export type StoredVkFlow = VkFlow & { nonce: string };
 export type VkConsents = components["schemas"]["VkStartIn"];
 export type VkCallback = components["schemas"]["VkCallbackIn"];
 
@@ -18,7 +19,7 @@ function unwrap<T>(result: Result<T>): T {
   return result.data as T;
 }
 
-export function saveVkFlow(flow: VkFlow) {
+export function saveVkFlow(flow: StoredVkFlow) {
   try {
     sessionStorage.setItem(FLOW_KEY, JSON.stringify(flow));
   } catch {
@@ -26,11 +27,11 @@ export function saveVkFlow(flow: VkFlow) {
   }
 }
 
-export function takeVkFlow(): VkFlow | null {
+export function takeVkFlow(): StoredVkFlow | null {
   try {
     const raw = sessionStorage.getItem(FLOW_KEY);
     sessionStorage.removeItem(FLOW_KEY);
-    return raw ? (JSON.parse(raw) as VkFlow) : null;
+    return raw ? (JSON.parse(raw) as StoredVkFlow) : null;
   } catch {
     return null;
   }
@@ -51,8 +52,8 @@ export function useVkStart(flow: VkFlow) {
       flow.mode === "login"
         ? unwrap(await api.POST("/api/v1/auth/vk/start", { body: consents }))
         : unwrap(await api.POST("/api/v1/me/identities/vk/start")),
-    onSuccess: ({ url }) => {
-      saveVkFlow(flow);
+    onSuccess: ({ url, nonce }) => {
+      saveVkFlow({ ...flow, nonce });
       window.location.assign(url);
     },
   });

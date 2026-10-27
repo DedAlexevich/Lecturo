@@ -1505,6 +1505,8 @@ export interface components {
             state: string;
             /** Device Id */
             device_id: string;
+            /** Nonce */
+            nonce: string;
         };
         /** VkStartIn */
         VkStartIn: {
@@ -1523,6 +1525,8 @@ export interface components {
         VkStartOut: {
             /** Url */
             url: string;
+            /** Nonce */
+            nonce: string;
         };
         /** WaitingLectureOut */
         WaitingLectureOut: {
@@ -1735,6 +1739,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Слишком много попыток входа */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Вход через VK не настроен */
             503: {
