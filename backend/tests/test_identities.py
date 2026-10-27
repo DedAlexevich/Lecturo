@@ -1,10 +1,12 @@
 import hashlib
 import hmac
+import json
 import random
 import time
 import uuid
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
+from urllib.parse import urlencode
 
 import pytest
 from sqlalchemy import delete, select, update
@@ -12,7 +14,15 @@ from sqlalchemy import delete, select, update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
-from app.models import AuthIdentity, AuthProvider, User
+from app.models import (
+    AuthIdentity,
+    AuthProvider,
+    Course,
+    Lecture,
+    SourceType,
+    Subscription,
+    User,
+)
 from app.services.auth import hash_password
 
 BOT_TOKEN = "123456:test-bot-token"
@@ -91,7 +101,10 @@ async def test_link_telegram_is_idempotent(client, cleanup, telegram_id):
 
 async def test_link_telegram_of_other_account_conflicts(client, cleanup, telegram_id):
     owner = await create_user(
-        cleanup, providers=[(AuthProvider.telegram, str(telegram_id))], telegram_chat_id=telegram_id
+        cleanup,
+        email=email_address(),
+        providers=[(AuthProvider.telegram, str(telegram_id))],
+        telegram_chat_id=telegram_id,
     )
     user = await create_user(cleanup)
     response = await client.post(
@@ -238,3 +251,174 @@ async def test_outdated_ai_transfer_revision_is_not_consent(client, cleanup):
     assert me.json()["ai_transfer_accepted_at"] is None
     renewed = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
     assert renewed.json()["ai_transfer_accepted_at"] is not None
+
+
+def webapp_init_data(telegram_id: int, **overrides) -> str:
+    fields = {
+        "query_id": "AAHdF6IQAAAAAN0XohDhrOrc",
+        "user": json.dumps({"id": telegram_id, "first_name": "Иван"}, ensure_ascii=False),
+        "auth_date": str(int(time.time())),
+    }
+    fields.update(overrides)
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+    secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+    fields["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    return urlencode(fields)
+
+
+async def identity_owner(telegram_id: int) -> uuid.UUID | None:
+    async with SessionLocal() as session:
+        return await session.scalar(
+            select(AuthIdentity.user_id).where(
+                AuthIdentity.provider == AuthProvider.telegram,
+                AuthIdentity.provider_user_id == str(telegram_id),
+            )
+        )
+
+
+async def test_link_telegram_by_init_data(client, cleanup, telegram_id):
+    user = await create_user(cleanup, email=email_address())
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 200
+    assert [item["provider"] for item in response.json()["identities"]] == ["telegram"]
+    assert await identity_owner(telegram_id) == user.id
+    async with SessionLocal() as session:
+        assert (await session.get(User, user.id)).telegram_chat_id == telegram_id
+
+
+async def test_link_telegram_by_init_data_rejects_forged_hash(client, cleanup, telegram_id):
+    user = await create_user(cleanup)
+    forged = webapp_init_data(telegram_id) + "0"
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": forged},
+        headers=headers(user),
+    )
+    assert response.status_code == 401
+    assert await identity_owner(telegram_id) is None
+
+
+async def test_link_telegram_requires_some_credentials(client, cleanup):
+    user = await create_user(cleanup)
+    response = await client.post("/api/v1/me/identities/telegram", json={}, headers=headers(user))
+    assert response.status_code == 422
+
+
+async def test_link_telegram_merges_empty_account(client, cleanup, telegram_id):
+    empty = await create_user(
+        cleanup, providers=[(AuthProvider.telegram, str(telegram_id))], telegram_chat_id=telegram_id
+    )
+    user = await create_user(cleanup, email=email_address())
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 200
+    assert await identity_owner(telegram_id) == user.id
+    async with SessionLocal() as session:
+        assert await session.get(User, empty.id) is None
+        assert (await session.get(User, user.id)).telegram_chat_id == telegram_id
+
+
+async def test_link_telegram_merges_empty_account_by_widget(client, cleanup, telegram_id):
+    empty = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    user = await create_user(cleanup)
+    response = await client.post(
+        "/api/v1/me/identities/telegram", json=signed(telegram_id), headers=headers(user)
+    )
+    assert response.status_code == 200
+    async with SessionLocal() as session:
+        assert await session.get(User, empty.id) is None
+
+
+async def test_link_telegram_keeps_account_with_lecture(client, cleanup, telegram_id):
+    owner = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    async with SessionLocal() as session:
+        session.add(Lecture(owner_id=owner.id, title="Лекция", source_type=SourceType.upload))
+        await session.commit()
+    user = await create_user(cleanup)
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert "Выйдите" in response.json()["detail"]
+    assert await identity_owner(telegram_id) == owner.id
+
+
+async def test_link_telegram_keeps_account_with_course(client, cleanup, telegram_id):
+    owner = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    async with SessionLocal() as session:
+        session.add(Course(owner_id=owner.id, title="Курс"))
+        await session.commit()
+    user = await create_user(cleanup)
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert await identity_owner(telegram_id) == owner.id
+
+
+async def test_link_telegram_keeps_account_with_subscription(client, cleanup, telegram_id):
+    owner = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    now = datetime.now(UTC)
+    async with SessionLocal() as session:
+        session.add(Subscription(user_id=owner.id, starts_at=now, ends_at=now + timedelta(days=30)))
+        await session.commit()
+    user = await create_user(cleanup)
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert await identity_owner(telegram_id) == owner.id
+
+
+async def test_link_telegram_keeps_account_with_email(client, cleanup, telegram_id):
+    owner = await create_user(
+        cleanup,
+        email=email_address(),
+        providers=[(AuthProvider.telegram, str(telegram_id))],
+    )
+    user = await create_user(cleanup)
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert await identity_owner(telegram_id) == owner.id
+
+
+async def test_link_email_taken_hints_to_relogin_for_telegram_account(client, cleanup, telegram_id):
+    address = email_address()
+    await create_user(cleanup, email=address, password_hash=hash_password(PASSWORD))
+    user = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    response = await client.post(
+        "/api/v1/me/identities/email",
+        json={"email": address, "password": PASSWORD},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert "войдите по этой почте" in response.json()["detail"]
+
+
+async def test_link_telegram_with_second_telegram_keeps_empty_account(client, cleanup, telegram_id):
+    other = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id + 1))])
+    user = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id + 1)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert await identity_owner(telegram_id + 1) == other.id
