@@ -274,6 +274,37 @@
   font-variant-numeric: tabular-nums;
 }
 
+.chapter__time {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: baseline;
+}
+
+.chapter__start {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-data);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+button.chapter__start {
+  cursor: pointer;
+}
+
+button.chapter__start:hover {
+  text-decoration: underline;
+}
+
+button.chapter__start:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 .chapter--current .chapter__time {
   color: var(--color-data);
   font-weight: var(--weight-semibold);
@@ -364,6 +395,59 @@ button.transcript__phrase:focus-visible {
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.transcript__chapter {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  margin: var(--space-3) 0 var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.transcript__chapter:first-child {
+  margin-top: 0;
+}
+
+.transcript__chapter--current {
+  background: var(--color-data-soft);
+}
+
+.transcript__chapter-time {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-data);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+button.transcript__chapter-time {
+  cursor: pointer;
+}
+
+button.transcript__chapter-time:hover {
+  text-decoration: underline;
+}
+
+button.transcript__chapter-time:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.transcript__chapter-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  line-height: var(--leading-normal);
 }
 
 .transcript__item--current .transcript__phrase,

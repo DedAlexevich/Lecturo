@@ -127,6 +127,7 @@ export function PublicLecture({ token, lecture, refreshVideo }: PublicLecturePro
                   segments.length > 0 ? (
                     <Transcript
                       segments={segments}
+                      chapters={chapters}
                       currentTime={hasPlayer ? currentTime : null}
                       onSelect={hasPlayer ? playFrom : undefined}
                     />

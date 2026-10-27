@@ -27,3 +27,24 @@ export function findActiveSegment(segments: { start: number }[], time: number) {
   }
   return found;
 }
+
+export type TranscriptRow<S, C> =
+  | { kind: "chapter"; chapter: C; chapterIndex: number }
+  | { kind: "segment"; segment: S; segmentIndex: number };
+
+export function groupTranscript<S extends { start: number }, C extends { start: number }>(
+  segments: S[],
+  chapters: C[],
+): TranscriptRow<S, C>[] {
+  const rows: TranscriptRow<S, C>[] = [];
+  let lastChapter = -1;
+  segments.forEach((segment, segmentIndex) => {
+    const chapterIndex = findActiveSegment(chapters, segment.start);
+    if (chapterIndex >= 0 && chapterIndex !== lastChapter) {
+      rows.push({ kind: "chapter", chapter: chapters[chapterIndex], chapterIndex });
+      lastChapter = chapterIndex;
+    }
+    rows.push({ kind: "segment", segment, segmentIndex });
+  });
+  return rows;
+}
