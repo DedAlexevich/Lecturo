@@ -1,11 +1,23 @@
+import uuid
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuthIdentity, AuthProvider, User
+from app.models import (
+    AuthIdentity,
+    AuthProvider,
+    Course,
+    HourPackage,
+    Lecture,
+    Payment,
+    ShareLink,
+    Subscription,
+    UsageEntry,
+    User,
+)
 from app.schemas.user import EmailIdentityIn, IdentityOut, UserOut
 from app.services.auth import hash_password, normalize_email
 from app.services.consents import ai_transfer_given, current_ai_transfer_revision
@@ -14,6 +26,14 @@ TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому а
 VK_TAKEN = "Этот VK уже привязан к другому аккаунту"
 YANDEX_TAKEN = "Этот Яндекс уже привязан к другому аккаунту"
 EMAIL_TAKEN = "Этот email уже используется"
+EMAIL_TAKEN_FOR_TELEGRAM = (
+    "Этот email уже используется другим аккаунтом. Выйдите, войдите по этой почте "
+    "и привяжите Telegram там"
+)
+TELEGRAM_ACCOUNT_NOT_EMPTY = (
+    "Этот Telegram привязан к другому аккаунту, в котором уже есть данные. "
+    "Выйдите и войдите в тот аккаунт через Telegram"
+)
 
 
 async def user_out(session: AsyncSession, user: User) -> UserOut:
@@ -51,13 +71,53 @@ async def user_identity(
     )
 
 
+async def has_user_data(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    for model, column in (
+        (Lecture, Lecture.owner_id),
+        (Course, Course.owner_id),
+        (ShareLink, ShareLink.owner_id),
+        (Payment, Payment.user_id),
+        (Subscription, Subscription.user_id),
+        (HourPackage, HourPackage.user_id),
+        (UsageEntry, UsageEntry.user_id),
+    ):
+        if await session.scalar(select(model.id).where(column == user_id).limit(1)) is not None:
+            return True
+    return False
+
+
+async def absorb_empty_telegram_owner(
+    session: AsyncSession, existing: AuthIdentity, telegram_id: int
+) -> None:
+    owner = await session.scalar(select(User).where(User.id == existing.user_id).with_for_update())
+    if owner is None:
+        return
+    await session.refresh(owner, ["identities"])
+    only_telegram = [
+        item
+        for item in owner.identities
+        if item.provider == AuthProvider.telegram and item.provider_user_id == str(telegram_id)
+    ]
+    if (
+        owner.email is not None
+        or len(owner.identities) != len(only_telegram)
+        or await has_user_data(session, owner.id)
+    ):
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, TELEGRAM_ACCOUNT_NOT_EMPTY)
+    session.expunge(existing)
+    await session.execute(delete(User).where(User.id == owner.id))
+    session.expunge(owner)
+
+
 async def link_telegram(session: AsyncSession, user: User, telegram_id: int, profile: dict) -> None:
-    existing = await find_identity(session, AuthProvider.telegram, str(telegram_id))
-    if existing is not None and existing.user_id != user.id:
-        raise HTTPException(status.HTTP_409_CONFLICT, TELEGRAM_TAKEN)
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     own = await user_identity(session, user, AuthProvider.telegram)
     if own is not None and own.provider_user_id != str(telegram_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "К аккаунту уже привязан другой Telegram")
+    existing = await find_identity(session, AuthProvider.telegram, str(telegram_id))
+    if existing is not None and existing.user_id != user.id:
+        await absorb_empty_telegram_owner(session, existing, telegram_id)
     if own is None:
         session.add(
             AuthIdentity(
@@ -124,12 +184,19 @@ async def link_yandex(session: AsyncSession, user: User, yandex_id: str, profile
         raise HTTPException(status.HTTP_409_CONFLICT, YANDEX_TAKEN) from None
 
 
+async def email_taken_message(session: AsyncSession, user: User) -> str:
+    if await user_identity(session, user, AuthProvider.telegram) is not None:
+        return EMAIL_TAKEN_FOR_TELEGRAM
+    return EMAIL_TAKEN
+
+
 async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -> None:
     if user.email is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "К аккаунту уже привязан email")
     email = normalize_email(body.email)
+    taken = await email_taken_message(session, user)
     if await session.scalar(select(User.id).where(User.email == email)) is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, EMAIL_TAKEN)
+        raise HTTPException(status.HTTP_409_CONFLICT, taken)
     user.email = email
     user.email_verified_at = None
     user.password_hash = hash_password(body.password)
@@ -138,7 +205,7 @@ async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, EMAIL_TAKEN) from None
+        raise HTTPException(status.HTTP_409_CONFLICT, taken) from None
 
 
 async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvider) -> None:

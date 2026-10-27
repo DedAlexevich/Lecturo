@@ -1,3 +1,4 @@
+import { LinkTelegramPrompt } from "../telegram/LinkTelegramPrompt";
 import { TelegramBridge } from "../telegram/TelegramBridge";
 import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
@@ -116,6 +117,7 @@ export function Layout() {
       {signedIn && <Navigation className={styles.bottomNav} />}
       {signedIn && <AddLectureDialog />}
       {signedIn && <QuotaDialog />}
+      {signedIn && <LinkTelegramPrompt />}
       <CookieNotice />
     </div>
   );
