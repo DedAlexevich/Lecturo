@@ -71,12 +71,14 @@ class VkStartIn(Schema):
 
 class VkStartOut(Schema):
     url: str
+    nonce: str
 
 
 class VkCallbackIn(Schema):
     code: str = Field(min_length=1, max_length=2048)
     state: str = Field(min_length=1, max_length=256)
     device_id: str = Field(min_length=1, max_length=256)
+    nonce: str = Field(min_length=1, max_length=256)
 
 
 class EmailIn(Schema):

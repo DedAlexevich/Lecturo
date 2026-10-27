@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     vk_authorize_url: str = "https://id.vk.com/authorize"
     vk_token_url: str = "https://id.vk.com/oauth2/auth"
     vk_user_info_url: str = "https://id.vk.com/oauth2/user_info"
+    vk_start_rate_limit: int = 30
+    vk_start_rate_window_seconds: int = 3600
 
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""

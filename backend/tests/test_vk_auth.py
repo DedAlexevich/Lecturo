@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
 from app.core.config import get_settings
@@ -60,6 +61,15 @@ def vk_settings(monkeypatch) -> None:
     monkeypatch.setattr(settings, "vk_user_info_url", USER_INFO_URL)
 
 
+@pytest.fixture(autouse=True)
+async def reset_start_rate_limit() -> AsyncIterator[None]:
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete("rate:vk-start:127.0.0.1")
+    yield
+    await redis.delete("rate:vk-start:127.0.0.1")
+    await redis.aclose()
+
+
 @pytest.fixture
 def vk_id() -> str:
     return str(random.randint(10**8, 10**9))
@@ -99,8 +109,22 @@ def headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id)}"}
 
 
+NONCES: dict[str, str] = {}
+
+
+def remember(response) -> str:
+    state = parse_qs(urlparse(response.json()["url"]).query)["state"][0]
+    NONCES[state] = response.json()["nonce"]
+    return state
+
+
 def callback_body(state: str, code: str = "auth-code") -> dict:
-    return {"code": code, "state": state, "device_id": "device-1"}
+    return {
+        "code": code,
+        "state": state,
+        "device_id": "device-1",
+        "nonce": NONCES.get(state, "unknown"),
+    }
 
 
 async def finish_login(client, state: str) -> int:
@@ -111,13 +135,13 @@ async def finish_login(client, state: str) -> int:
 async def start_login(client, **consents) -> str:
     response = await client.post("/api/v1/auth/vk/start", json=consents)
     assert response.status_code == 200
-    return parse_qs(urlparse(response.json()["url"]).query)["state"][0]
+    return remember(response)
 
 
 async def start_link(client, user: User) -> str:
     response = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
     assert response.status_code == 200
-    return parse_qs(urlparse(response.json()["url"]).query)["state"][0]
+    return remember(response)
 
 
 async def users_with_vk(vk_id: str) -> list[AuthIdentity]:
@@ -186,7 +210,7 @@ async def test_token_exchange_sends_pkce_verifier(client, vk, cleanup):
         "/api/v1/auth/vk/start", json={"accept_terms": True, "accept_personal_data": True}
     )
     query = parse_qs(urlparse(start.json()["url"]).query)
-    state = query["state"][0]
+    state = remember(start)
     challenge = query["code_challenge"][0]
     response = await client.post("/api/v1/auth/vk/callback", json=callback_body(state, "abc"))
     assert response.status_code == 200
@@ -348,3 +372,27 @@ async def test_unlink_only_vk_is_forbidden(client, vk_id, cleanup):
     user = await create_user(cleanup, [(AuthProvider.vk, vk_id)])
     response = await client.delete("/api/v1/me/identities/vk", headers=headers(user))
     assert response.status_code == 409
+
+
+async def test_callback_with_wrong_nonce_is_rejected(client, vk, vk_id, cleanup):
+    await create_user(cleanup, [(AuthProvider.vk, vk_id)])
+    state = await start_login(client)
+    body = callback_body(state) | {"nonce": "another-browser"}
+    response = await client.post("/api/v1/auth/vk/callback", json=body)
+    assert response.status_code == 400
+    assert vk.requests == []
+
+
+async def test_link_with_wrong_nonce_is_rejected(client, vk, cleanup):
+    user = await create_user(cleanup, [(AuthProvider.email, "nonce@example.test")])
+    state = await start_link(client, user)
+    body = callback_body(state) | {"nonce": "another-browser"}
+    response = await client.post("/api/v1/me/identities/vk", json=body, headers=headers(user))
+    assert response.status_code == 400
+    assert vk.requests == []
+
+
+async def test_start_is_rate_limited(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "vk_start_rate_limit", 2)
+    statuses = [(await client.post("/api/v1/auth/vk/start", json={})).status_code for _ in range(3)]
+    assert statuses == [200, 200, 429]

@@ -78,7 +78,8 @@ async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: Sessi
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"}},
 )
 async def start_vk_link(user: CurrentUser) -> VkStartOut:
-    return VkStartOut(url=await start_flow(get_settings(), user_id=user.id))
+    url, nonce = await start_flow(get_settings(), user_id=user.id)
+    return VkStartOut(url=url, nonce=nonce)
 
 
 @router.post(
@@ -98,7 +99,7 @@ async def link_vk(
     client: VkClientDep,
 ) -> UserOut:
     vk_id, profile, _ = await complete_flow(
-        get_settings(), client, body.code, body.state, body.device_id, user.id
+        get_settings(), client, body.code, body.state, body.device_id, body.nonce, user.id
     )
     await identities.link_vk(session, user, vk_id, profile)
     return await identities.user_out(session, user)

@@ -114,12 +114,14 @@ async def start_flow(
     user_id: uuid.UUID | None = None,
     accept_terms: bool = False,
     accept_personal_data: bool = False,
-) -> str:
+) -> tuple[str, str]:
     require_vk_enabled(settings)
     state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
     verifier = secrets.token_urlsafe(64)
     record = {
         "verifier": verifier,
+        "nonce": nonce,
         "user_id": str(user_id) if user_id else None,
         "accept_terms": accept_terms,
         "accept_personal_data": accept_personal_data,
@@ -141,10 +143,10 @@ async def start_flow(
             "code_challenge_method": "S256",
         }
     )
-    return f"{settings.vk_authorize_url}?{query}"
+    return f"{settings.vk_authorize_url}?{query}", nonce
 
 
-async def take_flow(settings: Settings, state: str, user_id: uuid.UUID | None) -> dict:
+async def take_flow(settings: Settings, state: str, nonce: str, user_id: uuid.UUID | None) -> dict:
     redis = Redis.from_url(settings.redis_url)
     try:
         raw = await redis.getdel(state_key(state))
@@ -155,7 +157,9 @@ async def take_flow(settings: Settings, state: str, user_id: uuid.UUID | None) -
     if raw is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
     record = json.loads(raw)
-    if record["user_id"] != (str(user_id) if user_id else None):
+    if not secrets.compare_digest(record["nonce"], nonce) or record["user_id"] != (
+        str(user_id) if user_id else None
+    ):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
     return record
 
@@ -166,10 +170,11 @@ async def complete_flow(
     code: str,
     state: str,
     device_id: str,
+    nonce: str,
     user_id: uuid.UUID | None = None,
 ) -> tuple[str, dict, dict]:
     require_vk_enabled(settings)
-    record = await take_flow(settings, state, user_id)
+    record = await take_flow(settings, state, nonce, user_id)
     access_token = await client.exchange_code(code, record["verifier"], device_id, state)
     vk_id, profile = await client.fetch_profile(access_token)
     return vk_id, profile, record
@@ -196,7 +201,7 @@ async def get_or_create_vk_user(
         display_name = " ".join(
             part for part in (profile.get("first_name"), profile.get("last_name")) if part
         )
-        user = User(display_name=display_name[:120])
+        user = User(display_name=(display_name or "Пользователь VK")[:120])
         record_signup_consents(user)
         user.identities.append(
             AuthIdentity(provider=AuthProvider.vk, provider_user_id=vk_id, data=profile)

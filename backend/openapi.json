@@ -205,6 +205,9 @@
               }
             }
           },
+          "429": {
+            "description": "Слишком много попыток входа"
+          },
           "503": {
             "description": "Вход через VK не настроен"
           },
@@ -4335,13 +4338,20 @@
             "maxLength": 256,
             "minLength": 1,
             "title": "Device Id"
+          },
+          "nonce": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Nonce"
           }
         },
         "type": "object",
         "required": [
           "code",
           "state",
-          "device_id"
+          "device_id",
+          "nonce"
         ],
         "title": "VkCallbackIn"
       },
@@ -4366,11 +4376,16 @@
           "url": {
             "type": "string",
             "title": "Url"
+          },
+          "nonce": {
+            "type": "string",
+            "title": "Nonce"
           }
         },
         "type": "object",
         "required": [
-          "url"
+          "url",
+          "nonce"
         ],
         "title": "VkStartOut"
       },

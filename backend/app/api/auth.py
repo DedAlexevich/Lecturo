@@ -26,7 +26,7 @@ from app.services.auth import authenticate, hash_password, normalize_email, regi
 from app.services.auth_tokens import consume_token, issue_token
 from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
-from app.services.rate_limit import enforce_mail_rate_limit
+from app.services.rate_limit import enforce_mail_rate_limit, enforce_rate_limit
 from app.services.telegram_auth import (
     TELEGRAM_PROFILE_FIELDS,
     get_or_create_telegram_user,
@@ -79,15 +79,26 @@ async def providers() -> ProvidersOut:
 
 @router.post(
     "/vk/start",
-    responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"}},
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
 )
-async def start_vk_login(body: VkStartIn) -> VkStartOut:
-    url = await start_flow(
-        get_settings(),
+async def start_vk_login(body: VkStartIn, request: Request) -> VkStartOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:vk-start:{ip}",
+        settings.vk_start_rate_limit,
+        settings.vk_start_rate_window_seconds,
+    )
+    url, nonce = await start_flow(
+        settings,
         accept_terms=body.accept_terms,
         accept_personal_data=body.accept_personal_data,
     )
-    return VkStartOut(url=url)
+    return VkStartOut(url=url, nonce=nonce)
 
 
 @router.post(
@@ -102,7 +113,7 @@ async def start_vk_login(body: VkStartIn) -> VkStartOut:
 )
 async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep) -> TokenOut:
     vk_id, profile, flow = await complete_flow(
-        get_settings(), client, body.code, body.state, body.device_id
+        get_settings(), client, body.code, body.state, body.device_id, body.nonce
     )
     user = await get_or_create_vk_user(
         session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
