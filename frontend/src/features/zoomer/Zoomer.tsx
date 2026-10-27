@@ -61,8 +61,12 @@ export function ZoomerClip({ src, autoplay, onHide }: { src: string; autoplay: b
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
         />
-        {!playing && !autoplay && (
-          <button type="button" className="zoomer__start" onClick={() => void video.current?.play()}>
+        {!playing && (
+          <button
+            type="button"
+            className="zoomer__start"
+            onClick={() => void video.current?.play().catch(() => setPlaying(false))}
+          >
             Запустить
           </button>
         )}
