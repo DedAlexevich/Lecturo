@@ -56,7 +56,9 @@
 }
 
 .lecture__title-row .lecture__title-actions {
+  flex-shrink: 1;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 @media (min-width: 40rem) {

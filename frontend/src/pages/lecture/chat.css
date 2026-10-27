@@ -1,0 +1,121 @@
+.lecture-chat {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.lecture-chat__messages {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+}
+
+.lecture-chat__empty,
+.lecture-chat__pending,
+.lecture-chat__error {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.lecture-chat__error {
+  color: var(--color-danger);
+}
+
+.lecture-chat__message {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+}
+
+.lecture-chat__message--user {
+  margin-left: var(--space-5);
+  background: var(--color-data-soft);
+}
+
+.lecture-chat__speaker,
+.lecture-chat__text,
+.lecture-chat__extra {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.lecture-chat__speaker,
+.lecture-chat__extra {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.lecture-chat__sources {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lecture-chat__sources li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.lecture-chat__sources button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lecture-chat__sources button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.lecture-chat__form {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.lecture-chat__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.lecture-chat__form textarea {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.lecture-chat__form textarea:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.lecture-chat__form .button {
+  justify-self: end;
+}
