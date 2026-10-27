@@ -33,6 +33,7 @@ type ProcessingProps = {
   onRetry: () => void;
   retrying: boolean;
   retryError: Error | null;
+  stalled: boolean;
 };
 
 function headline(status: LectureStatus, queuePosition: number | null) {
@@ -52,7 +53,7 @@ function retryMessage(error: Error) {
   return "Не удалось перезапустить обработку. Попробуйте ещё раз.";
 }
 
-export function Processing({ status, queuePosition, steps, onRetry, retrying, retryError }: ProcessingProps) {
+export function Processing({ status, queuePosition, steps, onRetry, retrying, retryError, stalled }: ProcessingProps) {
   const visible = steps
     .filter((step) => step.step !== "quiz")
     .sort((a, b) => stepOrder.indexOf(a.step) - stepOrder.indexOf(b.step));
@@ -62,10 +63,9 @@ export function Processing({ status, queuePosition, steps, onRetry, retrying, re
     <section
       className={failed ? "processing processing--failed" : "processing"}
       aria-labelledby="lecture-processing"
-      aria-live="polite"
     >
       <div className="processing__head">
-        <h2 id="lecture-processing" className="processing__title">
+        <h2 id="lecture-processing" className="processing__title" aria-live="polite">
           {headline(status, queuePosition)}
         </h2>
         {failed && (
@@ -77,6 +77,11 @@ export function Processing({ status, queuePosition, steps, onRetry, retrying, re
       {!failed && (
         <p className="processing__note">
           Страница обновится сама. Конспект и главы появятся здесь, как только будут готовы.
+        </p>
+      )}
+      {stalled && (
+        <p className="processing__error" role="status">
+          Не получается узнать статус обработки. Пробуем снова, данные могут быть устаревшими.
         </p>
       )}
       {retryError && (

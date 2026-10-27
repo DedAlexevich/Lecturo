@@ -156,7 +156,7 @@ export function LecturePage() {
   const { key: locationKey } = useLocation();
   const startAt = parseStartTime(searchParams.get("t"));
   const lecture = useLecture(id);
-  const status = useLectureStatus(id, lecture.data?.status);
+  const status = useLectureStatus(id, lecture.data);
   const retry = useRetryProcessing(id);
   const [tab, setTab] = useState<PanelKind>("summary");
   const { currentTime, seek, playFrom, bind } = usePlayer();
@@ -205,12 +205,13 @@ export function LecturePage() {
       </header>
       {showProcessing && (
         <Processing
-          status={data.status}
+          status={progress?.status ?? data.status}
           queuePosition={progress?.queue_position ?? null}
           steps={progress?.steps ?? data.steps}
           onRetry={() => retry.mutate()}
           retrying={retry.isPending}
           retryError={retry.error}
+          stalled={status.stalled}
         />
       )}
       <div className="lecture__body">
