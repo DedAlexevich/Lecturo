@@ -4,6 +4,7 @@ import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
+import { CoursesDialog } from "./CoursesDialog";
 import { useDeleteLecture, useRenameLecture } from "./queries";
 import "./lecture-actions.css";
 
@@ -18,7 +19,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
   const panelId = useId();
   const formId = useId();
   const [expanded, setExpanded] = useState(false);
-  const [action, setAction] = useState<"rename" | "delete" | null>(null);
+  const [action, setAction] = useState<"rename" | "courses" | "delete" | null>(null);
   const [title, setTitle] = useState(lecture.title);
   const [touched, setTouched] = useState(false);
   const rename = useRenameLecture(lecture.id);
@@ -35,7 +36,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
     return () => document.removeEventListener("pointerdown", outside);
   }, [expanded]);
 
-  function open(next: "rename" | "delete") {
+  function open(next: "rename" | "courses" | "delete") {
     setExpanded(false);
     trigger.current?.focus();
     setTitle(lecture.title);
@@ -45,20 +46,20 @@ export function LectureActions({ lecture }: LectureActionsProps) {
     setAction(next);
   }
 
-  function finishRename() {
+  function finishAction() {
     setAction(null);
     requestAnimationFrame(() => trigger.current?.focus());
   }
 
   function close() {
-    if (!pending) finishRename();
+    if (!pending) finishAction();
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
     if (pending || title.trim() === "") return;
-    rename.mutate(title.trim(), { onSuccess: finishRename });
+    rename.mutate(title.trim(), { onSuccess: finishAction });
   }
 
   return (
@@ -95,6 +96,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
       {expanded && (
         <div id={panelId} className="lecture-actions__panel">
           <Button variant="ghost" onClick={() => open("rename")}>Переименовать</Button>
+          <Button variant="ghost" onClick={() => open("courses")}>В курс…</Button>
           <Button variant="ghost" className="lecture-actions__delete" onClick={() => open("delete")}>
             Удалить
           </Button>
@@ -135,6 +137,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
           </form>
         </Dialog>
       )}
+      {action === "courses" && <CoursesDialog lecture={lecture} onClose={finishAction} />}
       {action === "delete" && (
         <Dialog
           open
