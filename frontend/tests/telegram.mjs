@@ -44,7 +44,7 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
       responseStatus = 401;
       body = { detail: "Недействительный токен" };
     } else if (path === "/api/v1/me") {
-      body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: [], balance_seconds: 0 };
+      body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: platform ? [{ provider: "telegram", created_at: "2026-10-27T00:00:00Z" }] : [], balance_seconds: 0 };
     }
     await route.fulfill({ status: responseStatus, json: body });
   });
