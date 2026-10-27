@@ -15,6 +15,7 @@ SLUGS = (
     "refund",
     "cookies",
     "ai-transfer",
+    "licenses",
 )
 TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 REVISION_RE = re.compile(r"^Редакция от (\d{4}-\d{2}-\d{2})$", re.MULTILINE)
