@@ -18,7 +18,7 @@ export function buildMatcher(query: string) {
     .map((word) => escape(stem(word)));
   if (stems.length === 0) return null;
   const unique = [...new Set(stems)].sort((a, b) => b.length - a.length);
-  return new RegExp(`(?:${unique.join("|")})[\\p{L}\\p{N}]*`, "giu");
+  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${unique.join("|")})[\\p{L}\\p{N}]*`, "giu");
 }
 
 export function highlight(text: string, matcher: RegExp | null): ReactNode[] {
