@@ -112,4 +112,11 @@ async def test_paid_endpoints_pass_subscriber(client, user, auth_headers, method
 
     response = await client.request(method, path.format(id=uuid.uuid4()), headers=auth_headers)
 
-    assert response.status_code != 403
+    assert response.status_code == 501
+
+
+@pytest.mark.parametrize(("method", "path"), PAID_ENDPOINTS)
+async def test_paid_endpoints_need_login(client, method, path):
+    response = await client.request(method, path.format(id=uuid.uuid4()))
+
+    assert response.status_code == 401
