@@ -279,9 +279,13 @@ try {
         ? route.fulfill({ json: { url: `${exportPath}?token=signed-export`, expires_at: "2026-10-27T00:02:00Z" } })
         : route.fulfill({ status: linkStatus, json: { detail: "Расшифровки ещё нет" } });
     });
+    const fileStatuses = [];
     await page.route((url) => url.pathname === exportPath, (route) => {
       downloads.push(route.request().url());
-      return route.fulfill({ body: "%PDF-1.4", headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="lecture.pdf"' } });
+      const fileStatus = fileStatuses.shift() ?? 200;
+      return fileStatus === 200
+        ? route.fulfill({ body: "%PDF-1.4", headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="lecture.pdf"' } })
+        : route.fulfill({ status: fileStatus, json: { detail: "Ссылка недействительна" } });
     });
     if (platform) {
       await page.goto(base + "/login");
@@ -302,7 +306,7 @@ try {
     } else {
       const [download] = await Promise.all([page.waitForEvent("download"), pdf.click()]);
       assert.equal(download.suggestedFilename(), "lecture.pdf");
-      assert.deepEqual(downloads, [`${base}${exportPath}?token=signed-export`]);
+      assert.deepEqual(downloads, [`${base}${exportPath}?token=signed-export`, `${base}${exportPath}?token=signed-export`]);
       assert.equal(page.url(), base + `/lectures/${lectureId}`);
     }
     assert.equal(linkRequests[0].path, `/api/v1/lectures/${lectureId}/exports/pdf/link`);
@@ -312,11 +316,97 @@ try {
     await page.getByRole("button", { name: "SRT", exact: true }).click();
     await page.getByText("Файл ещё не готов, попробуйте позже.").waitFor();
     assert.equal(linkRequests.length, 2);
-    assert.equal(downloads.length, platform ? 0 : 1);
+    assert.equal(downloads.length, platform ? 0 : 2);
+    if (!platform) {
+      linkStatus = 200;
+      fileStatuses.push(500);
+      await pdf.click();
+      const failure = page.getByRole("alert").filter({ hasText: "Не удалось скачать PDF" });
+      await failure.waitFor();
+      assert.equal(page.url(), base + `/lectures/${lectureId}`);
+      assert.equal(downloads.length, 3);
+      const [download] = await Promise.all([page.waitForEvent("download"), failure.getByRole("button", { name: "Попробовать снова" }).click()]);
+      assert.equal(download.suggestedFilename(), "lecture.pdf");
+      await failure.waitFor({ state: "detached" });
+      assert.equal(linkRequests.length, 4);
+      fileStatuses.push(401);
+      const [refreshed] = await Promise.all([page.waitForEvent("download"), pdf.click()]);
+      assert.equal(refreshed.suggestedFilename(), "lecture.pdf");
+      assert.equal(linkRequests.length, 6);
+      fileStatuses.push(401, 401);
+      await pdf.click();
+      await failure.waitFor();
+      assert.equal(linkRequests.length, 8);
+      assert.equal(page.url(), base + `/lectures/${lectureId}`);
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      }
+    }
     assert.deepEqual(errors, []);
     await context.close();
   }
-  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors, export links");
+  for (const platform of ["android", undefined]) {
+    const { context, page, errors } = await setup(platform);
+    if (platform) {
+      await page.goto(base + "/login");
+      await page.waitForURL(base + "/");
+    }
+    await page.goto(base + "/local");
+    await page.getByRole("heading", { level: 1 }).waitFor();
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const request = indexedDB.open("lecturo-local");
+      request.onsuccess = () => {
+        const transaction = request.result.transaction("lectures", "readwrite");
+        transaction.objectStore("lectures").put({ id: "fixture", title: "Проверочная лекция", createdAt: Date.now(), durationSec: 10, language: "ru", model: "tiny", segments: [{ start: 0, end: 10, text: "Тестовая запись" }], chapters: [], summaryMd: null });
+        transaction.oncomplete = () => { request.result.close(); resolve(); };
+        transaction.onerror = reject;
+      };
+      request.onerror = reject;
+    }));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const markdown = page.getByRole("button", { name: "Скачать «Проверочная лекция» в формате MD" });
+    if (platform) {
+      await page.evaluate(() => {
+        window.mock.copied = [];
+        window.mock.shared = [];
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: (text) => { window.mock.copied.push(text); return Promise.resolve(); } } });
+        navigator.canShare = (data) => Boolean(data.files);
+        navigator.share = (data) => { window.mock.shared.push(data.files ? data.files.map((file) => file.name) : data.text); return Promise.resolve(); };
+      });
+      await markdown.click();
+      const dialog = page.getByRole("dialog", { name: "Markdown" });
+      await dialog.waitFor();
+      assert.match(await dialog.getByRole("textbox").inputValue(), /^# Проверочная лекция/);
+      await dialog.getByRole("button", { name: "Скопировать" }).click();
+      await dialog.getByText("Текст скопирован.").waitFor();
+      assert.match((await page.evaluate(() => window.mock.copied))[0], /Тестовая запись/);
+      await dialog.getByRole("button", { name: "Поделиться" }).click();
+      await page.waitForFunction(() => window.mock.shared.length === 1);
+      assert.deepEqual(await page.evaluate(() => window.mock.shared), [["Проверочная лекция.md"]]);
+      await page.evaluate(() => {
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("denied")) } });
+        document.execCommand = () => true;
+      });
+      await dialog.getByRole("button", { name: "Скопировать" }).click();
+      await dialog.getByText("Текст скопирован.").waitFor();
+      for (const width of [360, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        const box = await dialog.boundingBox();
+        assert.ok(box.x >= 0 && box.x + box.width <= width);
+      }
+      await dialog.getByRole("button", { name: "Закрыть" }).click();
+      await dialog.waitFor({ state: "hidden" });
+    } else {
+      const [download] = await Promise.all([page.waitForEvent("download"), markdown.click()]);
+      assert.equal(download.suggestedFilename(), "Проверочная лекция.md");
+      assert.equal(await page.getByRole("dialog").count(), 0);
+    }
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors, export links, local export");
 } finally {
   await browser.close();
 }
