@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict
 from collections.abc import Sequence
 
@@ -7,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Lecture, SearchChunk
 from app.providers import get_embeddings
+from app.providers.openai_compat import OpenAICompatibleError
 from app.schemas.search import SearchHit
+
+logger = logging.getLogger(__name__)
 
 RRF_K = 60
 CANDIDATES = 50
@@ -15,18 +19,21 @@ LIMIT = 20
 LEXEME_PATTERN = r"'((?:[^']|'')+)'"
 
 
-async def embed_query(q: str) -> list[float]:
-    [vector] = await get_embeddings().embed([q])
+async def embed_query(q: str) -> list[float] | None:
+    try:
+        [vector] = await get_embeddings().embed([q])
+    except OpenAICompatibleError:
+        logger.exception("Не удалось получить эмбеддинг запроса, ищем только по тексту")
+        return None
     return vector
 
 
 async def hybrid_search(
-    session: AsyncSession, scope: ColumnElement[bool], q: str, vector: list[float]
+    session: AsyncSession, scope: ColumnElement[bool], q: str, vector: list[float] | None
 ) -> list[SearchHit]:
-    ranked_lists = [
-        await fulltext_ids(session, scope, q),
-        await vector_ids(session, scope, vector),
-    ]
+    ranked_lists = [await fulltext_ids(session, scope, q)]
+    if vector is not None:
+        ranked_lists.append(await vector_ids(session, scope, vector))
     scores = rrf(ranked_lists)
     top = sorted(scores, key=scores.__getitem__, reverse=True)[:LIMIT]
     if not top:

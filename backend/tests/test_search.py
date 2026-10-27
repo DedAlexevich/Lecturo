@@ -4,7 +4,9 @@ import pytest
 
 from app.core.db import SessionLocal
 from app.models import Course, Lecture, SearchChunk, SourceType, User, course_lectures
+from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import StubEmbeddings
+from app.services import search as search_service
 from app.services.search import LIMIT, RRF_K, rrf
 
 
@@ -96,6 +98,23 @@ async def test_odd_queries_do_not_fail(client, user, auth_headers, q):
     response = await search(client, auth_headers, q=q, lecture_id=str(lecture_id))
 
     assert response.status_code == 200
+
+
+class BrokenEmbeddings(StubEmbeddings):
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise OpenAICompatibleError("/embeddings: нет ответа от API")
+
+
+async def test_falls_back_to_fulltext_when_embeddings_fail(client, user, auth_headers, monkeypatch):
+    lecture_id = await create_lecture(
+        user.id, "Лекция", "Пределы последовательностей", "Определённые интегралы"
+    )
+    monkeypatch.setattr(search_service, "get_embeddings", BrokenEmbeddings)
+
+    response = await search(client, auth_headers, q="интеграл", lecture_id=str(lecture_id))
+
+    assert response.status_code == 200
+    assert [hit["text"] for hit in response.json()] == ["Определённые интегралы"]
 
 
 async def test_course_search_covers_only_course_lectures(client, user, auth_headers):
