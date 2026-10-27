@@ -1,7 +1,6 @@
 import asyncio
 import uuid
 from collections.abc import Callable, Iterable
-from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
@@ -44,7 +43,7 @@ async def subtitles_response(
 @router.get("/export.srt", response_class=Response)
 async def export_srt(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     return await subtitles_response(
-        session, user, lecture_id, to_srt, "srt", "application/x-subrip"
+        session, user, lecture_id, to_srt, "srt", "application/x-subrip; charset=utf-8"
     )
 
 
@@ -68,11 +67,8 @@ async def export_pdf(lecture_id: uuid.UUID, user: CurrentUser, session: SessionD
 
     html = lecture_html(lecture, get_settings().public_url.rstrip("/"))
     content = await asyncio.to_thread(render_pdf, html)
-    filename = quote(f"{lecture.title}.pdf", safe="")
     return Response(
         content,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"inline; filename=\"lecture.pdf\"; filename*=UTF-8''{filename}"
-        },
+        headers={"Content-Disposition": content_disposition(lecture.title, "pdf")},
     )
