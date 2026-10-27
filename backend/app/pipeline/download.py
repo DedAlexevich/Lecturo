@@ -73,6 +73,18 @@ def is_yandex_disk(url: str) -> bool:
     return normalized_host(urlparse(url)) in YANDEX_DISK_HOSTS
 
 
+def is_youtube(url: str) -> bool:
+    host = normalized_host(urlparse(url))
+    return host in YOUTUBE_HOSTS or host == "youtu.be"
+
+
+def ydl_options(url: str) -> dict[str, Any]:
+    proxy = get_settings().youtube_proxy
+    if proxy and is_youtube(url):
+        return {**BASE_OPTIONS, "proxy": proxy}
+    return BASE_OPTIONS
+
+
 def with_scheme(url: str) -> str:
     url = url.strip()
     if url and not SCHEME.match(url):
@@ -189,7 +201,7 @@ async def resolve_yandex_disk(
 
 
 def extract_info(url: str) -> dict[str, Any]:
-    with YoutubeDL(BASE_OPTIONS) as ydl:
+    with YoutubeDL(ydl_options(url)) as ydl:
         return ydl.extract_info(url, download=False)
 
 
@@ -254,7 +266,7 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
             progress["fraction"] = status.get("downloaded_bytes", 0) / total
 
     options = {
-        **BASE_OPTIONS,
+        **ydl_options(url),
         "outtmpl": f"{target}.%(ext)s",
         "progress_hooks": [on_progress],
         "postprocessors": [

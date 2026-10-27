@@ -446,3 +446,60 @@ def test_fetch_audio_requires_downloaded_file(monkeypatch, tmp_path, creates_fil
     else:
         with pytest.raises(RuntimeError, match="не скачалось"):
             download.fetch_audio("https://vkvideo.ru/video-1_2", target, {})
+
+
+@pytest.fixture
+def youtube_proxy(monkeypatch):
+    monkeypatch.setenv("YOUTUBE_PROXY", "socks5h://user:secret@proxy.test:1080")
+    download.get_settings.cache_clear()
+    yield "socks5h://user:secret@proxy.test:1080"
+    download.get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+        "https://m.youtube.com/shorts/dQw4w9WgXcQ",
+        "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    ],
+)
+def test_youtube_goes_through_proxy(youtube_proxy, url):
+    assert download.ydl_options(url)["proxy"] == youtube_proxy
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://rutube.ru/video/{RUTUBE_ID}/",
+        "https://vkvideo.ru/video-12345_456239017",
+        "https://files.lecturo.test/lecture.mp4",
+        "https://notyoutube.com/watch?v=dQw4w9WgXcQ",
+    ],
+)
+def test_other_sources_skip_proxy(youtube_proxy, url):
+    assert "proxy" not in download.ydl_options(url)
+
+
+def test_no_proxy_without_setting(monkeypatch):
+    monkeypatch.delenv("YOUTUBE_PROXY", raising=False)
+    download.get_settings.cache_clear()
+    try:
+        assert download.ydl_options("https://youtu.be/dQw4w9WgXcQ") == download.BASE_OPTIONS
+    finally:
+        download.get_settings.cache_clear()
+
+
+def test_fetch_audio_uses_proxy_for_youtube(monkeypatch, tmp_path, youtube_proxy):
+    used = []
+
+    def fake_ydl(options):
+        used.append(options)
+        return FakeYoutubeDL(options, True)
+
+    monkeypatch.setattr(download, "YoutubeDL", fake_ydl)
+    download.fetch_audio("https://youtu.be/dQw4w9WgXcQ", tmp_path / "lecture", {})
+
+    assert used[0]["proxy"] == youtube_proxy
+    assert used[0]["format"] == "bestaudio/best"
