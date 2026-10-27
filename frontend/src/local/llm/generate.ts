@@ -1,4 +1,4 @@
-import { CreateWebWorkerMLCEngine, type WebWorkerMLCEngine } from "@mlc-ai/web-llm";
+import type { WebWorkerMLCEngine } from "@mlc-ai/web-llm";
 import type { LocalSegment } from "../storage/types";
 import { detectLlmPrecision } from "./device";
 import { LLM_MODEL } from "./models";
@@ -37,10 +37,13 @@ function getEngine(modelId: string): Promise<WebWorkerMLCEngine> {
   disposeLlm();
   worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
   engineModel = modelId;
-  const created = CreateWebWorkerMLCEngine(worker, modelId, {
-    logLevel: "WARN",
-    initProgressCallback: (report) => onLoadProgress?.(report.progress),
-  });
+  const target = worker;
+  const created = import("@mlc-ai/web-llm").then(({ CreateWebWorkerMLCEngine }) =>
+    CreateWebWorkerMLCEngine(target, modelId, {
+      logLevel: "WARN",
+      initProgressCallback: (report) => onLoadProgress?.(report.progress),
+    }),
+  );
   engine = created;
   created.catch(() => {
     if (engine === created) disposeLlm();
