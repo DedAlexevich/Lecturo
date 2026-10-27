@@ -36,7 +36,7 @@ function pickClip(clips: string[]): string | null {
   return clips[index];
 }
 
-export function useZoomerMode() {
+export function useZoomerMode(allowed: boolean) {
   const [missing, setMissing] = useState(() => readStorage(missingKey, true) !== null);
   const [enabled, setEnabled] = useState(() => !missing && parseStoredMode(readStorage(modeKey)));
   const [clips, setClips] = useState<string[] | null>(null);
@@ -51,7 +51,7 @@ export function useZoomerMode() {
   }, []);
 
   useEffect(() => {
-    if (!enabled || clips !== null) return;
+    if (!allowed || !enabled || clips !== null) return;
     let active = true;
     void loadZoomerClips().then((loaded) => {
       if (active) setClips(loaded);
@@ -59,7 +59,7 @@ export function useZoomerMode() {
     return () => {
       active = false;
     };
-  }, [enabled, clips]);
+  }, [allowed, enabled, clips]);
 
   useEffect(() => {
     if (!enabled || clips === null) return;
@@ -88,9 +88,9 @@ export function useZoomerMode() {
   const cancel = useCallback(() => setConfirming(false), []);
 
   return {
-    available: !missing,
+    available: allowed && !missing,
     enabled,
-    clip: enabled ? clip : null,
+    clip: allowed && enabled ? clip : null,
     autoplay,
     confirming,
     toggle,

@@ -195,7 +195,7 @@ export function LecturePage() {
   const [searching, setSearching] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
   const { currentTime, playFrom, bind } = usePlayer();
-  const zoomer = useZoomerMode();
+  const zoomer = useZoomerMode(Boolean(lecture.data?.video_url));
 
   const rawSegments = lecture.data?.segments;
   const segments = useMemo(
