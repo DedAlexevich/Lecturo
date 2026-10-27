@@ -11,6 +11,8 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
@@ -29,8 +31,8 @@ jobs:
       - name: Deploy
         env:
           SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: ssh "$SSH_TARGET" "/opt/lecturo/infra/deploy.sh $SHA"
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: ssh "$SSH_TARGET" "$SHA"
       - name: Health check
         env:
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
