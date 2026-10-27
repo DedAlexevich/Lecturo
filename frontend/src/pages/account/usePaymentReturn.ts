@@ -4,8 +4,8 @@ import { useSearchParams } from "react-router";
 import { useToast } from "../../ui/Toast";
 import { paymentReturnParam, paymentsQueryKey, quotaQueryKey, rememberedPayment, usePayments } from "./billing";
 
-const pollInterval = 3000;
-const pollLimit = 2 * 60_000;
+export const pollInterval = 3000;
+export const pollLimit = 2 * 60_000;
 
 export function usePaymentReturn() {
   const [params, setParams] = useSearchParams();
