@@ -10,6 +10,7 @@ import { HomePage } from "../pages/home/HomePage";
 import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
 import { CoursePage } from "../pages/course/CoursePage";
+import { PublicSharePage } from "../pages/public/PublicSharePage";
 
 export const guestRoutes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -22,6 +23,7 @@ export const publicRoutes: RouteObject[] = [
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/ui", element: <UiPage /> },
+  { path: "/s/:token", element: <PublicSharePage /> },
 ];
 
 export const privateRoutes: RouteObject[] = [
