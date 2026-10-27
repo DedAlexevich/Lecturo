@@ -12,6 +12,7 @@ import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
 import { CoursePage } from "../pages/course/CoursePage";
 import { PublicSharePage } from "../pages/public/PublicSharePage";
+import { QuizPage } from "../features/quiz/QuizPage";
 
 export const guestRoutes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -31,6 +32,7 @@ export const publicRoutes: RouteObject[] = [
 export const privateRoutes: RouteObject[] = [
   { path: "/", element: <HomePage /> },
   { path: "/lectures/:id", element: <LecturePage /> },
+  { path: "/lectures/:id/quiz", element: <QuizPage /> },
   { path: "/courses/:id", element: <CoursePage /> },
   { path: "/account", element: <AccountPage /> },
 ];

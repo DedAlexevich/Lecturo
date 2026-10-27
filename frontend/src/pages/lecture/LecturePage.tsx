@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
+import { QuizButton } from "../../features/quiz/QuizButton";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { ShareButton } from "../../features/share/ShareButton";
 import { Button } from "../../ui/Button";
@@ -251,6 +252,7 @@ export function LecturePage() {
         <div className="lecture__title-row">
           <h1 className="lecture__title">{data.title}</h1>
           <div className="lecture__title-actions">
+            <QuizButton lecture={data} />
             {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
             <LectureActions lecture={data} />
           </div>
