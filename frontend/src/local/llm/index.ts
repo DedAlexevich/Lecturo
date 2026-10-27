@@ -1,19 +1,12 @@
+import { notesError } from "./gpu";
 import type { LocalChapter, LocalSegment } from "../storage";
+
+export { markWebGPUUnsupported, NO_GPU_MESSAGE, NoGpuError, supportsWebGPU } from "./gpu";
 
 export type NotesProgress = { type: "loading"; value: number } | { type: "generating"; value: number };
 export type Notes = { chapters: LocalChapter[]; summaryMd: string };
 
 type Response = NotesProgress | ({ type: "done" } & Notes) | { type: "error"; message: string };
-
-export async function supportsWebGPU(): Promise<boolean> {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-  if (!gpu) return false;
-  try {
-    return Boolean(await gpu.requestAdapter());
-  } catch {
-    return false;
-  }
-}
 
 export function generateNotes(segments: LocalSegment[], onProgress: (progress: NotesProgress) => void, signal: AbortSignal): Promise<Notes> {
   signal.throwIfAborted();
@@ -36,11 +29,11 @@ export function generateNotes(segments: LocalSegment[], onProgress: (progress: N
       }
       cleanup();
       if (message.type === "done") resolve({ chapters: message.chapters, summaryMd: message.summaryMd });
-      else reject(new Error(message.message));
+      else reject(notesError(message.message));
     };
     worker.onerror = (event) => {
       cleanup();
-      reject(new Error(event.message || "Не удалось запустить модель"));
+      reject(notesError(event.message || "Не удалось запустить модель"));
     };
     worker.postMessage({ segments });
   });
