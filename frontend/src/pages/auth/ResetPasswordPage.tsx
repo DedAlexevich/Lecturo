@@ -7,7 +7,7 @@ import { useToast } from "../../ui/Toast";
 import { AuthLayout } from "./AuthLayout";
 import { fieldErrorsOf, messageOf, type FieldErrors } from "./errors";
 import { useConfirmPasswordReset, useRequestPasswordReset } from "./useAuthRequests";
-import { validateEmail, validateNewPassword } from "./validation";
+import { validateEmail, validateNewPassword, validatePasswordConfirm } from "./validation";
 
 function RequestReset() {
   const [email, setEmail] = useState("");
@@ -76,6 +76,7 @@ function RequestReset() {
 
 function ConfirmReset({ token }: { token: string }) {
   const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
   const confirm = useConfirmPasswordReset();
@@ -85,9 +86,10 @@ function ConfirmReset({ token }: { token: string }) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const passwordError = validateNewPassword(password);
-    setErrors({ password: passwordError });
+    const repeatError = validatePasswordConfirm(password, repeat);
+    setErrors({ password: passwordError, password_repeat: repeatError });
     setFormError(undefined);
-    if (passwordError) return;
+    if (passwordError || repeatError) return;
 
     confirm.mutate(
       { token, password },
@@ -122,6 +124,21 @@ function ConfirmReset({ token }: { token: string }) {
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Повторите новый пароль" error={errors.password_repeat}>
+          {(control) => (
+            <Input
+              {...control}
+              type="password"
+              name="password_repeat"
+              autoComplete="new-password"
+              value={repeat}
+              onChange={(event) => {
+                setRepeat(event.target.value);
+                setErrors((current) => ({ ...current, password_repeat: undefined }));
+              }}
             />
           )}
         </Field>
