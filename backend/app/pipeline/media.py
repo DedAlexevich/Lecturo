@@ -236,7 +236,7 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
             now = datetime.now(UTC)
             days = await quota.video_retention_days(session, owner, now=now, settings=settings)
             lecture.video_expires_at = now + timedelta(days=days)
-    except MediaError:
+    except Exception:
         await asyncio.to_thread(original.unlink, missing_ok=True)
         raise
     await asyncio.to_thread(original.unlink, missing_ok=True)
