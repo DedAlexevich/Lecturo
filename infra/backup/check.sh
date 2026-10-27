@@ -5,11 +5,15 @@ file="${1:+$(realpath "$1")}"
 
 source "$(dirname "$0")/common.sh"
 
-file="${file:-$(latest_backup)}"
+file="${file:-$(latest_backup "$backup_dir")}"
 [ -n "$file" ] || fail "no backups in $backup_dir"
 [ -f "$file" ] || fail "$file not found"
 
-image=$(docker compose config --images db)
+if [ -n "$db_container" ]; then
+  image=$(docker inspect -f '{{.Config.Image}}' "$db_container")
+else
+  image=$(docker compose config --images "$db_service")
+fi
 container="${BACKUP_CHECK_CONTAINER:-lecturo-backup-check}"
 
 docker run -d --rm --name "$container" --network none \

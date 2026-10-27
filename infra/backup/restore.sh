@@ -20,8 +20,7 @@ safety="$backup_dir/pre-restore-$(date -u +%Y%m%d-%H%M%S).dump"
 dump_database "$safety"
 
 docker compose stop api worker bot
-docker compose exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
-if ! docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < "$file"; then
+if ! restore_database "$file"; then
   fail "restore failed, services are stopped, previous database is saved in $safety"
 fi
 
