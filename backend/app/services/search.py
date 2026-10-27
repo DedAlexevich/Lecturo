@@ -24,6 +24,7 @@ MARGIN = 0.08
 KEYWORD_BONUS = 0.03
 NEIGHBOR_GAP = 10.0
 PINPOINTED_MOMENTS = 3
+MAX_SEGMENT_EMBEDDINGS = 16
 CONTEXT_SECONDS = 30.0
 LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
 
@@ -176,25 +177,24 @@ async def pinpoint(
     ][:PINPOINTED_MOMENTS]
     spans = [await moment_segments(session, moment, query) for moment in targets]
     candidates = [
-        [
-            (segment, matched)
-            for segment, matched in span
-            if moment.best.start <= segment.start < moment.best.end
-        ]
+        narrow(
+            [segment for segment in span if moment.best.start <= segment[0].start < moment.best.end]
+        )
         for moment, span in zip(targets, spans, strict=True)
     ]
-    closeness = await segment_closeness(
-        [segment.text for options in candidates for segment, _ in options], vector
-    )
-    offset = 0
+    texts = [segment.text for options in candidates if len(options) > 1 for segment, _ in options]
+    closeness = iter(await segment_closeness(texts[:MAX_SEGMENT_EMBEDDINGS], vector))
     for moment, span, options in zip(targets, spans, candidates, strict=True):
         if not options:
             continue
         scored = [
-            (closeness[offset + idx] + (KEYWORD_BONUS if matched else 0.0), segment)
-            for idx, (segment, matched) in enumerate(options)
+            (
+                (next(closeness, 0.0) if len(options) > 1 else 0.0)
+                + (KEYWORD_BONUS if matched else 0.0),
+                segment,
+            )
+            for segment, matched in options
         ]
-        offset += len(options)
         best = max(scored, key=lambda pair: pair[0])[1]
         moment.at = best.start
         moment.text = " ".join(
@@ -202,6 +202,13 @@ async def pinpoint(
             for segment, _ in span
             if best.start <= segment.start < best.start + CONTEXT_SECONDS
         )
+
+
+def narrow(
+    options: list[tuple[TranscriptSegment, bool]],
+) -> list[tuple[TranscriptSegment, bool]]:
+    matched = [option for option in options if option[1]]
+    return matched or options
 
 
 async def moment_segments(
