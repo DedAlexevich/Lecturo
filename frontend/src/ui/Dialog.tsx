@@ -7,9 +7,10 @@ type DialogProps = {
   title: string;
   children: ReactNode;
   actions?: ReactNode;
+  dismissible?: boolean;
 };
 
-export function Dialog({ open, onClose, title, children, actions }: DialogProps) {
+export function Dialog({ open, onClose, title, children, actions, dismissible = true }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -25,9 +26,12 @@ export function Dialog({ open, onClose, title, children, actions }: DialogProps)
       ref={ref}
       className="dialog"
       aria-labelledby={titleId}
+      onCancel={(event) => {
+        if (!dismissible) event.preventDefault();
+      }}
       onClose={onClose}
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (dismissible && event.target === event.currentTarget) onClose();
       }}
     >
       <div className="dialog__panel">

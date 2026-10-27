@@ -1,5 +1,6 @@
 import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useLocation } from "react-router";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
@@ -10,9 +11,15 @@ import { SectionError, SectionLoading } from "./SectionState";
 export function PurchaseSection() {
   const titleId = useId();
   const { data: products, isPending, isError, refetch } = useProducts();
+  const { hash } = useLocation();
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (hash === "#purchase" && !isPending) sectionRef.current?.scrollIntoView({ block: "start" });
+  }, [hash, isPending]);
 
   return (
-    <section className={styles.panel} aria-labelledby={titleId}>
+    <section ref={sectionRef} id="purchase" className={styles.panel} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
         <h2 id={titleId} className={styles.sectionTitle}>
           Подписка и пакеты часов

@@ -4,7 +4,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright")
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE, headless: true });
 const base = process.env.TEST_BASE_URL ?? "http://127.0.0.1:5186";
 
-async function setup(platform, status = 200, savedToken = false) {
+async function setup(platform, status = 200, savedToken = false, waiting = false) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const requests = [];
@@ -21,6 +21,12 @@ async function setup(platform, status = 200, savedToken = false) {
       requests.push(request);
       responseStatus = request.accept_terms && request.accept_personal_data ? 200 : status;
       body = responseStatus === 200 ? { access_token: "test-token", token_type: "bearer" } : { detail: "Нужно принять документы" };
+    } else if (path.endsWith("/billing/waiting")) {
+      body = {
+        lectures: waiting ? [{ id: "00000000-0000-4000-8000-000000000001", title: "Лекция в ожидании", duration_sec: 120 }] : [],
+        available_sec: 60,
+        resets_at: "2026-11-01T00:00:00Z",
+      };
     } else if (path.endsWith("/billing/quota")) {
       body = { weekly_limit_sec: 3600, weekly_used_sec: 0, package_left_sec: 0, resets_at: "2026-11-01T00:00:00Z" };
     } else if (path.endsWith("/billing/products")) {
@@ -181,6 +187,20 @@ try {
     await page.getByRole("link", { name: "Оплатить", exact: true }).click({ modifiers: ["Control"] });
     assert.equal(await page.evaluate(() => window.nativePrevented), false);
     assert.equal(requests.length, 0);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const { context, page, errors } = await setup("android", 200, false, true);
+    await page.goto(base + "/login");
+    await page.waitForURL(base + "/");
+    await page.getByText("Ждут лимита: 1 лекция.", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => window.mock.events.themeChanged.size), 1);
+    await page.getByRole("button", { name: "Выбрать, что обработать" }).click();
+    await page.getByRole("dialog", { name: "Не хватает лимита" }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Не хватает лимита" }).waitFor({ state: "hidden" });
+    assert.equal(await page.evaluate(() => window.mock.back.size), 1);
     assert.deepEqual(errors, []);
     await context.close();
   }

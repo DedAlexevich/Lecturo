@@ -16,9 +16,10 @@ export type UploadState = {
   sent: number;
   total: number;
   error: string | null;
+  lectureId: string | null;
 };
 
-const idle: UploadState = { phase: "idle", file: null, sent: 0, total: 0, error: null };
+const idle: UploadState = { phase: "idle", file: null, sent: 0, total: 0, error: null, lectureId: null };
 
 const statusMessages: Record<number, string> = {
   401: "Сессия истекла. Войдите заново и выберите файл ещё раз",
@@ -44,6 +45,12 @@ function messageOf(error: Error | DetailedError) {
   const detail = detailOf(parseBody(response.getBody()));
   if (typeof detail === "string") return detail;
   return statusMessages[status] ?? "Сервер не принял файл. Попробуйте ещё раз";
+}
+
+function lectureIdOf(body: string) {
+  const parsed = parseBody(body);
+  if (typeof parsed !== "object" || parsed === null || !("lecture_id" in parsed)) return null;
+  return typeof parsed.lecture_id === "string" ? parsed.lecture_id : null;
 }
 
 function parseBody(body: string) {
@@ -93,7 +100,13 @@ export function useTusUpload(userId: string | undefined) {
             total,
             phase: sent >= total ? "finishing" : state.phase === "paused" ? "paused" : "uploading",
           })),
-        onSuccess: () => update(upload, (state) => ({ ...state, phase: "done", error: null })),
+        onSuccess: ({ lastResponse }) =>
+          update(upload, (state) => ({
+            ...state,
+            phase: "done",
+            error: null,
+            lectureId: lectureIdOf(lastResponse.getBody()),
+          })),
         onError: (error) => {
           if (current.current !== upload) return;
           if (isRejected(error)) {
@@ -109,7 +122,7 @@ export function useTusUpload(userId: string | undefined) {
         },
       });
       current.current = upload;
-      setState({ phase: "uploading", file, sent: 0, total: file.size, error: null });
+      setState({ phase: "uploading", file, sent: 0, total: file.size, error: null, lectureId: null });
       void launch(upload);
     },
     [update, userId],

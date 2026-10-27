@@ -6,6 +6,8 @@ import { Dialog } from "../../ui/Dialog";
 import { Tabs } from "../../ui/Tabs";
 import { useToast } from "../../ui/Toast";
 import { useAiTransferConsent } from "../consent/useAiTransferConsent";
+import { fetchWaiting, waitingQueryKey } from "../quota-dialog/queries";
+import { useQuotaDialogParam } from "../quota-dialog/useQuotaDialogParam";
 import { CourseField } from "./CourseField";
 import { FilePanel } from "./FilePanel";
 import { LinkPanel } from "./LinkPanel";
@@ -28,6 +30,7 @@ export function AddLectureDialog() {
   const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { setOpen: setQuotaDialogOpen } = useQuotaDialogParam();
 
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -52,18 +55,41 @@ export function AddLectureDialog() {
   const refreshLists = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["lectures"] });
     void queryClient.invalidateQueries({ queryKey: ["courses"] });
+    void queryClient.invalidateQueries({ queryKey: ["billing"] });
   }, [queryClient]);
 
-  const { phase, file } = upload.state;
+  const waitsForQuota = useCallback(
+    async (lectureId: string | null) => {
+      if (lectureId === null) return false;
+      const waiting = await queryClient
+        .fetchQuery({ queryKey: waitingQueryKey, queryFn: fetchWaiting, staleTime: 0 })
+        .catch(() => null);
+      return waiting?.lectures.some((lecture) => lecture.id === lectureId) ?? false;
+    },
+    [queryClient],
+  );
+
+  const { phase, file, lectureId } = upload.state;
   const { reset } = upload;
 
   useEffect(() => {
     if (phase !== "done") return;
-    toast.show(`Запись «${file?.name ?? ""}» загружена, начинаем обработку`, "success");
+    const name = file?.name ?? "";
     refreshLists();
     reset();
-    if (open && tab === "file") close();
-  }, [phase, file, open, tab, close, refreshLists, reset, toast]);
+    void waitsForQuota(lectureId).then((waiting) => {
+      if (waiting) {
+        toast.show(`Запись «${name}» загружена, но лимита на неё не хватает`);
+        if (open && tab === "file") {
+          resetLink();
+          setQuotaDialogOpen(true);
+        }
+        return;
+      }
+      toast.show(`Запись «${name}» загружена, начинаем обработку`, "success");
+      if (open && tab === "file") close();
+    });
+  }, [phase, file, lectureId, open, tab, close, refreshLists, reset, resetLink, setQuotaDialogOpen, toast, waitsForQuota]);
 
   const startUpload = (picked: File) => {
     const course = selectedCourse || null;
@@ -79,9 +105,15 @@ export function AddLectureDialog() {
         { url, course_id: selectedCourse || null },
         {
           onSuccess: (lecture) => {
-            toast.show(`Лекция «${lecture.title}» добавлена, начинаем обработку`, "success");
             refreshLists();
             setLinkKey((key) => key + 1);
+            if (lecture.status === "waiting_quota") {
+              toast.show(`Лекция «${lecture.title}» добавлена, но лимита на неё не хватает`);
+              resetLink();
+              setQuotaDialogOpen(true);
+              return;
+            }
+            toast.show(`Лекция «${lecture.title}» добавлена, начинаем обработку`, "success");
             close();
           },
         },
