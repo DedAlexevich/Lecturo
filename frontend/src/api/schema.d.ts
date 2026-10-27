@@ -557,6 +557,23 @@ export interface paths {
         patch: operations["update_lecture_api_v1_lectures__lecture_id__patch"];
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audio File */
+        get: operations["audio_file_api_v1_lectures__lecture_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{lecture_id}/video-access": {
         parameters: {
             query?: never;
@@ -1090,6 +1107,13 @@ export interface components {
             created_at: string;
             /** Video Url */
             video_url?: string | null;
+            /**
+             * Audio Only
+             * @default false
+             */
+            audio_only: boolean;
+            /** Audio Url */
+            audio_url?: string | null;
             /** Steps */
             steps: components["schemas"]["StepOut"][];
             /** Segments */
@@ -3127,6 +3151,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LectureOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audio_file_api_v1_lectures__lecture_id__audio_get: {
+        parameters: {
+            query?: {
+                expires?: string;
+                signature?: string;
+            };
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

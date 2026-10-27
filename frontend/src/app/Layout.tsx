@@ -42,7 +42,7 @@ function UserBlock() {
 
   return (
     <div className={styles.user}>
-      {me && <span className={styles.userName}>{me.display_name}</span>}
+      {me && <span className={styles.userName}>{me.display_name.trim() || me.email}</span>}
       <button type="button" className={styles.textButton} onClick={signOut}>
         Выйти
       </button>

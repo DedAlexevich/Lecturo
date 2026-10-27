@@ -1713,6 +1713,67 @@
         }
       }
     },
+    "/api/v1/lectures/{lecture_id}/audio": {
+      "get": {
+        "tags": [
+          "lectures"
+        ],
+        "summary": "Audio File",
+        "operationId": "audio_file_api_v1_lectures__lecture_id__audio_get",
+        "parameters": [
+          {
+            "name": "lecture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lecture Id"
+            }
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Expires"
+            }
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Signature"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lectures/{lecture_id}/video-access": {
       "get": {
         "tags": [
@@ -3189,6 +3250,22 @@
               }
             ],
             "title": "Video Url"
+          },
+          "audio_only": {
+            "type": "boolean",
+            "title": "Audio Only",
+            "default": false
+          },
+          "audio_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audio Url"
           },
           "steps": {
             "items": {
