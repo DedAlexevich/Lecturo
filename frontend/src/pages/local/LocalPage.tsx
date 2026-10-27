@@ -64,11 +64,12 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   const [saved, setSaved] = useState<LocalLecture | null>(null);
   const [saveError, setSaveError] = useState(false);
   const [webgpu, setWebgpu] = useState(false);
-  const [notesProgress, setNotesProgress] = useState<{ type: "loading" | "generating"; value: number } | null>(null);
+  const [notesProgress, setNotesProgress] = useState<{ type: "loading" | "generating" | "saving"; value: number } | null>(null);
   const [notesError, setNotesError] = useState("");
   const [libraryVersion, setLibraryVersion] = useState(0);
   const player = useRef<HTMLMediaElement | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const savingNotes = useRef(false);
   const transcriptionBusy = stage === "extracting" || stage === "loading" || stage === "transcribing";
   const busy = transcriptionBusy || notesProgress !== null;
 
@@ -141,6 +142,9 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setNotesProgress({ type: "loading", value: 0 });
     try {
       const result = await generateNotes(saved.segments, setNotesProgress, abort.signal);
+      abort.signal.throwIfAborted();
+      savingNotes.current = true;
+      setNotesProgress({ type: "saving", value: 0 });
       const updated = await updateLocalNotes(saved.id, result.chapters, result.summaryMd);
       if (abort.signal.aborted) return;
       setSaved(updated);
@@ -148,12 +152,14 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     } catch (reason) {
       if (!abort.signal.aborted) setNotesError(reason instanceof Error ? reason.message : "Не удалось построить конспект");
     } finally {
+      savingNotes.current = false;
       if (controller.current === abort) controller.current = null;
       if (!abort.signal.aborted) setNotesProgress(null);
     }
   }
 
   function cancel() {
+    if (savingNotes.current) return;
     controller.current?.abort();
     controller.current = null;
     disposeWhisper();
@@ -280,10 +286,10 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
           {stage === "done" && saved && segments.length > 0 && webgpu && <div className="local-actions">
             <Button disabled={busy} onClick={() => void makeNotes()}>{saved.summaryMd ? "Обновить конспект и главы" : "Создать конспект и главы"}</Button>
-            {notesProgress && <Button variant="secondary" onClick={cancel}>Отменить</Button>}
+            {notesProgress && notesProgress.type !== "saving" && <Button variant="secondary" onClick={cancel}>Отменить</Button>}
           </div>}
           {stage === "done" && saved && segments.length > 0 && webgpu && !saved.summaryMd && <p className="local-note">При первом запуске модель конспекта загружается из интернета. Для работы ей требуется около 2 ГБ видеопамяти. Текст обрабатывается на устройстве.</p>}
-          {notesProgress && <Progress label={notesProgress.type === "loading" ? "Загрузка модели конспекта" : "Создание конспекта"} value={notesProgress.value * 100} />}
+          {notesProgress && <Progress label={notesProgress.type === "loading" ? "Загрузка модели конспекта" : notesProgress.type === "saving" ? "Сохранение конспекта" : "Создание конспекта"} value={notesProgress.type === "saving" ? undefined : notesProgress.value * 100} />}
           {notesError && <p className="local-error" role="alert">Не удалось создать конспект: {notesError}</p>}
           {saved?.summaryMd && <section><h2>Конспект</h2><div className="summary"><Markdown source={saved.summaryMd} /></div></section>}
           {saved && saved.chapters.length > 0 && <section><h2>Главы</h2><Chapters chapters={saved.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} /></section>}
