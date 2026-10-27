@@ -1,12 +1,14 @@
 import asyncio
+import contextlib
+import logging
 import uuid
 
 from arq import create_pool
-from arq.connections import RedisSettings
-from arq.constants import abort_jobs_ss
+from arq.connections import ArqRedis, RedisSettings
+from arq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.utils import timestamp_ms
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -16,6 +18,10 @@ from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
+
+logger = logging.getLogger(__name__)
+
+LECTURE_TIMEOUT_SEC = 4 * 3600
 
 HANDLERS: dict[StepName, StepHandler] = {
     StepName.download: download.download,
@@ -29,27 +35,29 @@ HANDLERS: dict[StepName, StepHandler] = {
 ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
 PLANS: dict[SourceType, list[StepName]] = {
-    SourceType.upload: [
-        StepName.audio,
-        StepName.video,
-        StepName.transcribe,
-        StepName.summarize,
-        StepName.embed,
-    ],
+    SourceType.upload: [StepName.audio, StepName.transcribe, StepName.summarize, StepName.embed],
     SourceType.link: [StepName.download, StepName.transcribe, StepName.summarize, StepName.embed],
     SourceType.local: [StepName.embed],
 }
+
+AFTER_READY: dict[SourceType, list[StepName]] = {SourceType.upload: [StepName.video]}
+
+LECTURE_STEPS = [name for name in StepName if name != StepName.quiz]
 
 
 async def process_lecture(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
-        return await run_plan(lecture_uuid)
+        async with asyncio.timeout(LECTURE_TIMEOUT_SEC):
+            return await run_plan(lecture_uuid)
     except quota.QuotaExceeded:
         return LectureStatus.waiting_quota
     except StepFailed:
         await refund(lecture_uuid)
         return LectureStatus.failed
+    except asyncio.CancelledError:
+        await return_to_queue([lecture_uuid])
+        raise
     except BaseException as error:
         await mark_failed(lecture_uuid, str(error) or type(error).__name__)
         raise
@@ -81,15 +89,77 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
         lecture = await session.get(Lecture, lecture_id)
         if lecture is None:
             return "missing"
-        lecture.status = LectureStatus.processing
-        await session.commit()
-        await publish_status(lecture.id, lecture.owner_id, lecture.status)
-        for name in PLANS[lecture.source_type]:
-            await run_step(session, lecture, name, HANDLERS[name])
-        lecture.status = LectureStatus.ready
-        await session.commit()
-        await publish_status(lecture.id, lecture.owner_id, lecture.status)
+        if lecture.status != LectureStatus.ready:
+            lecture.status = LectureStatus.processing
+            await session.commit()
+            await publish_status(lecture.id, lecture.owner_id, lecture.status)
+            for name in PLANS[lecture.source_type]:
+                await run_step(session, lecture, name, HANDLERS[name])
+            lecture.status = LectureStatus.ready
+            await session.commit()
+            await publish_status(lecture.id, lecture.owner_id, lecture.status)
+        for name in AFTER_READY.get(lecture.source_type, []):
+            with contextlib.suppress(StepFailed):
+                await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
         return lecture.status
+
+
+async def return_to_queue(lecture_ids: list[uuid.UUID]) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id.in_(lecture_ids),
+                ProcessingStep.step.in_(LECTURE_STEPS),
+                ProcessingStep.status == StepStatus.running,
+            )
+            .values(status=StepStatus.pending, progress=0.0)
+        )
+        await session.execute(
+            update(Lecture)
+            .where(Lecture.id.in_(lecture_ids), Lecture.status == LectureStatus.processing)
+            .values(status=LectureStatus.queued)
+        )
+        await session.commit()
+
+
+async def release_orphaned_jobs(redis: ArqRedis) -> None:
+    job_ids = await redis.zrange(default_queue_name, 0, -1)
+    if job_ids:
+        await redis.delete(*(in_progress_key_prefix + job_id.decode() for job_id in job_ids))
+
+
+async def resume_interrupted_lectures(redis: ArqRedis) -> int:
+    await release_orphaned_jobs(redis)
+    async with SessionLocal() as session:
+        running = select(ProcessingStep.lecture_id).where(
+            ProcessingStep.step.in_(LECTURE_STEPS), ProcessingStep.status == StepStatus.running
+        )
+        lecture_ids = list(
+            await session.scalars(
+                select(Lecture.id).where(
+                    or_(
+                        Lecture.status.in_([LectureStatus.queued, LectureStatus.processing]),
+                        Lecture.id.in_(running),
+                    )
+                )
+            )
+        )
+    if not lecture_ids:
+        return 0
+    await return_to_queue(lecture_ids)
+    resumed = 0
+    for lecture_id in lecture_ids:
+        job_id = lecture_job_id(lecture_id)
+        if await Job(job_id, redis).info() is None:
+            await redis.enqueue_job("process_lecture", str(lecture_id), _job_id=job_id)
+            resumed += 1
+    logger.info(
+        "После перезапуска не закончено лекций: %s, заново поставлено в очередь: %s",
+        len(lecture_ids),
+        resumed,
+    )
+    return resumed
 
 
 async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:

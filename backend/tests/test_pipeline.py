@@ -218,6 +218,148 @@ async def test_audio_upload_has_no_video(user, sample_audio, storage):
     assert not (storage / "videos").exists()
 
 
+async def test_upload_is_ready_before_video_is_compressed(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+    order = []
+    transcode = tasks.HANDLERS[StepName.video]
+
+    async def tracked_video(session, lecture, report):
+        order.append((StepName.video, lecture.status))
+        await transcode(session, lecture, report)
+
+    for name in (StepName.audio, StepName.transcribe, StepName.summarize, StepName.embed):
+
+        def tracked(handler=tasks.HANDLERS[name], name=name):
+            async def run(session, lecture, report):
+                order.append((name, lecture.status))
+                await handler(session, lecture, report)
+
+            return run
+
+        monkeypatch.setitem(tasks.HANDLERS, name, tracked())
+    monkeypatch.setitem(tasks.HANDLERS, StepName.video, tracked_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    assert order == [
+        (StepName.audio, LectureStatus.processing),
+        (StepName.transcribe, LectureStatus.processing),
+        (StepName.summarize, LectureStatus.processing),
+        (StepName.embed, LectureStatus.processing),
+        (StepName.video, LectureStatus.ready),
+    ]
+    assert (await load(lecture.id)).video_path is not None
+
+
+async def test_failed_video_keeps_lecture_ready(user, sample_video, storage, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+
+    encode = media.encode
+
+    async def broken_encode(args, target, duration, report, error):
+        if target.parent.name == "videos":
+            raise media.MediaError(error)
+        await encode(args, target, duration, report, error)
+
+    monkeypatch.setattr(media, "encode", broken_encode)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    lecture = await load(lecture.id)
+    steps = steps_by_name(lecture)
+    assert lecture.status == LectureStatus.ready
+    assert lecture.video_path is None
+    assert steps[StepName.video].status == StepStatus.failed
+    assert steps[StepName.video].error == "Не удалось пережать видео"
+    assert steps[StepName.transcribe].status == StepStatus.done
+    assert await count(UsageEntry, lecture.id) == 1
+    assert not media.original_path(lecture.id).exists()
+
+
+async def test_ready_lecture_job_only_finishes_video(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+    publish = events.publish_status
+
+    async def cancelled_on_ready(lecture_id, user_id, status, error=None):
+        if status == LectureStatus.ready:
+            raise asyncio.CancelledError
+        await publish(lecture_id, user_id, status, error)
+
+    monkeypatch.setattr(tasks, "publish_status", cancelled_on_ready)
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_lecture({}, str(lecture.id))
+    assert StepName.video not in steps_by_name(await load(lecture.id))
+
+    monkeypatch.setattr(tasks, "publish_status", publish)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    lecture = await load(lecture.id)
+    steps = steps_by_name(lecture)
+    assert steps[StepName.video].status == StepStatus.done
+    assert steps[StepName.transcribe].attempts == 1
+    assert lecture.video_path is not None
+
+
+def encode_sample(path: Path, size: str, *video_args: str) -> Path:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"testsrc=size={size}:rate=10",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440",
+            "-t",
+            "2",
+            *video_args,
+            "-c:a",
+            "aac",
+            str(path),
+        ],
+        check=True,
+    )
+    return path
+
+
+async def test_player_ready_video_is_copied(user, storage, tmp_path):
+    source = encode_sample(
+        tmp_path / "ready.mp4", "1280x720", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p"
+    )
+    assert media.fits_player(await media.media_streams(source))
+    lecture = await create_lecture(user, source)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    video = storage / "videos" / f"{lecture.id}.mp4"
+    assert (await load(lecture.id)).video_path == str(video)
+    copied, original = await asyncio.to_thread(lambda: (video.read_bytes(), source.read_bytes()))
+    assert len(copied) == pytest.approx(len(original), rel=0.05)
+    assert copied.index(b"moov") < copied.index(b"mdat")
+
+
+@pytest.mark.parametrize(
+    ("size", "video_args"),
+    [
+        ("1280x720", ("-c:v", "mpeg4")),
+        ("1920x1080", ("-c:v", "libx264", "-pix_fmt", "yuv420p")),
+        ("1280x720", ("-c:v", "libx264", "-pix_fmt", "yuv444p")),
+        ("1280x720", ("-c:v", "libx264", "-qp", "0", "-pix_fmt", "yuv420p")),
+    ],
+)
+async def test_other_videos_are_transcoded(tmp_path, size, video_args):
+    source = encode_sample(tmp_path / "source.mp4", size, *video_args)
+    assert not media.fits_player(await media.media_streams(source))
+
+
+async def test_videos_without_aac_are_transcoded(sample_video, sample_audio):
+    assert not media.fits_player(await media.media_streams(sample_video))
+    assert not media.fits_player(await media.media_streams(sample_audio))
+
+
 async def test_broken_original_fails_audio_step(user, storage, tmp_path):
     broken = tmp_path / "broken.mp4"
     broken.write_bytes(b"not a video")
@@ -324,19 +466,45 @@ async def test_error_outside_step_marks_lecture_failed(user, sample_video, monke
     assert (await load(lecture.id)).status == LectureStatus.failed
 
 
-async def test_cancelled_job_marks_running_step_failed(user, sample_video, monkeypatch):
+async def test_cancelled_job_returns_lecture_to_queue(user, sample_video, monkeypatch):
     lecture = await create_lecture(user, sample_video)
 
     async def cancelled(session, lecture, report):
         raise asyncio.CancelledError
 
+    transcribe = tasks.HANDLERS[StepName.transcribe]
     monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, cancelled)
 
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
+    interrupted = await load(lecture.id)
+    steps = steps_by_name(interrupted)
+    assert interrupted.status == LectureStatus.queued
+    assert steps[StepName.audio].status == StepStatus.done
+    assert steps[StepName.transcribe].status == StepStatus.pending
+    assert media.original_path(lecture.id).exists()
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, transcribe)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    steps = steps_by_name(await load(lecture.id))
+    assert steps[StepName.audio].attempts == 1
+    assert all(s.status == StepStatus.done for s in steps.values())
+
+
+async def test_timed_out_job_marks_running_step_failed(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def endless(session, lecture, report):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(tasks, "LECTURE_TIMEOUT_SEC", 0.5)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, endless)
+
+    with pytest.raises(TimeoutError):
+        await tasks.process_lecture({}, str(lecture.id))
     failed = await load(lecture.id)
     assert failed.status == LectureStatus.failed
-    assert steps_by_name(failed)[StepName.transcribe].status == StepStatus.failed
+    assert steps_by_name(failed)[StepName.audio].status == StepStatus.failed
 
 
 async def fail_lecture(user, sample_video) -> Lecture:
