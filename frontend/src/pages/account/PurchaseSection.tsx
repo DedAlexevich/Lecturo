@@ -181,7 +181,7 @@ function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; ne
               setReceiptEmail(value);
               setReceiptEmailError(undefined);
               idempotenceKey.current = crypto.randomUUID();
-              if (createPayment.isError) createPayment.reset();
+              createPayment.reset();
             }}
           />
         </div>
