@@ -6,7 +6,7 @@ from weasyprint import CSS, HTML
 from weasyprint.text.fonts import FontConfiguration
 
 from app.core.config import get_settings
-from app.models import Lecture
+from app.models import Course, Lecture
 from app.services.summary_markdown import katex_css, render_summary
 
 MOSCOW = ZoneInfo("Europe/Moscow")
@@ -134,6 +134,19 @@ p { margin: 0 0 3mm; }
 .summary-callout--important { border-color: #ad5b52; background: #f5eae9; }
 .summary-callout__title { font-weight: 700; margin: 0 0 2mm; }
 .summary-callout > :last-child { margin-bottom: 0; }
+.tickets { margin: 0; padding-left: 7mm; }
+.tickets li { margin: 0 0 2mm; padding-left: 1mm; break-inside: avoid; }
+.tickets li::marker { font-weight: 600; font-variant-numeric: tabular-nums; }
+.terms { margin: 0; }
+.terms div {
+  padding: 2.5mm 0;
+  border-top: 0.5pt solid #c6cbd4;
+  break-inside: avoid;
+}
+.terms div:last-child { border-bottom: 0.5pt solid #c6cbd4; }
+.terms dt { font-weight: 700; margin: 0 0 1mm; }
+.terms dd { margin: 0; color: #2b303a; }
+.empty { color: #5b6270; }
 """
 )
 
@@ -185,6 +198,50 @@ def lecture_html(lecture: Lecture, base_url: str, lecture_url: str | None = None
     return (
         f'<!doctype html><html lang="ru"><head><meta charset="utf-8">'
         f"<title>{escape(lecture.title)}</title></head><body>{''.join(parts)}</body></html>"
+    )
+
+
+def exam_sheet_html(course: Course, content: dict, base_url: str) -> str:
+    sheet_url = f"{base_url}/courses/{course.id}/exam-sheet"
+    tickets = [ticket for ticket in content.get("tickets", []) if ticket]
+    definitions = [
+        item
+        for item in content.get("definitions", [])
+        if item.get("term") and item.get("definition")
+    ]
+    cheatsheet = content.get("cheatsheet_md", "")
+
+    parts = [
+        f"<h1>{escape(course.title)}</h1>",
+        f'<p class="meta">Памятка к экзамену · '
+        f'<a href="{escape(sheet_url)}">Открыть в Lecturo</a></p>',
+        "<h2>Билеты</h2>",
+    ]
+    if tickets:
+        parts.append('<ol class="tickets">')
+        parts.extend(f"<li>{escape(ticket)}</li>" for ticket in tickets)
+        parts.append("</ol>")
+    else:
+        parts.append('<p class="empty">Билетов в памятке нет.</p>')
+    parts.append("<h2>Определения</h2>")
+    if definitions:
+        parts.append('<dl class="terms">')
+        parts.extend(
+            f"<div><dt>{escape(item['term'])}</dt><dd>{escape(item['definition'])}</dd></div>"
+            for item in definitions
+        )
+        parts.append("</dl>")
+    else:
+        parts.append('<p class="empty">Определений в памятке нет.</p>')
+    parts.append("<h2>Шпаргалка</h2>")
+    if cheatsheet.strip():
+        parts.append(f'<div class="summary">{render_summary(cheatsheet)}</div>')
+    else:
+        parts.append('<p class="empty">Шпаргалки в памятке нет.</p>')
+
+    return (
+        f'<!doctype html><html lang="ru"><head><meta charset="utf-8">'
+        f"<title>{escape(course.title)}</title></head><body>{''.join(parts)}</body></html>"
     )
 
 

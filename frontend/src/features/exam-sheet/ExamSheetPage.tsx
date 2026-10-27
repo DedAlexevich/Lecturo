@@ -10,6 +10,7 @@ import { useAiTransferConsent } from "../consent/useAiTransferConsent";
 import { Cheatsheet, DefinitionList, TicketList } from "./ExamSheetContent";
 import { ExamSheetPrint } from "./ExamSheetPrint";
 import { definitionsCount, ticketsCount } from "./format";
+import { PrintButton } from "./PrintButton";
 import { createErrorText, definitionsOf, errorCode, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
 import "./exam-sheet.css";
 
@@ -101,11 +102,7 @@ export function ExamSheetPage() {
             </p>
           )}
         </div>
-        {data && (
-          <Button variant="secondary" onClick={() => window.print()}>
-            Распечатать
-          </Button>
-        )}
+        {data && <PrintButton key={id} courseId={id} />}
       </header>
 
       {sheet.isPending && <SheetSkeleton />}
