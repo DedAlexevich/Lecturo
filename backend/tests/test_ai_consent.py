@@ -234,7 +234,6 @@ async def post_local_result(client, auth_headers):
         json={
             "title": "Матанализ",
             "duration_sec": 60.0,
-            "model": "whisper-small",
             "segments": [{"start": 0.0, "end": 60.0, "text": "слово " * 40}],
         },
         headers=auth_headers,

@@ -24,7 +24,6 @@ def result_body(**overrides) -> dict:
     return {
         "title": "Матанализ",
         "duration_sec": 120.0,
-        "model": "whisper-small",
         "segments": [
             {"start": 0.0, "end": 60.0, "text": TEXT},
             {"start": 60.0, "end": 120.0, "text": TEXT},
@@ -108,6 +107,46 @@ async def test_saves_result_and_enqueues_embeddings(client, user, auth_headers, 
 )
 async def test_implausible_result_rejected(client, user, auth_headers, overrides):
     response = await client.post(URL, json=result_body(**overrides), headers=auth_headers)
+
+    assert response.status_code == 422
+    assert await count(Lecture, user.id) == 0
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"title": ""},
+        {"title": "   "},
+        {"title": "я" * 301},
+        {"language": "я" * 9},
+        {"chapters": [{"start": 0.0, "end": 120.0, "title": "я" * 301, "summary": ""}]},
+        {"chapters": [{"start": 0.0, "end": 120.0, "title": "Глава", "summary": "я" * 5001}]},
+        {"summary_md": "я" * 100_001},
+    ],
+)
+async def test_oversized_fields_rejected(client, user, auth_headers, overrides):
+    response = await client.post(URL, json=result_body(**overrides), headers=auth_headers)
+
+    assert response.status_code == 422
+    assert await count(Lecture, user.id) == 0
+
+
+async def test_boundary_lengths_accepted(client, user, auth_headers):
+    body = result_body(
+        title="  " + "я" * 300 + "  ",
+        language="я" * 8,
+        chapters=[{"start": 0.0, "end": 120.0, "title": "я" * 300, "summary": "я" * 5000}],
+        summary_md="я" * 100_000,
+    )
+    response = await client.post(URL, json=body, headers=auth_headers)
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "я" * 300
+
+
+async def test_total_text_limit(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "local_max_total_chars", 1000)
+    response = await client.post(URL, json=result_body(summary_md="я" * 1000), headers=auth_headers)
 
     assert response.status_code == 422
     assert await count(Lecture, user.id) == 0
