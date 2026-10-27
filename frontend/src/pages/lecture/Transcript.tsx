@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { components } from "../../api/schema";
 import { formatTimecode } from "../../lib/timecode";
-import { findActiveSegment, groupTranscript } from "./time";
+import { findActiveSegment, groupTranscript, joinSentences } from "./time";
 
 export type TranscriptSegment = components["schemas"]["SegmentOut"];
 type TranscriptChapter = components["schemas"]["ChapterOut"];
@@ -19,9 +19,10 @@ const NO_CHAPTERS: TranscriptChapter[] = [];
 export function Transcript({ segments, chapters = NO_CHAPTERS, currentTime, onSelect }: TranscriptProps) {
   const listRef = useRef<HTMLOListElement>(null);
   const manualScrollAt = useRef(0);
-  const active = currentTime === null ? -1 : findActiveSegment(segments, currentTime);
+  const sentences = useMemo(() => joinSentences(segments, chapters), [segments, chapters]);
+  const rows = useMemo(() => groupTranscript(sentences, chapters), [sentences, chapters]);
+  const active = currentTime === null ? -1 : findActiveSegment(sentences, currentTime);
   const activeChapter = currentTime === null ? -1 : findActiveSegment(chapters, currentTime);
-  const rows = useMemo(() => groupTranscript(segments, chapters), [segments, chapters]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -75,17 +76,17 @@ export function Transcript({ segments, chapters = NO_CHAPTERS, currentTime, onSe
             </li>
           );
         }
-        const { segment, segmentIndex: index } = row;
+        const { segment: sentence, segmentIndex: index } = row;
         const current = index === active;
         const content = (
           <>
-            <span className="transcript__time">{formatTimecode(segment.start)}</span>
-            <span className="transcript__text">{segment.text}</span>
+            <span className="transcript__time">{formatTimecode(sentence.start)}</span>
+            <span className="transcript__text">{sentence.text}</span>
           </>
         );
         return (
           <li
-            key={`${segment.start}-${index}`}
+            key={`${sentence.start}-${index}`}
             data-segment={index}
             className={current ? "transcript__item transcript__item--current" : "transcript__item"}
           >
@@ -96,7 +97,7 @@ export function Transcript({ segments, chapters = NO_CHAPTERS, currentTime, onSe
                 aria-current={current || undefined}
                 onClick={() => {
                   manualScrollAt.current = 0;
-                  onSelect(segment.start);
+                  onSelect(sentence.start);
                 }}
               >
                 {content}

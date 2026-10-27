@@ -6,7 +6,7 @@ import socket
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import ParseResult, parse_qs, urlencode, urlparse
+from urllib.parse import ParseResult, parse_qs, unquote, urlencode, urlparse
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,8 @@ YOUTUBE_PATH = re.compile(r"/(?:shorts|embed|live|v)/([\w-]{11})")
 YOUTUBE_ID = re.compile(r"[\w-]{11}")
 RUTUBE_PATH = re.compile(r"/(?:video|play/embed)/(?:private/)?([0-9a-f]{32})")
 VK_VIDEO = re.compile(r"video(-?\d+)_(\d+)")
+YANDEX_DISK_FOLDER_FILE = re.compile(r"(/d/[^/]+)(/.+)")
+SCHEME = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://")
 
 BASE_OPTIONS: dict[str, Any] = {
     "quiet": True,
@@ -71,35 +73,82 @@ def is_yandex_disk(url: str) -> bool:
     return normalized_host(urlparse(url)) in YANDEX_DISK_HOSTS
 
 
+def with_scheme(url: str) -> str:
+    url = url.strip()
+    if url and not SCHEME.match(url):
+        return "https://" + url.removeprefix("//")
+    return url
+
+
+def youtube_id(parsed: ParseResult) -> str | None:
+    host = normalized_host(parsed)
+    if host == "youtu.be":
+        video_id = parsed.path.strip("/")
+    elif host not in YOUTUBE_HOSTS:
+        return None
+    elif match := YOUTUBE_PATH.match(parsed.path):
+        video_id = match.group(1)
+    else:
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+    return video_id if YOUTUBE_ID.fullmatch(video_id) else None
+
+
+def rutube_id(parsed: ParseResult) -> str | None:
+    if normalized_host(parsed) in RUTUBE_HOSTS and (match := RUTUBE_PATH.match(parsed.path)):
+        return match.group(1)
+    return None
+
+
+def vk_params(parsed: ParseResult) -> dict[str, str] | None:
+    if normalized_host(parsed) not in VK_HOSTS:
+        return None
+    query = parse_qs(parsed.query)
+    if parsed.path == "/video_ext.php" and "oid" in query and "id" in query:
+        params = {"oid": query["oid"][0], "id": query["id"][0]}
+        if "hash" in query:
+            params["hash"] = query["hash"][0]
+        return params
+    if match := VK_VIDEO.search(query.get("z", [""])[0]) or VK_VIDEO.search(parsed.path):
+        return dict(zip(("oid", "id"), match.groups(), strict=True))
+    return None
+
+
 def build_embed_url(url: str) -> str | None:
     parsed = urlparse(url)
-    host = normalized_host(parsed)
-    query = parse_qs(parsed.query)
-    if host in YOUTUBE_HOSTS or host == "youtu.be":
-        if host == "youtu.be":
-            video_id = parsed.path.strip("/")
-        elif match := YOUTUBE_PATH.match(parsed.path):
-            video_id = match.group(1)
-        else:
-            video_id = query.get("v", [""])[0]
-        if YOUTUBE_ID.fullmatch(video_id):
-            return f"https://www.youtube.com/embed/{video_id}"
-    if host in RUTUBE_HOSTS and (match := RUTUBE_PATH.match(parsed.path)):
-        embed = f"https://rutube.ru/play/embed/{match.group(1)}"
-        if private_key := query.get("p", [""])[0]:
+    if video_id := youtube_id(parsed):
+        return f"https://www.youtube.com/embed/{video_id}"
+    if video_id := rutube_id(parsed):
+        embed = f"https://rutube.ru/play/embed/{video_id}"
+        if private_key := parse_qs(parsed.query).get("p", [""])[0]:
             embed += "?" + urlencode({"p": private_key})
         return embed
-    if host in VK_HOSTS:
-        if parsed.path == "/video_ext.php" and "oid" in query and "id" in query:
-            params = {"oid": query["oid"][0], "id": query["id"][0]}
-            if "hash" in query:
-                params["hash"] = query["hash"][0]
-        elif match := VK_VIDEO.search(query.get("z", [""])[0]) or VK_VIDEO.search(parsed.path):
-            params = dict(zip(("oid", "id"), match.groups(), strict=True))
-        else:
-            return None
+    if params := vk_params(parsed):
         return "https://vkvideo.ru/video_ext.php?" + urlencode(params)
     return None
+
+
+def link_key(url: str) -> str:
+    parsed = urlparse(with_scheme(url))
+    if video_id := youtube_id(parsed):
+        return f"youtube:{video_id}"
+    if video_id := rutube_id(parsed):
+        return f"rutube:{video_id}"
+    if params := vk_params(parsed):
+        return f"vk:{params['oid']}_{params['id']}"
+    host = normalized_host(parsed)
+    if parsed.port is not None:
+        host += f":{parsed.port}"
+    path = unquote(parsed.path).rstrip("/")
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{host}{path}{query}"
+
+
+def yandex_disk_resource(url: str) -> tuple[str, str | None]:
+    parsed = urlparse(url)
+    if match := YANDEX_DISK_FOLDER_FILE.fullmatch(parsed.path.rstrip("/")):
+        public_key = parsed._replace(path=match.group(1), query="", fragment="").geturl()
+        return public_key, unquote(match.group(2))
+    return url, None
 
 
 async def ensure_public_host(url: str) -> None:
@@ -119,15 +168,19 @@ async def ensure_public_host(url: str) -> None:
 async def resolve_yandex_disk(
     url: str, transport: httpx.AsyncBaseTransport | None = None
 ) -> tuple[str, str]:
+    public_key, path = yandex_disk_resource(url)
+    params = {"public_key": public_key}
+    if path is not None:
+        params["path"] = path
     try:
         async with httpx.AsyncClient(timeout=30, transport=transport) as client:
-            resource = await client.get(YANDEX_DISK_API, params={"public_key": url})
+            resource = await client.get(YANDEX_DISK_API, params=params)
             if resource.status_code != httpx.codes.OK:
                 raise LinkError("Файл на Яндекс Диске не найден или закрыт")
             meta = resource.json()
             if meta.get("type") != "file" or meta.get("media_type") not in {"video", "audio"}:
                 raise LinkError("Ссылка Яндекс Диска должна вести на видео или аудиофайл")
-            download = await client.get(f"{YANDEX_DISK_API}/download", params={"public_key": url})
+            download = await client.get(f"{YANDEX_DISK_API}/download", params=params)
             if download.status_code != httpx.codes.OK:
                 raise LinkError("Яндекс Диск не отдал ссылку на скачивание")
             return meta["name"], download.json()["href"]

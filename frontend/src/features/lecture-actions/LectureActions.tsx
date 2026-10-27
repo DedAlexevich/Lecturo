@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
@@ -7,6 +7,7 @@ import { Input } from "../../ui/Input";
 import { ApiError } from "../../app/queryClient";
 import { detailOf } from "../upload/errors";
 import { CoursesDialog } from "./CoursesDialog";
+import { placeMenu } from "./placement";
 import { useDeleteLecture, useRegenerateSummary, useRenameLecture } from "./queries";
 import "./lecture-actions.css";
 
@@ -26,6 +27,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
   const navigate = useNavigate();
   const trigger = useRef<HTMLButtonElement>(null);
   const container = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const formId = useId();
   const [expanded, setExpanded] = useState(false);
@@ -46,6 +48,27 @@ export function LectureActions({ lecture }: LectureActionsProps) {
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [expanded]);
+
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    function place() {
+      const menu = panel.current;
+      const button = trigger.current;
+      if (!menu || !button) return;
+      menu.style.left = "";
+      menu.style.width = "";
+      const placement = placeMenu(
+        button.getBoundingClientRect(),
+        menu.offsetWidth,
+        document.documentElement.clientWidth,
+      );
+      menu.style.left = `${placement.left}px`;
+      if (placement.width !== undefined) menu.style.width = `${placement.width}px`;
+    }
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [expanded, lecture.status]);
 
   function open(next: "rename" | "courses" | "delete" | "regenerate") {
     setExpanded(false);
@@ -106,7 +129,7 @@ export function LectureActions({ lecture }: LectureActionsProps) {
         </svg>
       </Button>
       {expanded && (
-        <div id={panelId} className="lecture-actions__panel">
+        <div id={panelId} ref={panel} className="lecture-actions__panel">
           <Button variant="ghost" onClick={() => open("rename")}>Переименовать</Button>
           <Button variant="ghost" onClick={() => open("courses")}>В курс…</Button>
           {lecture.status === "ready" && (
