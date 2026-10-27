@@ -5,6 +5,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
 from app.pipeline.exam import build_exam_sheet
 from app.pipeline.retention import delete_expired_videos
 from app.pipeline.tasks import process_lecture, process_quiz
@@ -26,6 +27,7 @@ async def check_providers(
 
 
 async def startup(ctx: dict[str, Any]) -> None:
+    configure_logging()
     await check_providers(get_settings())
 
 
