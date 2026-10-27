@@ -61,7 +61,7 @@ function ExportDialog({ file, format, onClose }: { file: ExportFile | null; form
     >
       {file && (
         <div className="local-export-dialog__body">
-          <p>В Telegram файл {file.name} не скачивается. Скопируйте текст или поделитесь им.</p>
+          <p>В Telegram файл {file.name} не скачивается. {shareMode === "none" ? "Скопируйте текст." : "Скопируйте текст или поделитесь им."}</p>
           <textarea
             ref={textRef}
             className="local-export-dialog__text"
