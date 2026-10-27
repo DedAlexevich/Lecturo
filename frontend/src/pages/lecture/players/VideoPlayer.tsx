@@ -131,6 +131,7 @@ export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: V
       element.currentTime = resume.time;
       element.playbackRate = rate;
       if (resume.play) void element.play().catch(() => undefined);
+      else setWaiting(false);
     }
     setDuration(element.duration);
     onReady({
