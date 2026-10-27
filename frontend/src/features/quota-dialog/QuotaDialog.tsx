@@ -187,6 +187,11 @@ function PlanBody({ plan, waiting, pending, error, onChange, onLeave }: PlanBody
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link to="/local" onClick={onLeave}>
+                  Другой файл
+                </Link>
+              </li>
             </ul>
           </li>
         </ul>
