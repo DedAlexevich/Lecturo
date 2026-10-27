@@ -3,19 +3,15 @@ import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Spinner } from "../../ui/Spinner";
+import { formatDate } from "./formatDate";
 import { Markdown } from "./markdown";
 import { useLegalDocument } from "./useLegalDocument";
 import "./legal.css";
 
-const revisionLine = /^Редакция от .*$/m;
-const titleLine = /^#\s+.*$/m;
+const metaLines = [/^#\s+.*$/m, /^Редакция от .*$/m, /^Вступает в силу с .*$/m, /^Изменения: .*$/m];
 
 function bodyOf(content: string) {
-  return content.replace(titleLine, "").replace(revisionLine, "");
-}
-
-function formatDate(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+  return metaLines.reduce((body, line) => body.replace(line, ""), content);
 }
 
 export function LegalPage() {
@@ -53,7 +49,11 @@ export function LegalPage() {
     <article className="legal">
       <header className="legal__header">
         <h1 className="legal__title">{data.title}</h1>
-        <p className="legal__revision">Редакция от {formatDate(data.revision_date)}</p>
+        <p className="legal__revision">
+          Редакция от {formatDate(data.revision_date)}
+          {data.effective_date !== data.revision_date && `, вступает в силу с ${formatDate(data.effective_date)}`}
+        </p>
+        {data.changes && <p className="legal__changes">Что изменилось: {data.changes}</p>}
       </header>
       <div className="legal__body">
         <Markdown source={bodyOf(data.content_md)} />

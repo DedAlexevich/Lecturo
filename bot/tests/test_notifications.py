@@ -4,8 +4,21 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.methods import SendMessage
 
-from app.notifications import check_quotas, deliver_pending, handle_event, send_once
+from app.notifications import (
+    DROP_LEGAL_NOTICE,
+    LEGAL_NOTICE_ATTEMPTS,
+    MARK_LEGAL_NOTICE_FAILED,
+    MARK_LEGAL_NOTICE_SENT,
+    PENDING_LEGAL_NOTICES,
+    check_quotas,
+    deliver_legal_notices,
+    deliver_pending,
+    handle_event,
+    send_once,
+)
 
 
 class FakeRedis:
@@ -147,3 +160,52 @@ async def test_reset_is_sent_after_long_downtime():
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.args[1] == "Недельный лимит обработки обновлён."
+
+
+def legal_rows(*chats):
+    link = "https://lecturo.test/legal/ai-transfer"
+    return [
+        {"id": uuid4(), "telegram_chat_id": chat, "text": "Новая редакция", "link": link}
+        for chat in chats
+    ]
+
+
+async def test_legal_notices_are_sent_once_and_failures_are_counted():
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    rows = legal_rows(11, 22, 33, 44)
+    pool.fetch.return_value = rows
+
+    async def send(chat_id, text, reply_markup=None):
+        method = SendMessage(chat_id=chat_id, text=text)
+        if chat_id == 22:
+            raise TelegramForbiddenError(method, "blocked")
+        if chat_id == 33:
+            raise TelegramBadRequest(method, "chat not found")
+        if chat_id == 44:
+            raise RuntimeError()
+
+    bot.send_message.side_effect = send
+    assert await deliver_legal_notices(pool, redis, bot) == 0
+    assert pool.fetch.await_args.args == (PENDING_LEGAL_NOTICES, LEGAL_NOTICE_ATTEMPTS)
+    assert [call.args for call in pool.execute.await_args_list] == [
+        (MARK_LEGAL_NOTICE_SENT, rows[0]["id"]),
+        (DROP_LEGAL_NOTICE, rows[1]["id"], LEGAL_NOTICE_ATTEMPTS),
+        (DROP_LEGAL_NOTICE, rows[2]["id"], LEGAL_NOTICE_ATTEMPTS),
+        (MARK_LEGAL_NOTICE_FAILED, rows[3]["id"]),
+    ]
+    args, kwargs = bot.send_message.await_args_list[0]
+    assert args == (11, "Новая редакция")
+    assert kwargs["reply_markup"].inline_keyboard[0][0].web_app.url == rows[0]["link"]
+    await deliver_legal_notices(pool, redis, bot)
+    assert [call.args[0] for call in bot.send_message.await_args_list].count(11) == 1
+
+
+async def test_legal_notices_stop_on_retry_after():
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    pool.fetch.return_value = legal_rows(11, 22)
+    bot.send_message.side_effect = TelegramRetryAfter(
+        SendMessage(chat_id=11, text="Новая редакция"), "flood", 90
+    )
+    assert await deliver_legal_notices(pool, redis, bot) == 90
+    assert bot.send_message.await_count == 1
+    pool.execute.assert_not_awaited()

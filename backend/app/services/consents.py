@@ -3,8 +3,10 @@ from functools import cache
 
 from fastapi import HTTPException, status
 from fastapi.exceptions import RequestValidationError
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
+from app.models import LegalRevision, User
 from app.services.legal import read_document
 
 CONSENT_REQUIRED = (
@@ -13,9 +15,15 @@ CONSENT_REQUIRED = (
 )
 
 AI_TRANSFER_REQUIRED = (
-    "Нет действующего согласия на передачу данных провайдерам ИИ: "
-    "оно отозвано или обновилась редакция. Дайте согласие заново и повторите обработку"
+    "Нет согласия на передачу данных провайдерам ИИ: оно не давалось или отозвано. "
+    "Дайте согласие и повторите обработку"
 )
+
+ACCEPTANCES = {
+    "terms": (User.terms_accepted_at, User.terms_revision),
+    "personal-data-consent": (User.personal_data_accepted_at, User.personal_data_revision),
+    "ai-transfer": (User.ai_transfer_accepted_at, User.ai_transfer_revision),
+}
 
 
 def require_signup_consents(accept_terms: bool, accept_personal_data: bool) -> None:
@@ -46,9 +54,23 @@ def current_ai_transfer_revision() -> date:
 
 
 def ai_transfer_given(accepted_at: datetime | None, revision: date | None) -> bool:
-    if accepted_at is None or revision is None:
-        return False
-    return revision >= current_ai_transfer_revision()
+    return accepted_at is not None and revision is not None
+
+
+async def apply_effective_revisions(session: AsyncSession, today: date) -> None:
+    announced = await session.execute(
+        select(LegalRevision.slug, LegalRevision.revision_date)
+        .where(LegalRevision.effective_date <= today, LegalRevision.slug.in_(ACCEPTANCES))
+        .order_by(LegalRevision.revision_date)
+    )
+    for slug, revision_date in announced.all():
+        accepted_at, revision = ACCEPTANCES[slug]
+        await session.execute(
+            update(User)
+            .where(accepted_at.is_not(None), revision.is_not(None), revision < revision_date)
+            .values({revision: revision_date})
+            .execution_options(synchronize_session=False)
+        )
 
 
 def require_ai_transfer_consent(user: User) -> None:

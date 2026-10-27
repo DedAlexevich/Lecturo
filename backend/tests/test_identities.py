@@ -239,18 +239,16 @@ async def test_revoke_ai_transfer_clears_consent(client, cleanup):
     assert again.json()["ai_transfer_accepted_at"] is not None
 
 
-async def test_outdated_ai_transfer_revision_is_not_consent(client, cleanup):
+async def test_previous_ai_transfer_revision_stays_consent(client, cleanup):
     user = await create_user(cleanup)
-    await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    first = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
     async with SessionLocal() as session:
         await session.execute(
             update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
         )
         await session.commit()
     me = await client.get("/api/v1/me", headers=headers(user))
-    assert me.json()["ai_transfer_accepted_at"] is None
-    renewed = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
-    assert renewed.json()["ai_transfer_accepted_at"] is not None
+    assert me.json()["ai_transfer_accepted_at"] == first.json()["ai_transfer_accepted_at"]
 
 
 def webapp_init_data(telegram_id: int, **overrides) -> str:

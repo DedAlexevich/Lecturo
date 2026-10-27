@@ -951,6 +951,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Updates */
+        get: operations["list_updates_api_v1_legal_updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/{slug}": {
         parameters: {
             query?: never;
@@ -1233,13 +1250,20 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
-            /** Content Md */
-            content_md: string;
             /**
              * Revision Date
              * Format: date
              */
             revision_date: string;
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Changes */
+            changes: string | null;
+            /** Content Md */
+            content_md: string;
         };
         /** LegalDocSummary */
         LegalDocSummary: {
@@ -1247,6 +1271,25 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+        };
+        /** LegalUpdateOut */
+        LegalUpdateOut: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /**
+             * Revision Date
+             * Format: date
+             */
+            revision_date: string;
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Changes */
+            changes: string | null;
         };
         /** LinkIn */
         LinkIn: {
@@ -4035,6 +4078,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LegalDocSummary"][];
+                };
+            };
+        };
+    };
+    list_updates_api_v1_legal_updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateOut"][];
                 };
             };
         };

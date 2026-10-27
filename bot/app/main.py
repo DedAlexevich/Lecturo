@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 from app.config import load_settings
 from app.handlers import build_router
 from app.logs import configure_logging
-from app.notifications import delivery_loop, listen_events, quota_loop
+from app.notifications import delivery_loop, legal_notices_loop, listen_events, quota_loop
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ async def run() -> None:
                     settings.subscription_weekly_seconds,
                 )
             ),
+            asyncio.create_task(legal_notices_loop(pool, redis, bot)),
         ]
     try:
         await bot.set_my_commands([BotCommand(command="start", description="Открыть Lecturo")])
