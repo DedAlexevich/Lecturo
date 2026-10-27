@@ -108,11 +108,11 @@
 - Правообладатель: Hugging Face; @huggingface/jinja — `Copyright (c) 2023 Hugging Face`.
 - Исходный код: [github.com/huggingface/transformers.js, тег 4.3.1](https://github.com/huggingface/transformers.js/tree/4.3.1), [github.com/huggingface/tokenizers.js, тег v0.2.0](https://github.com/huggingface/tokenizers.js/tree/v0.2.0), [github.com/huggingface/huggingface.js, тег jinja-v0.5.10](https://github.com/huggingface/huggingface.js/tree/jinja-v0.5.10).
 
-3.2.5. **ONNX Runtime Web** версии 1.31.0-dev.20260914-8d85527a0 и **onnxruntime-common** версии 1.30.0 — среда выполнения модели распознавания речи. Файлы среды выполнения в формате WebAssembly загружаются браузером с сайта cdn.jsdelivr.net.
+3.2.5. **ONNX Runtime Web** версии 1.31.0-dev.20260914-8d85527a0 и **onnxruntime-common** версий 1.30.0 и 1.31.0-dev.20260911-2a43ec07e — среда выполнения модели распознавания речи. Файлы среды выполнения в формате WebAssembly загружаются браузером с сайта cdn.jsdelivr.net.
 
 - Открытая лицензия: MIT.
 - Правообладатель: `Copyright (c) Microsoft Corporation.`
-- Исходный код: [github.com/microsoft/onnxruntime, коммит 8d85527a010e294a26b274749f74294b2a32cec5](https://github.com/microsoft/onnxruntime/tree/8d85527a010e294a26b274749f74294b2a32cec5), [тег v1.30.0](https://github.com/microsoft/onnxruntime/tree/v1.30.0). Сведения о компонентах третьих лиц, включённых в ONNX Runtime, приведены в файле [ThirdPartyNotices.txt](https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/ThirdPartyNotices.txt).
+- Исходный код: [github.com/microsoft/onnxruntime, коммит 8d85527a010e294a26b274749f74294b2a32cec5](https://github.com/microsoft/onnxruntime/tree/8d85527a010e294a26b274749f74294b2a32cec5), [коммит 2a43ec07e67df9263c7c56c15da76cc7f74d7b32](https://github.com/microsoft/onnxruntime/tree/2a43ec07e67df9263c7c56c15da76cc7f74d7b32), [тег v1.30.0](https://github.com/microsoft/onnxruntime/tree/v1.30.0). Сведения о компонентах третьих лиц, включённых в ONNX Runtime, приведены в файле [ThirdPartyNotices.txt](https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/ThirdPartyNotices.txt).
 
 3.3. Модели распознавания речи загружаются браузером Пользователя с сайта huggingface.co при первом запуске Локального режима и не передаются с серверов Сервиса:
 
@@ -145,7 +145,7 @@
 - x264, ветка 4-cores (на дату редакции Документа — коммит 33cac6b77d5b9259c552156013a817ab23119612), GPL-2.0-or-later: [github.com/ffmpegwasm/x264](https://github.com/ffmpegwasm/x264/tree/33cac6b77d5b9259c552156013a817ab23119612);
 - x265, тег 3.4, GPL-2.0-or-later: [github.com/ffmpegwasm/x265](https://github.com/ffmpegwasm/x265/tree/3.4);
 - libvpx, тег v1.13.1, BSD-3-Clause: [github.com/ffmpegwasm/libvpx](https://github.com/ffmpegwasm/libvpx/tree/v1.13.1);
-- LAME, ветка master (на дату редакции Документа — коммит 2badea1974ae36cb8312afe99cff1e6b3b5decee), GNU Library General Public License версии 2: [github.com/ffmpegwasm/lame](https://github.com/ffmpegwasm/lame/tree/2badea1974ae36cb8312afe99cff1e6b3b5decee);
+- LAME, ветка master (на дату редакции Документа — коммит 2badea1974ae36cb8312afe99cff1e6b3b5decee), GNU Library General Public License версии 2 или любой более поздней версии (LGPL-2.0-or-later): [github.com/ffmpegwasm/lame](https://github.com/ffmpegwasm/lame/tree/2badea1974ae36cb8312afe99cff1e6b3b5decee);
 - libogg, тег v1.3.4, BSD-3-Clause: [github.com/ffmpegwasm/Ogg](https://github.com/ffmpegwasm/Ogg/tree/v1.3.4);
 - libtheora, тег v1.1.1, BSD-3-Clause: [github.com/ffmpegwasm/theora](https://github.com/ffmpegwasm/theora/tree/v1.1.1);
 - Opus, тег v1.3.1, BSD-3-Clause: [github.com/ffmpegwasm/opus](https://github.com/ffmpegwasm/opus/tree/v1.3.1);
