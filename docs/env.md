@@ -17,7 +17,7 @@ cp .env.example .env
 - `SITE_ADDRESS` и `PUBLIC_URL` с вашим доменом;
 - уникальный `SECRET_KEY` и свой `POSTGRES_PASSWORD`;
 - настоящие провайдеры `STT_PROVIDER`, `LLM_PROVIDER`, `EMBEDDINGS_PROVIDER` и их ключи;
-- SMTP, иначе пользователи не получат письма для подтверждения почты и сброса пароля;
+- записи DNS для почты (см. [deploy.md](deploy.md#почта)), иначе письма подтверждения почты и сброса пароля будут попадать в спам;
 - Telegram-бот, если нужен вход через Telegram и бот;
 - приложение VK ID, если нужен вход через VK;
 - приложение на oauth.yandex.ru, если нужен вход через Яндекс;
@@ -146,13 +146,16 @@ docker compose exec worker python -m app.pipeline.reindex
 
 Почта нужна для писем подтверждения адреса и сброса пароля. Если `SMTP_HOST` пуст, письма не уходят, а пишутся в лог `api`.
 
+На сервере письма по умолчанию отправляет свой SMTP, сервис `mail` из `infra/compose.prod.yml` (см. [deploy.md](deploy.md#почта)). Если `SMTP_HOST`, `SMTP_PORT` и `SMTP_FROM` в `.env` пусты, compose подставляет `mail`, `587` и `Lecturo <noreply@<домен>>`. Заполняйте их, только если нужен внешний SMTP, например Яндекс или Gmail, тогда `mail` просто не используется. Для внешнего SMTP на сервере `SMTP_FROM` обязателен: если его не задать, письма пойдут от `noreply@<домен>` и провайдер их отклонит.
+
 | Переменная | Описание | Обязательна | По умолчанию | Где используется |
 |---|---|---|---|---|
-| `SMTP_HOST` | Адрес SMTP-сервера | на сервере | пусто | `backend/app/services/mail.py` |
+| `SMTP_HOST` | Адрес SMTP-сервера | нет | пусто, на сервере `mail` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
 | `SMTP_PORT` | Порт. `465` включает SSL сразу при подключении, любой другой порт работает через STARTTLS (обычно `587`) | нет | `587` | `backend/app/services/mail.py` |
 | `SMTP_USER` | Логин. Если пуст, авторизация не выполняется | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_PASSWORD` | Пароль. Для Яндекса и Gmail нужен пароль приложения | обычно да | пусто | `backend/app/services/mail.py` |
-| `SMTP_FROM` | Адрес в поле «От». Если пуст, берётся `SMTP_USER` | нет | пусто | `backend/app/services/mail.py` |
+| `SMTP_FROM` | Адрес в поле «От». Локально при пустом значении берётся `SMTP_USER`, на сервере подставляется `noreply@<домен>`, поэтому для внешнего SMTP там его нужно заполнить | на сервере с внешним SMTP | пусто, на сервере `Lecturo <noreply@<домен>>` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
+| `MAIL_DOMAIN` | Домен, от имени которого `mail` отправляет и подписывает письма. Только один домен без схемы и порта, например `lecturo.example`. Если в `SITE_ADDRESS` несколько адресов или схема, задайте `MAIL_DOMAIN` явно, иначе `mail` не запустится | нет | значение `SITE_ADDRESS` | `infra/compose.prod.yml`, `infra/mail` |
 
 Яндекс Почта:
 
