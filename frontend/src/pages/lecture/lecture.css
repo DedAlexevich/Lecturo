@@ -73,6 +73,11 @@
   min-height: 0;
 }
 
+.lecture__panel--chat {
+  min-height: 38rem;
+  max-height: 56rem;
+}
+
 .lecture__panel .tabs {
   flex: 1;
   grid-template-columns: minmax(0, 1fr);
@@ -633,6 +638,13 @@ button.transcript__chapter-time:focus-visible {
 
   .lecture__panel:not(.lecture__panel--empty) {
     height: 60dvh;
+  }
+
+  .lecture__panel.lecture__panel--chat {
+    height: max(60dvh, calc(100dvh - var(--bar-height) - env(safe-area-inset-bottom) - var(--space-4) * 2));
+    min-height: 22rem;
+    max-height: none;
+    scroll-margin-top: var(--space-4);
   }
 }
 
