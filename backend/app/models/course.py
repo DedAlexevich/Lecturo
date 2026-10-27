@@ -10,7 +10,9 @@ course_lectures = Table(
     "course_lectures",
     Base.metadata,
     Column("course_id", ForeignKey("courses.id", ondelete="CASCADE"), primary_key=True),
-    Column("lecture_id", ForeignKey("lectures.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "lecture_id", ForeignKey("lectures.id", ondelete="CASCADE"), primary_key=True, index=True
+    ),
     Column("position", Integer, nullable=False, server_default="0"),
     Column("added_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
