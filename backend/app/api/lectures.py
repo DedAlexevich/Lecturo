@@ -46,7 +46,7 @@ from app.schemas.lecture import (
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 from app.services.consents import require_ai_transfer_consent
-from app.services.rate_limit import is_rate_limited
+from app.services.rate_limit import is_rate_limited, reset_rate_limit
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -288,10 +288,11 @@ async def regenerate_summary(
         )
     require_ai_transfer_consent(user)
     settings = get_settings()
+    limit_key = f"rate:regenerate-summary:{lecture_id}"
     try:
         limited = await is_rate_limited(
             settings.redis_url,
-            f"rate:regenerate-summary:{lecture_id}",
+            limit_key,
             1,
             settings.regenerate_summary_rate_window_seconds,
         )
@@ -324,6 +325,7 @@ async def regenerate_summary(
         )
         lecture.status = LectureStatus.ready
         await session.commit()
+        await reset_rate_limit(settings.redis_url, limit_key)
         await publish_status(lecture.id, user.id, LectureStatus.ready, QUEUE_UNAVAILABLE)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
 
