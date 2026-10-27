@@ -80,6 +80,7 @@ export function useTusUpload(userId: string | undefined) {
   const [state, setState] = useState<UploadState>(idle);
   const current = useRef<Upload | null>(null);
   const extraction = useRef<AbortController | null>(null);
+  const launchVersion = useRef(0);
 
   const update = useCallback((upload: Upload, next: (state: UploadState) => UploadState) => {
     setState((state) => (current.current === upload ? next(state) : state));
@@ -154,7 +155,8 @@ export function useTusUpload(userId: string | undefined) {
       });
       current.current = upload;
       setState({ phase: "uploading", file, sent: 0, total: file.size, error: null, lectureId: null });
-      void launch(upload, () => current.current === upload);
+      const version = ++launchVersion.current;
+      void launch(upload, () => current.current === upload && launchVersion.current === version);
     },
     [update, userId],
   );
@@ -162,6 +164,7 @@ export function useTusUpload(userId: string | undefined) {
   const pause = useCallback(() => {
     const upload = current.current;
     if (!upload) return;
+    launchVersion.current += 1;
     void upload.abort();
     update(upload, (state) => ({ ...state, phase: "paused" }));
   }, [update]);
@@ -170,7 +173,8 @@ export function useTusUpload(userId: string | undefined) {
     const upload = current.current;
     if (!upload) return;
     update(upload, (state) => ({ ...state, phase: "uploading", error: null }));
-    void launch(upload, () => current.current === upload);
+    const version = ++launchVersion.current;
+    void launch(upload, () => current.current === upload && launchVersion.current === version);
   }, [update]);
 
   const reset = useCallback(() => {
