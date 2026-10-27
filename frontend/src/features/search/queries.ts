@@ -1,9 +1,11 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 
-export type SearchScope = { lectureId: string } | { courseId: string };
+export type SearchScope = { lectureId: string } | { courseId: string } | { all: true };
+export type SearchHit = components["schemas"]["SearchHit"];
 
 export const MIN_QUERY_LENGTH = 2;
 
@@ -18,7 +20,12 @@ export function useDebouncedValue<T>(value: T, delay: number) {
 
 export function useSearch(scope: SearchScope, query: string) {
   const q = query.trim();
-  const params = "lectureId" in scope ? { lecture_id: scope.lectureId } : { course_id: scope.courseId };
+  const params =
+    "lectureId" in scope
+      ? { lecture_id: scope.lectureId }
+      : "courseId" in scope
+        ? { course_id: scope.courseId }
+        : {};
   return useQuery({
     queryKey: ["search", params, q],
     queryFn: async ({ signal }) => {

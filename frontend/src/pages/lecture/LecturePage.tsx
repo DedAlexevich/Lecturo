@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
@@ -18,7 +18,7 @@ import { resolveEmbed } from "./players/embed";
 import { VideoPlayer } from "./players/VideoPlayer";
 import { usePlayer, videoIdentity } from "./players/player";
 import { Processing } from "./Processing";
-import { formatDuration, parseStartTime } from "./time";
+import { formatDuration, parseSection, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
 import { awaitsVideo, fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
 import "./lecture.css";
@@ -169,6 +169,9 @@ export function LecturePage() {
   const [searchParams] = useSearchParams();
   const { key: locationKey, state: locationState } = useLocation();
   const startAt = parseStartTime(searchParams.get("t"));
+  const section = parseSection(searchParams.get("section"));
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const shownSection = useRef<string | null>(null);
   const lecture = useLecture(id);
   const status = useLectureStatus(id, lecture.data);
   const retry = useRetryProcessing(id);
@@ -191,6 +194,23 @@ export function LecturePage() {
   useEffect(() => {
     if (startAt !== null) seek(startAt);
   }, [startAt, locationKey, seek]);
+
+  useEffect(() => {
+    if (section !== null) setTab("summary");
+  }, [section, locationKey]);
+
+  const summaryReady = Boolean(lecture.data?.summary?.content_md.trim());
+
+  useEffect(() => {
+    if (section === null || !summaryReady || tab !== "summary") return;
+    if (shownSection.current === locationKey) return;
+    const heading = summaryRef.current?.querySelectorAll("h2, h3, h4")[section];
+    if (!(heading instanceof HTMLElement)) return;
+    shownSection.current = locationKey;
+    heading.scrollIntoView({ block: "start" });
+    heading.setAttribute("tabindex", "-1");
+    heading.focus({ preventScroll: true });
+  }, [section, locationKey, summaryReady, tab]);
 
   if (lecture.isPending) return <LectureSkeleton />;
   if (lecture.isError) {
@@ -217,7 +237,7 @@ export function LecturePage() {
           id: "summary",
           label: "Конспект",
           panel: summary ? (
-            <div className="lecture__scroll summary">
+            <div className="lecture__scroll summary" ref={summaryRef}>
               <Markdown source={summary} />
             </div>
           ) : (

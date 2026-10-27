@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, Text, cast, func, literal, select
+from sqlalchemy import ColumnElement, Text, cast, func, literal, select, text
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,8 +49,10 @@ async def hybrid_search(
         chunk.id: SearchHit(
             lecture_id=chunk.lecture_id,
             lecture_title=title,
+            kind=chunk.kind,
             start=chunk.start,
             end=chunk.end,
+            section=chunk.section,
             text=chunk.text,
             score=scores[chunk.id],
         )
@@ -86,6 +88,7 @@ def add_prefixes(tsquery: str) -> str:
 async def vector_ids(
     session: AsyncSession, scope: ColumnElement[bool], vector: list[float]
 ) -> list[int]:
+    await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
     rows = await session.scalars(
         select(SearchChunk.id)
         .where(scope, SearchChunk.embedding.is_not(None))

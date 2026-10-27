@@ -1,10 +1,12 @@
-from collections.abc import Sequence
+import re
+import uuid
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Lecture, SearchChunk, TranscriptSegment
+from app.models import Chapter, ChunkKind, Lecture, SearchChunk, Summary, TranscriptSegment
 from app.pipeline.runner import Report
 from app.pipeline.stages import load_segments, require_ai_transfer
 from app.providers import get_embeddings
@@ -12,18 +14,26 @@ from app.providers import get_embeddings
 MIN_CHUNK_SECONDS = 30.0
 MAX_CHUNK_SECONDS = 60.0
 BATCH_SIZE = 32
+MAX_SECTION_CHARS = 1500
+HEADING_PATTERN = re.compile(r"^#{1,4}\s+")
+MARKUP_PATTERN = re.compile(r"[*`]")
 
 
 @dataclass(frozen=True)
 class Chunk:
-    start: float
-    end: float
+    start: float | None
+    end: float | None
     text: str
+    kind: ChunkKind = ChunkKind.transcript
+    section: int | None = None
 
 
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
-    chunks = split_into_chunks(await load_segments(session, lecture))
+    chunks = [
+        *split_into_chunks(await load_segments(session, lecture)),
+        *await load_section_chunks(session, lecture.id),
+    ]
     embeddings = get_embeddings()
     vectors: list[list[float]] = []
     for offset in range(0, len(chunks), BATCH_SIZE):
@@ -32,15 +42,74 @@ async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None
         await report(len(vectors) / len(chunks))
     await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))
     session.add_all(
-        SearchChunk(
-            lecture_id=lecture.id,
-            start=chunk.start,
-            end=chunk.end,
-            text=chunk.text,
-            embedding=vector,
-        )
+        to_search_chunk(lecture.id, chunk, vector)
         for chunk, vector in zip(chunks, vectors, strict=True)
     )
+
+
+def to_search_chunk(
+    lecture_id: uuid.UUID, chunk: Chunk, embedding: list[float] | None = None
+) -> SearchChunk:
+    return SearchChunk(
+        lecture_id=lecture_id,
+        kind=chunk.kind,
+        start=chunk.start,
+        end=chunk.end,
+        section=chunk.section,
+        text=chunk.text,
+        embedding=embedding,
+    )
+
+
+async def load_section_chunks(session: AsyncSession, lecture_id: uuid.UUID) -> list[Chunk]:
+    chapters = await session.scalars(
+        select(Chapter).where(Chapter.lecture_id == lecture_id).order_by(Chapter.idx)
+    )
+    summary = await session.scalar(
+        select(Summary.content_md).where(Summary.lecture_id == lecture_id)
+    )
+    return [*chapter_chunks(chapters), *summary_chunks(summary or "")]
+
+
+def chapter_chunks(chapters: Iterable[Chapter]) -> list[Chunk]:
+    return [
+        Chunk(
+            start=chapter.start,
+            end=chapter.end,
+            text=f"{chapter.title.strip()}\n{chapter.summary.strip()}".strip(),
+            kind=ChunkKind.chapter,
+        )
+        for chapter in chapters
+    ]
+
+
+def summary_chunks(content_md: str) -> list[Chunk]:
+    sections: list[tuple[int | None, list[str]]] = [(None, [])]
+    for line in content_md.replace("\r\n", "\n").split("\n"):
+        if HEADING_PATTERN.match(line.strip()):
+            sections.append((len(sections) - 1, []))
+        if plain := MARKUP_PATTERN.sub("", HEADING_PATTERN.sub("", line.strip())).strip():
+            sections[-1][1].append(plain)
+    return [
+        Chunk(start=None, end=None, text=piece, kind=ChunkKind.summary, section=section)
+        for section, lines in sections
+        for piece in join_lines(lines)
+    ]
+
+
+def join_lines(lines: list[str]) -> list[str]:
+    pieces: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in lines:
+        if current and size + len(line) > MAX_SECTION_CHARS:
+            pieces.append("\n".join(current))
+            current, size = [], 0
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        pieces.append("\n".join(current))
+    return pieces
 
 
 def split_into_chunks(segments: Sequence[TranscriptSegment]) -> list[Chunk]:

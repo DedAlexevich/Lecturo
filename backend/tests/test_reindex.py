@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models import Lecture, SearchChunk, SourceType, User
+from app.models import Chapter, ChunkKind, Lecture, SearchChunk, SourceType, Summary, User
 from app.pipeline import reindex
 from app.pipeline.reindex import reindex_embeddings
 from app.providers.openai_compat import OpenAICompatibleError
@@ -79,3 +79,19 @@ async def test_reindex_continues_after_provider_error(user, monkeypatch):
 
     assert all(chunk.embedding is None for chunk in await load_chunks(broken_id))
     assert all(chunk.embedding is not None for chunk in await load_chunks(good_id))
+
+
+async def test_reindex_adds_chapters_and_summary_once(user):
+    lecture_id = await add_lecture(user.id, "расшифровка")
+    async with SessionLocal() as session:
+        session.add(Chapter(lecture_id=lecture_id, idx=0, start=0, end=60, title="Пределы"))
+        session.add(Summary(lecture_id=lecture_id, content_md="## Пределы\nОпределение"))
+        await session.commit()
+
+    await reindex.reindex()
+    await reindex.reindex()
+
+    chunks = await load_chunks(lecture_id)
+    kinds = sorted(chunk.kind for chunk in chunks)
+    assert kinds == [ChunkKind.chapter, ChunkKind.summary, ChunkKind.transcript]
+    assert all(chunk.embedding is not None for chunk in chunks)

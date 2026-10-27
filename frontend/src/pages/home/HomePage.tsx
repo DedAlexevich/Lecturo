@@ -1,4 +1,5 @@
 import { Link, useSearchParams } from "react-router";
+import { GlobalSearch } from "../../features/search/GlobalSearch";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { CourseFilter } from "./CourseFilter";
@@ -83,7 +84,15 @@ export function HomePage() {
               action={addButton}
             />
           ))}
-        {lectures.data && lectures.data.length > 0 && <LectureList lectures={lectures.data} />}
+        {lectures.data &&
+          lectures.data.length > 0 &&
+          (courseId ? (
+            <LectureList lectures={lectures.data} />
+          ) : (
+            <GlobalSearch>
+              <LectureList lectures={lectures.data} />
+            </GlobalSearch>
+          ))}
       </section>
     </div>
   );
