@@ -2,12 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { api } from "../../api/client";
+import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { formatDate } from "../../pages/legal/formatDate";
 import { Button } from "../../ui/Button";
 import "./LegalUpdateNotice.css";
 
-type LegalUpdate = { slug: string; revision_date: string };
+type LegalUpdate = components["schemas"]["LegalUpdateOut"];
+
+const revocable = new Set(["ai-transfer"]);
 
 function storageKey(update: LegalUpdate) {
   return `lecturo.legal-update.${update.slug}.${update.revision_date}`;
@@ -64,8 +67,9 @@ export function LegalUpdateNotice() {
         {update.changes && <p>{update.changes}</p>}
         {!inForce && (
           <p className="legal-update__note">
-            С этой даты она действует без отдельного подтверждения. Если вы не согласны, до этой даты отзовите согласие в{" "}
-            <Link to="/account">кабинете</Link> или удалите аккаунт.
+            С этой даты она действует без отдельного подтверждения. Если вы не согласны, до этой даты{" "}
+            {revocable.has(update.slug) ? "отзовите согласие или удалите аккаунт в " : "удалите аккаунт в "}
+            <Link to="/account">кабинете</Link>.
           </p>
         )}
       </div>
