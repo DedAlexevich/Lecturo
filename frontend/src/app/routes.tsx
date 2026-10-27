@@ -10,6 +10,7 @@ import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
 import { UiPage } from "../ui/UiPage";
 import { AccountPage } from "../pages/account/AccountPage";
+import { LocalPage } from "../pages/local/LocalPage";
 import { CoursePage } from "../pages/course/CoursePage";
 import { PublicSharePage } from "../pages/public/PublicSharePage";
 import { ExamSheetPage } from "../features/exam-sheet/ExamSheetPage";
@@ -20,6 +21,7 @@ export const guestRoutes: RouteObject[] = [
 ];
 
 export const publicRoutes: RouteObject[] = [
+  { path: "/local", element: <LocalPage /> },
   { path: "/legal/:slug", element: <LegalPage /> },
   { path: "/auth/vk", element: <VkCallbackPage /> },
   { path: "/auth/yandex", element: <YandexCallbackPage /> },

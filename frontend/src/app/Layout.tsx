@@ -17,6 +17,7 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 const navItems = [
   { to: "/", label: "Лекции" },
   { to: "/account", label: "Кабинет" },
+  { to: "/local", label: "На устройстве" },
 ];
 
 function Navigation({ className }: { className: string }) {
@@ -101,6 +102,7 @@ export function Layout() {
               Выйти
             </button>
           )}
+          {!signedIn && <Link to="/local" className={styles.textButton}>На устройстве</Link>}
           {!signedIn && !onLoginPage && (
             <Link to="/login" className={styles.textButton}>
               Войти

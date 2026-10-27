@@ -95,3 +95,9 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+.add-lecture__audio-only {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
