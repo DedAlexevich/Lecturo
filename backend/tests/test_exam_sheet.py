@@ -96,7 +96,8 @@ async def test_exam_sheet_for_three_lectures_on_stub_llm(user):
     assert await exam.build_exam_sheet({}, str(course_id)) == "ready"
 
     content = await saved_sheet(course_id)
-    assert set(content) == {"tickets", "definitions", "cheatsheet_md"}
+    assert set(content) == {"tickets", "definitions", "cheatsheet_md", "lecture_ids"}
+    assert len(content["lecture_ids"]) == len(LECTURES)
     for title, _ in LECTURES:
         assert f"## {title}" in content["cheatsheet_md"]
 
@@ -118,7 +119,8 @@ async def test_exam_sheet_uses_reduce_answer(user, monkeypatch):
     request = llm.reduce_requests[0]
     assert request["course"] == "Матанализ"
     assert [lecture["title"] for lecture in request["lectures"]] == [t for t, _ in LECTURES]
-    assert await saved_sheet(course_id) == answer
+    content = await saved_sheet(course_id)
+    assert {key: content[key] for key in answer} == answer
 
 
 async def test_empty_reduce_answer_merges_lecture_digests(user, monkeypatch):
@@ -248,6 +250,8 @@ async def test_post_enqueues_and_get_returns_sheet(
     data = response.json()
     assert data["course_id"] == str(course_id)
     assert "## Интеграл" in data["cheatsheet_md"]
+    assert data["processing"] is True
+    assert data["outdated"] is False
 
 
 async def test_post_without_summaries_conflicts(client, user, auth_headers, enqueued):
@@ -286,7 +290,9 @@ async def test_broken_map_answer_falls_back_to_outline():
         async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
             return "не JSON"
 
-    notes = exam.LectureNotes(title="Ряды", content_md="## Ряды\nтекст\n### Признаки\nещё текст")
+    notes = exam.LectureNotes(
+        lecture_id=uuid.uuid4(), title="Ряды", content_md="## Ряды\nтекст\n### Признаки\nещё текст"
+    )
 
     digest = await exam.digest_lecture(BrokenMapLLM(), notes)
 
@@ -308,3 +314,64 @@ async def test_queue_down_returns_503(client, user, auth_headers, monkeypatch):
     for method in ("post", "get"):
         response = await getattr(client, method)(url, headers=auth_headers)
         assert response.status_code == 503
+
+
+async def add_lecture(user, course_id, title: str, content_md: str) -> uuid.UUID:
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=user.id, title=title, source_type=SourceType.upload)
+        session.add(lecture)
+        await session.flush()
+        session.add(Summary(lecture_id=lecture.id, content_md=content_md))
+        await session.execute(
+            insert(course_lectures).values(course_id=course_id, lecture_id=lecture.id, position=9)
+        )
+        await session.commit()
+        return lecture.id
+
+
+async def test_sheet_outdated_after_course_changes(client, user, auth_headers, in_progress):
+    await subscribe(user)
+    course_id = await create_course(user)
+    url = f"/api/v1/courses/{course_id}/exam-sheet"
+    await exam.build_exam_sheet({}, str(course_id))
+    first = await client.get(url, headers=auth_headers)
+    assert (first.json()["outdated"], first.json()["processing"]) == (False, False)
+
+    added = await add_lecture(user, course_id, "Ряды", "## Ряды")
+    assert (await client.get(url, headers=auth_headers)).json()["outdated"] is True
+
+    await exam.build_exam_sheet({}, str(course_id))
+    assert (await client.get(url, headers=auth_headers)).json()["outdated"] is False
+
+    removed = await client.delete(
+        f"/api/v1/courses/{course_id}/lectures/{added}", headers=auth_headers
+    )
+    assert removed.status_code == 204
+    assert (await client.get(url, headers=auth_headers)).json()["outdated"] is True
+
+
+async def test_lecture_without_summary_does_not_outdate_sheet(
+    client, user, auth_headers, in_progress
+):
+    await subscribe(user)
+    course_id = await create_course(user)
+    await exam.build_exam_sheet({}, str(course_id))
+    await add_lecture(user, course_id, "Ещё обрабатывается", "")
+    response = await client.get(f"/api/v1/courses/{course_id}/exam-sheet", headers=auth_headers)
+    assert response.json()["outdated"] is False
+
+
+async def test_sheet_without_lecture_list_is_outdated(client, user, auth_headers, in_progress):
+    await subscribe(user)
+    course_id = await create_course(user)
+    async with SessionLocal() as session:
+        session.add(
+            ExamSheet(
+                course_id=course_id,
+                content={"tickets": [], "definitions": [], "cheatsheet_md": "- старое"},
+            )
+        )
+        await session.commit()
+    response = await client.get(f"/api/v1/courses/{course_id}/exam-sheet", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["outdated"] is True

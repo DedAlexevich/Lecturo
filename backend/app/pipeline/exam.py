@@ -6,7 +6,7 @@ from typing import Any
 from arq import create_pool
 from arq.connections import RedisSettings
 from arq.jobs import Job, JobStatus
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from app.services.consents import ai_transfer_given
 
 @dataclass(frozen=True)
 class LectureNotes:
+    lecture_id: uuid.UUID
     title: str
     content_md: str
 
@@ -39,15 +40,33 @@ class ExamSheetDraft:
     cheatsheet_md: str
 
 
-async def load_course_notes(session: AsyncSession, course_id: uuid.UUID) -> list[LectureNotes]:
-    rows = await session.execute(
-        select(Lecture.title, Summary.content_md)
-        .join(course_lectures, course_lectures.c.lecture_id == Lecture.id)
+def with_course_notes(query: Select, course_id: uuid.UUID) -> Select:
+    return (
+        query.join(course_lectures, course_lectures.c.lecture_id == Lecture.id)
         .join(Summary, Summary.lecture_id == Lecture.id)
         .where(course_lectures.c.course_id == course_id, Summary.content_md != "")
-        .order_by(course_lectures.c.position, course_lectures.c.added_at)
     )
-    return [LectureNotes(title=title, content_md=content) for title, content in rows]
+
+
+async def load_course_notes(session: AsyncSession, course_id: uuid.UUID) -> list[LectureNotes]:
+    rows = await session.execute(
+        with_course_notes(
+            select(Lecture.id, Lecture.title, Summary.content_md), course_id
+        ).order_by(course_lectures.c.position, course_lectures.c.added_at)
+    )
+    return [
+        LectureNotes(lecture_id=lecture_id, title=title, content_md=content)
+        for lecture_id, title, content in rows
+    ]
+
+
+async def course_note_ids(session: AsyncSession, course_id: uuid.UUID) -> set[uuid.UUID]:
+    return set(await session.scalars(with_course_notes(select(Lecture.id), course_id)))
+
+
+def is_outdated(content: dict, lecture_ids: set[uuid.UUID]) -> bool:
+    built_from = content.get("lecture_ids")
+    return built_from is None or set(built_from) != {str(item) for item in lecture_ids}
 
 
 def parse_tickets(items: Any) -> list[str]:
@@ -134,12 +153,16 @@ async def compose_exam_sheet(
 
 
 async def save_exam_sheet(
-    session: AsyncSession, course_id: uuid.UUID, draft: ExamSheetDraft
+    session: AsyncSession,
+    course_id: uuid.UUID,
+    draft: ExamSheetDraft,
+    lecture_ids: list[uuid.UUID],
 ) -> None:
     content = {
         "tickets": draft.tickets,
         "definitions": draft.definitions,
         "cheatsheet_md": draft.cheatsheet_md,
+        "lecture_ids": [str(lecture_id) for lecture_id in lecture_ids],
     }
     await session.execute(
         insert(ExamSheet)
@@ -167,7 +190,9 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         if not notes:
             return "empty"
         draft = await compose_exam_sheet(get_llm(), course_title, notes)
-        await save_exam_sheet(session, course_uuid, draft)
+        await save_exam_sheet(
+            session, course_uuid, draft, [lecture.lecture_id for lecture in notes]
+        )
         await session.commit()
         return "ready"
 

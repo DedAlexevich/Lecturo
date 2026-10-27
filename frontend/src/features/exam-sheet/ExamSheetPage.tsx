@@ -50,6 +50,15 @@ function Processing() {
   );
 }
 
+function Refreshing() {
+  return (
+    <div className="exam-sheet__notice" role="status">
+      <Spinner size="sm" label="Обновляем памятку" />
+      <p className="exam-sheet__notice-text">Обновляем памятку. Пока показана прежняя версия.</p>
+    </div>
+  );
+}
+
 function SheetTabs({ sheet, definitions }: { sheet: ExamSheet; definitions: Definition[] }) {
   return (
     <Tabs
@@ -162,6 +171,26 @@ export function ExamSheetPage() {
           <button type="button" className="exam-sheet__retry" onClick={() => sheet.refetch()}>
             Повторить
           </button>
+        </div>
+      )}
+
+      {data?.processing && <Refreshing />}
+
+      {data && data.outdated && !data.processing && (
+        <div className="exam-sheet__notice">
+          <div className="exam-sheet__notice-body">
+            <p className="exam-sheet__notice-text">
+              Состав курса изменился после сборки памятки. Соберите её заново, чтобы в ней были все лекции курса.
+            </p>
+            {create.isError && (
+              <p className="exam-sheet__alert" role="alert">
+                {createErrorText(create.error)}
+              </p>
+            )}
+          </div>
+          <Button variant="secondary" size="sm" onClick={startCreate} loading={create.isPending}>
+            Обновить памятку
+          </Button>
         </div>
       )}
 

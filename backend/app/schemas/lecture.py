@@ -88,6 +88,8 @@ class ExamSheetOut(Schema):
     tickets: list[str]
     definitions: list[dict[str, str]]
     cheatsheet_md: str
+    outdated: bool
+    processing: bool
 
 
 class LocalResultIn(Schema):

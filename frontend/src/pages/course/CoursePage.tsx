@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError } from "../../app/queryClient";
+import { useExamSheet } from "../../features/exam-sheet/queries";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
@@ -47,6 +48,7 @@ export function CoursePage() {
   const toast = useToast();
   const course = useCourse(id);
   const lectures = useLectures(id);
+  const examSheet = useExamSheet(id);
   const rename = useUpdateCourse(id);
   const remove = useDeleteCourse(id);
   const addLectures = useAddLectures(id);
@@ -101,6 +103,12 @@ export function CoursePage() {
             <h1 className="course__title">{data.title}</h1>
             {data.description && <p className="course__description">{data.description}</p>}
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
+            {examSheet.data?.outdated && !examSheet.data.processing && (
+              <p className="course__note">
+                Состав курса изменился, памятка к экзамену собрана по прежнему списку лекций.{" "}
+                <Link to={`/courses/${data.id}/exam-sheet`}>Обновить памятку</Link>
+              </p>
+            )}
           </div>
           <div className="course__actions">
             {items && items.length > 0 && (
