@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import Field, HttpUrl, field_validator
+from pydantic import Field, HttpUrl, StringConstraints, field_validator
 
 from app.models import LectureStatus, SourceType, StepName, StepStatus
 from app.pipeline.download import with_scheme
@@ -95,14 +96,20 @@ class ExamSheetOut(Schema):
     processing: bool
 
 
-class LocalResultIn(Schema):
+class LocalChapterIn(Schema):
+    start: float
+    end: float
     title: str = Field(max_length=300)
+    summary: str = Field(max_length=5000)
+
+
+class LocalResultIn(Schema):
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
     duration_sec: float = Field(gt=0, le=4 * 3600)
-    language: str = "ru"
-    model: str
+    language: str = Field(default="ru", max_length=8)
     segments: list[SegmentOut]
-    chapters: list[ChapterOut] = []
-    summary_md: str | None = None
+    chapters: list[LocalChapterIn] = []
+    summary_md: str | None = Field(default=None, max_length=100_000)
 
 
 class LectureUpdate(Schema):

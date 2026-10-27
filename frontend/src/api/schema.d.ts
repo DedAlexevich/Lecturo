@@ -1532,6 +1532,17 @@ export interface components {
              */
             existing: boolean;
         };
+        /** LocalChapterIn */
+        LocalChapterIn: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Title */
+            title: string;
+            /** Summary */
+            summary: string;
+        };
         /** LocalResultIn */
         LocalResultIn: {
             /** Title */
@@ -1543,15 +1554,13 @@ export interface components {
              * @default ru
              */
             language: string;
-            /** Model */
-            model: string;
             /** Segments */
             segments: components["schemas"]["SegmentOut"][];
             /**
              * Chapters
              * @default []
              */
-            chapters: components["schemas"]["ChapterOut"][];
+            chapters: components["schemas"]["LocalChapterIn"][];
             /** Summary Md */
             summary_md?: string | null;
         };

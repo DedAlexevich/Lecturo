@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     stt_poll_seconds: float = 3.0
     stt_expected_ratio: float = 0.3
     stt_expected_min_seconds: float = 45.0
+    stt_chunk_threshold_seconds: float = 720.0
+    stt_chunk_target_seconds: float = 420.0
+    stt_parallel_parts: int = 3
     eta_download_ratio: float = 0.1
     eta_audio_ratio: float = 0.01
     eta_summarize_ratio: float = 0.05
@@ -97,6 +100,7 @@ class Settings(BaseSettings):
     local_max_segments: int = 20000
     local_max_chapters: int = 500
     local_max_text_chars: int = 5000
+    local_max_total_chars: int = 1_000_000
     local_timecode_tolerance_sec: float = 1.0
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60

@@ -4,7 +4,8 @@ import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { buildMatcher, highlight } from "./highlight";
+import { highlight } from "./highlight";
+import { buildMatcher } from "./matcher";
 import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
 
