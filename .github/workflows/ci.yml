@@ -95,6 +95,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run check:comments
+      - run: npm run test:local
       - name: API types up to date
         run: |
           npm run gen:api

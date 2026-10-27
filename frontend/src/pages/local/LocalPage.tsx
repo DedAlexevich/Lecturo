@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { extractAudio } from "../../local/audio";
 import { disposeWhisper, transcribe } from "../../local/whisper";
+import { saveLocalLecture } from "../../local/storage";
+import type { LocalLecture } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
 import { Transcript } from "../lecture/Transcript";
 import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";
+import { ExportButtons } from "./ExportButtons";
+import { LocalLibrary } from "./LocalLibrary";
 import "../lecture/lecture.css";
 import "./local.css";
 
@@ -26,6 +30,9 @@ export function LocalPage() {
   const [error, setError] = useState("");
   const [url, setUrl] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
+  const [saved, setSaved] = useState<LocalLecture | null>(null);
+  const [saveError, setSaveError] = useState(false);
+  const [libraryVersion, setLibraryVersion] = useState(0);
   const player = useRef<HTMLMediaElement | null>(null);
   const controller = useRef<AbortController | null>(null);
   const busy = stage === "extracting" || stage === "loading" || stage === "transcribing";
@@ -48,6 +55,8 @@ export function LocalPage() {
     controller.current = abort;
     setError("");
     setSegments([]);
+    setSaved(null);
+    setSaveError(false);
     setStage("extracting");
     setProgress(undefined);
     try {
@@ -60,6 +69,19 @@ export function LocalPage() {
       }, { signal: abort.signal, language });
       setSegments(result);
       setStage("done");
+      try {
+        const lecture = await saveLocalLecture({
+          title: file.name.replace(/\.[^.]+$/, "") || file.name,
+          durationSec: audio.duration,
+          language,
+          model,
+          segments: result,
+        });
+        setSaved(lecture);
+        setLibraryVersion((value) => value + 1);
+      } catch {
+        setSaveError(true);
+      }
     } catch (reason) {
       if (abort.signal.aborted) return;
       setError(reason instanceof Error ? reason.message : "Не удалось обработать файл");
@@ -81,8 +103,29 @@ export function LocalPage() {
     setFile(next);
     setStage("idle");
     setSegments([]);
+    setSaved(null);
+    setSaveError(false);
     setError("");
     setCurrentTime(0);
+  }
+
+  function openSaved(lecture: LocalLecture) {
+    controller.current?.abort();
+    setFile(null);
+    setUrl("");
+    setSaved(lecture);
+    setSaveError(false);
+    setSegments(lecture.segments);
+    setError("");
+    setCurrentTime(0);
+    setStage("done");
+  }
+
+  function removed(id: string) {
+    if (saved?.id !== id) return;
+    setSaved(null);
+    setSegments([]);
+    setStage("idle");
   }
 
   const selectedModel = models.find((item) => item.id === model)!;
@@ -123,7 +166,7 @@ export function LocalPage() {
           {stage === "error" && <p className="local-error" role="alert">Не удалось обработать запись: {error}</p>}
         </section>
         <section className="local-result" aria-labelledby="local-result-title">
-          <div className="local-result__head"><h2 id="local-result-title">Расшифровка</h2><p>{file ? file.name : "Выберите файл, чтобы начать"}</p></div>
+          <div className="local-result__head"><h2 id="local-result-title">Расшифровка</h2><p>{file ? file.name : saved ? saved.title : "Выберите файл, чтобы начать"}</p></div>
           {file && url && (file.type.startsWith("video/") ? (
             <video ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ) : (
@@ -132,9 +175,12 @@ export function LocalPage() {
           {stage === "done" && segments.length > 0 ? (
             <Transcript segments={segments} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
-          {stage === "done" && <p className="local-note local-result__note">Результат доступен только на этой странице. Сохраните нужный текст до её закрытия.</p>}
+          {stage === "done" && saved && <ExportButtons lecture={saved} />}
+          {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
+          {stage === "done" && saveError && <p className="local-error" role="alert">Не удалось сохранить результат в браузере. Он доступен только до закрытия страницы.</p>}
         </section>
       </div>
+      <LocalLibrary version={libraryVersion} activeId={saved?.id} onOpen={openSaved} onRemoved={removed} />
     </div>
   );
 }
