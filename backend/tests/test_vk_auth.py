@@ -157,9 +157,9 @@ async def users_with_vk(vk_id: str) -> list[AuthIdentity]:
 
 
 async def test_providers_reports_vk_flag(client, monkeypatch):
-    assert (await client.get("/api/v1/auth/providers")).json() == {"vk": True}
+    assert (await client.get("/api/v1/auth/providers")).json()["vk"] is True
     monkeypatch.setattr(get_settings(), "vk_client_id", "")
-    assert (await client.get("/api/v1/auth/providers")).json() == {"vk": False}
+    assert (await client.get("/api/v1/auth/providers")).json()["vk"] is False
 
 
 async def test_start_builds_pkce_authorize_url(client):

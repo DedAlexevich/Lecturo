@@ -12,6 +12,7 @@ from app.services.consents import ai_transfer_given, current_ai_transfer_revisio
 
 TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому аккаунту"
 VK_TAKEN = "Этот VK уже привязан к другому аккаунту"
+YANDEX_TAKEN = "Этот Яндекс уже привязан к другому аккаунту"
 EMAIL_TAKEN = "Этот email уже используется"
 
 
@@ -96,6 +97,31 @@ async def link_vk(session: AsyncSession, user: User, vk_id: str, profile: dict) 
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, VK_TAKEN) from None
+
+
+async def link_yandex(session: AsyncSession, user: User, yandex_id: str, profile: dict) -> None:
+    existing = await find_identity(session, AuthProvider.yandex, yandex_id)
+    if existing is not None and existing.user_id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, YANDEX_TAKEN)
+    own = await user_identity(session, user, AuthProvider.yandex)
+    if own is not None and own.provider_user_id != yandex_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "К аккаунту уже привязан другой Яндекс")
+    if own is None:
+        session.add(
+            AuthIdentity(
+                user_id=user.id,
+                provider=AuthProvider.yandex,
+                provider_user_id=yandex_id,
+                data=profile,
+            )
+        )
+    else:
+        own.data = profile
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, YANDEX_TAKEN) from None
 
 
 async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -> None:
