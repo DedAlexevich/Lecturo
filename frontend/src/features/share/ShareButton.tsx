@@ -35,7 +35,7 @@ export function ShareButton({ target, title }: ShareButtonProps) {
 function ShareDialog({ target, title, onClose }: ShareButtonProps & { onClose: () => void }) {
   const toast = useToast();
   const linkInput = useRef<HTMLInputElement>(null);
-  const shares = useShares(true);
+  const shares = useShares();
   const create = useCreateShare(target);
   const revoke = useRevokeShare();
   const isCourse = "courseId" in target;

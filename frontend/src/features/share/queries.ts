@@ -12,10 +12,9 @@ export function matchesTarget(share: Share, target: ShareTarget) {
   return "lectureId" in target ? share.lecture_id === target.lectureId : share.course_id === target.courseId;
 }
 
-export function useShares(enabled: boolean) {
+export function useShares() {
   return useQuery({
     queryKey: sharesKey,
-    enabled,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/shares");
       if (data === undefined) throw new ApiError(response.status, error);
