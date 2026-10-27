@@ -166,6 +166,11 @@ try {
     await page.getByRole("button", { name: "Выйти", exact: true }).click();
     await page.waitForURL(base + "/login");
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
+    await page.getByRole("button", { name: "Войти через Telegram", exact: true }).waitFor();
+    assert.equal(requests.length, 1);
+    await page.getByRole("button", { name: "Войти через Telegram", exact: true }).click();
+    await page.waitForURL(base + "/");
+    assert.equal(requests.length, 2);
     assert.deepEqual(errors, []);
     await context.close();
   }

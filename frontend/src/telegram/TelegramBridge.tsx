@@ -94,10 +94,12 @@ export function TelegramBridge() {
 
   return (
     <>
-      {error && !consent && (
+      {!consent && (error || (token === null && wasSignedOutByUser())) && (
         <div>
-          <p role="alert">Вход через Telegram: {error}</p>
-          <Button variant="ghost" loading={busy} onClick={submit}>Повторить вход</Button>
+          {error && <p role="alert">Вход через Telegram: {error}</p>}
+          <Button variant="ghost" loading={busy} onClick={submit}>
+            {error ? "Повторить вход" : "Войти через Telegram"}
+          </Button>
         </div>
       )}
       <Dialog
