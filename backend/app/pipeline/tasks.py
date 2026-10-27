@@ -156,11 +156,19 @@ async def quiz_job_active(lecture_id: uuid.UUID) -> bool:
 
 
 async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
+    return await abort_job(lecture_job_id(lecture_id))
+
+
+async def cancel_quiz_job(lecture_id: uuid.UUID) -> bool:
+    return await abort_job(quiz_job_id(lecture_id))
+
+
+async def abort_job(job_id: str) -> bool:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     redis_settings.conn_retries = 0
     redis = await create_pool(redis_settings)
     try:
-        job = Job(lecture_job_id(lecture_id), redis)
+        job = Job(job_id, redis)
         if await job.status() not in ACTIVE_JOB_STATUSES:
             return False
         await redis.zadd(abort_jobs_ss, {job.job_id: timestamp_ms()})

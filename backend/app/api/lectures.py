@@ -22,7 +22,13 @@ from app.models import (
 from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
-from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture, enqueue_quiz, quiz_job_active
+from app.pipeline.tasks import (
+    cancel_lecture_job,
+    cancel_quiz_job,
+    enqueue_lecture,
+    enqueue_quiz,
+    quiz_job_active,
+)
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -158,6 +164,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
 
     try:
         await cancel_lecture_job(lecture_id)
+        await cancel_quiz_job(lecture_id)
     except (OSError, RedisError):
         pass
     await asyncio.to_thread(remove_files, files)
