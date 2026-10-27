@@ -78,7 +78,7 @@ export function LocalLibrary({ version, activeId, onOpen, onRemoved }: LocalLibr
               {formats.map((format) => (
                 <Button key={format.id} size="sm" variant="ghost" aria-label={`Скачать «${item.title}» в формате ${format.label}`} onClick={() => void withLecture(item.id, (lecture) => downloadLecture(lecture, format.id))}>{format.label}</Button>
               ))}
-              <Button size="sm" variant="danger" aria-label={`Удалить «${item.title}»`} onClick={() => void remove(item)}>Удалить</Button>
+              <Button size="sm" variant="ghost" aria-label={`Удалить «${item.title}»`} onClick={() => void remove(item)}>Удалить</Button>
             </div>
           </li>
         ))}
