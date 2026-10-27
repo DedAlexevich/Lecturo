@@ -120,20 +120,29 @@
   font-weight: var(--weight-semibold);
 }
 
+.search__body--idle {
+  display: none;
+}
+
 .search--lecture {
   flex: 1;
-  padding: var(--space-3) var(--space-2) 0;
+  gap: 0;
 }
 
 .search--lecture .search__form {
-  padding: 0 var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+
+.search--lecture .search__spinner {
+  right: calc(var(--space-3) * 2);
+  margin-top: calc((var(--space-3) - var(--space-2)) / 2);
 }
 
 .search--lecture .search__body {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-bottom: var(--space-2);
+  padding: var(--space-2);
 }
 
 .search--lecture .search__note,

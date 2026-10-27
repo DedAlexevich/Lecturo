@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatTimecode } from "../../pages/lecture/time";
 import { Button } from "../../ui/Button";
@@ -17,7 +17,7 @@ function fragmentsCount(count: number) {
   return `${count} фрагментов`;
 }
 
-export function SearchPanel({ scope }: { scope: SearchScope }) {
+export function SearchPanel({ scope, children }: { scope: SearchScope; children?: ReactNode }) {
   const [value, setValue] = useState("");
   const query = useDebouncedValue(value.trim(), 300);
   const search = useSearch(scope, query);
@@ -46,13 +46,10 @@ export function SearchPanel({ scope }: { scope: SearchScope }) {
         )}
       </form>
 
-      <div className="search__body" aria-live="polite">
-        {!active && (
-          <p className="search__note">
-            {inCourse
-              ? "Ищет по расшифровкам всех лекций курса и открывает запись на нужной минуте."
-              : "Ищет по расшифровке и переносит видео к найденному месту."}
-          </p>
+      {!active && children}
+      <div className={active || !children ? "search__body" : "search__body search__body--idle"} aria-live="polite">
+        {!active && !children && (
+          <p className="search__note">Ищет по расшифровкам всех лекций курса и открывает запись на нужной минуте.</p>
         )}
         {active && search.isPending && <p className="search__note">Ищем…</p>}
         {active && search.isError && !hits && (

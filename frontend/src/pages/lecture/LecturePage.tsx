@@ -70,7 +70,6 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
 }
 
 type PanelKind = "summary" | "chapters" | "transcript";
-type TabId = PanelKind | "search";
 
 const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: string }> = {
   summary: {
@@ -161,7 +160,7 @@ export function LecturePage() {
   const lecture = useLecture(id);
   const status = useLectureStatus(id, lecture.data);
   const retry = useRetryProcessing(id);
-  const [tab, setTab] = useState<TabId>("summary");
+  const [tab, setTab] = useState<PanelKind>("summary");
   const { currentTime, seek, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
@@ -191,7 +190,57 @@ export function LecturePage() {
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
-  const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0, search: true };
+  const tabs = (
+    <Tabs
+      label="Материалы лекции"
+      value={tab}
+      onChange={(next) => setTab(next as PanelKind)}
+      items={[
+        {
+          id: "summary",
+          label: "Конспект",
+          panel: summary ? (
+            <div className="lecture__scroll summary">
+              <Markdown source={summary} />
+            </div>
+          ) : (
+            <PanelEmpty kind="summary" status={data.status} />
+          ),
+        },
+        {
+          id: "chapters",
+          label: "Главы",
+          panel:
+            chapters.length > 0 ? (
+              <div className="lecture__scroll">
+                <Chapters
+                  chapters={chapters}
+                  currentTime={hasPlayer ? currentTime : null}
+                  onSelect={hasPlayer ? playFrom : undefined}
+                />
+              </div>
+            ) : (
+              <PanelEmpty kind="chapters" status={data.status} />
+            ),
+        },
+        {
+          id: "transcript",
+          label: "Расшифровка",
+          panel:
+            segments.length > 0 ? (
+              <Transcript
+                segments={segments}
+                currentTime={hasPlayer ? currentTime : null}
+                onSelect={hasPlayer ? playFrom : undefined}
+              />
+            ) : (
+              <PanelEmpty kind="transcript" status={data.status} />
+            ),
+        },
+      ]}
+    />
+  );
+  const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0 };
 
   return (
     <div className="lecture">
@@ -242,59 +291,11 @@ export function LecturePage() {
           className={tabHasContent[tab] ? "lecture__panel" : "lecture__panel lecture__panel--empty"}
           aria-label="Материалы лекции"
         >
-          <Tabs
-            label="Материалы лекции"
-            value={tab}
-            onChange={(next) => setTab(next as TabId)}
-            items={[
-              {
-                id: "summary",
-                label: "Конспект",
-                panel: summary ? (
-                  <div className="lecture__scroll summary">
-                    <Markdown source={summary} />
-                  </div>
-                ) : (
-                  <PanelEmpty kind="summary" status={data.status} />
-                ),
-              },
-              {
-                id: "chapters",
-                label: "Главы",
-                panel:
-                  chapters.length > 0 ? (
-                    <div className="lecture__scroll">
-                      <Chapters
-                        chapters={chapters}
-                        currentTime={hasPlayer ? currentTime : null}
-                        onSelect={hasPlayer ? playFrom : undefined}
-                      />
-                    </div>
-                  ) : (
-                    <PanelEmpty kind="chapters" status={data.status} />
-                  ),
-              },
-              {
-                id: "transcript",
-                label: "Расшифровка",
-                panel:
-                  segments.length > 0 ? (
-                    <Transcript
-                      segments={segments}
-                      currentTime={hasPlayer ? currentTime : null}
-                      onSelect={hasPlayer ? playFrom : undefined}
-                    />
-                  ) : (
-                    <PanelEmpty kind="transcript" status={data.status} />
-                  ),
-              },
-              {
-                id: "search",
-                label: "Поиск",
-                panel: <SearchPanel scope={{ lectureId: data.id }} />,
-              },
-            ]}
-          />
+          {data.status === "ready" ? (
+            <SearchPanel scope={{ lectureId: data.id }}>{tabs}</SearchPanel>
+          ) : (
+            tabs
+          )}
         </section>
       </div>
     </div>
