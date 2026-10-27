@@ -62,12 +62,18 @@ function parseBody(body: string) {
   }
 }
 
-async function launch(upload: Upload) {
+async function audioFingerprint(file: File) {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function launch(upload: Upload, isCurrent: () => boolean) {
   if (!upload.url) {
     const previous = await upload.findPreviousUploads();
+    if (!isCurrent()) return;
     if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0]);
   }
-  upload.start();
+  if (isCurrent()) upload.start();
 }
 
 export function useTusUpload(userId: string | undefined) {
@@ -113,7 +119,7 @@ export function useTusUpload(userId: string | undefined) {
         removeFingerprintOnSuccess: true,
         metadata,
         fingerprint: async (source) =>
-          ["lecturo", userId, courseId ?? "none", source.name, source.type, source.size, source.lastModified].join(":"),
+          ["lecturo", userId, courseId ?? "none", source.name, source.type, source.size, source.lastModified, ...(audioOnly ? [await audioFingerprint(source)] : [])].join(":"),
         onBeforeRequest: (request) => {
           const token = tokenStorage.get();
           if (token) request.setHeader("Authorization", `Bearer ${token}`);
@@ -148,8 +154,7 @@ export function useTusUpload(userId: string | undefined) {
       });
       current.current = upload;
       setState({ phase: "uploading", file, sent: 0, total: file.size, error: null, lectureId: null });
-      if (audioOnly) upload.start();
-      else void launch(upload);
+      void launch(upload, () => current.current === upload);
     },
     [update, userId],
   );
@@ -165,7 +170,7 @@ export function useTusUpload(userId: string | undefined) {
     const upload = current.current;
     if (!upload) return;
     update(upload, (state) => ({ ...state, phase: "uploading", error: null }));
-    void launch(upload);
+    void launch(upload, () => current.current === upload);
   }, [update]);
 
   const reset = useCallback(() => {
