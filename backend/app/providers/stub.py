@@ -50,6 +50,18 @@ class StubLLM:
         if json_mode and '"questions"' in system:
             return stub_quiz(user)
         if json_mode:
+            if '"source_ids"' in system:
+                sources = json.loads(user).get("sources", [])
+                if sources:
+                    return json.dumps(
+                        {
+                            "related": True,
+                            "lecture_answer": sources[0]["text"],
+                            "additional": "",
+                            "source_ids": [1],
+                        },
+                        ensure_ascii=False,
+                    )
             return json.dumps({"text": user[:200]}, ensure_ascii=False)
         return f"Кратко: {user[:200]}"
 

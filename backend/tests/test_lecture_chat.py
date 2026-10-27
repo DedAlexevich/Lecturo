@@ -5,7 +5,14 @@ import pytest
 
 from app.models import ChunkKind
 from app.schemas.search import SearchHit
-from app.services.lecture_chat import InvalidChatReply, answer_question, parse_reply, select_sources
+from app.services.lecture_chat import (
+    MAX_CONTEXT_LENGTH,
+    InvalidChatReply,
+    answer_question,
+    limit_notes,
+    parse_reply,
+    select_sources,
+)
 
 
 class ScriptedLLM:
@@ -52,8 +59,9 @@ async def test_answer_uses_only_owned_lecture_sources():
         chapters=[{"title": "Предел", "summary": "Определение"}],
         hits=[hit(uuid.uuid4(), "Чужой фрагмент"), hit(lecture_id)],
     )
-    assert reply.lecture_answer == "Предел равен двум."
-    assert reply.additional == "Предел описывает поведение функции."
+    assert reply.status == "answered"
+    assert reply.answer == "Предел равен двум."
+    assert reply.extra == "Предел описывает поведение функции."
     assert [(source.start, source.end) for source in reply.sources] == [(10, 15)]
     sent = llm.requests[0][1]
     assert len(sent["sources"]) == 1
@@ -74,8 +82,9 @@ async def test_no_sources_does_not_call_model():
         hits=[],
     )
     assert not llm.requests
+    assert reply.status == "not_found"
     assert not reply.sources
-    assert "не найден" in reply.additional
+    assert "не найден" in reply.answer
 
 
 def test_unrelated_question_never_returns_generated_text_or_sources():
@@ -91,9 +100,9 @@ def test_unrelated_question_never_returns_generated_text_or_sources():
         ),
         sources,
     )
-    assert not reply.related
-    assert not reply.lecture_answer
-    assert not reply.additional
+    assert reply.status == "off_topic"
+    assert "не относится" in reply.answer
+    assert reply.extra is None
     assert not reply.sources
 
 
@@ -129,3 +138,13 @@ def test_only_timestamped_transcript_and_chapter_sources_are_selected():
         hit(lecture_id, "Глава", start=20, end=30, kind=ChunkKind.chapter),
     ]
     assert [source.text for source in select_sources(lecture_id, hits)] == ["Глава"]
+
+
+def test_summary_and_chapters_share_a_bounded_context():
+    summary, chapters = limit_notes("Конспект", [{"title": "Глава", "summary": "x" * 20000}])
+
+    assert summary == "Конспект"
+    assert (
+        len(summary) + sum(len(chapter["title"]) + len(chapter["summary"]) for chapter in chapters)
+        == MAX_CONTEXT_LENGTH
+    )
