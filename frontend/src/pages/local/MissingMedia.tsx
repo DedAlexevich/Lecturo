@@ -12,7 +12,7 @@ export function MissingMedia({ disabled, onPick }: MissingMediaProps) {
   return (
     <div className="local-source local-source--notice local-media-missing" role="status">
       <p className="local-source__title">Записи нет в этом браузере</p>
-      <p>Файл не поместился в хранилище или был удалён. Выберите его заново, и он будет открываться вместе с расшифровкой.</p>
+      <p>Файл записи не сохранён в этом браузере. Выберите его заново, и он будет открываться вместе с расшифровкой.</p>
       <input
         ref={input}
         type="file"
