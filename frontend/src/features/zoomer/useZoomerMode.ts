@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { zoomerClips } from "./clips";
+import { useCallback, useEffect, useState } from "react";
+import { loadZoomerClips } from "./clips";
 import { nextClipIndex, parseStoredIndex, parseStoredMode } from "./rotation";
 
 const modeKey = "lecturo-zoomer";
@@ -26,42 +26,67 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function pickClip(): string | null {
-  const index = nextClipIndex(parseStoredIndex(readStorage(clipKey)), zoomerClips.length);
+function pickClip(clips: string[]): string | null {
+  const index = nextClipIndex(parseStoredIndex(readStorage(clipKey)), clips.length);
   if (index === null) return null;
   writeStorage(clipKey, String(index));
-  return zoomerClips[index];
+  return clips[index];
 }
 
 export function useZoomerMode() {
-  const available = zoomerClips.length > 0;
-  const [clip, setClip] = useState<string | null>(() =>
-    available && parseStoredMode(readStorage(modeKey)) ? pickClip() : null,
-  );
+  const [enabled, setEnabled] = useState(() => parseStoredMode(readStorage(modeKey)));
+  const [clips, setClips] = useState<string[] | null>(null);
+  const [clip, setClip] = useState<string | null>(null);
   const [autoplay, setAutoplay] = useState(() => !prefersReducedMotion());
   const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || clips !== null) return;
+    let active = true;
+    void loadZoomerClips().then((loaded) => {
+      if (active) setClips(loaded);
+    });
+    return () => {
+      active = false;
+    };
+  }, [enabled, clips]);
+
+  useEffect(() => {
+    if (enabled && clips !== null && clip === null) setClip(pickClip(clips));
+  }, [enabled, clips, clip]);
 
   const enable = useCallback(() => {
     setConfirming(false);
     setAutoplay(true);
-    setClip(pickClip());
+    setEnabled(true);
     writeStorage(modeKey, "on");
   }, []);
 
   const disable = useCallback(() => {
+    setEnabled(false);
     setClip(null);
     writeStorage(modeKey, null);
   }, []);
 
   const toggle = useCallback(() => {
-    if (clip !== null) disable();
+    if (enabled) disable();
     else if (prefersReducedMotion()) setConfirming(true);
     else enable();
-  }, [clip, disable, enable]);
+  }, [enabled, disable, enable]);
 
   const cancel = useCallback(() => setConfirming(false), []);
 
-  return { available, clip, autoplay, confirming, toggle, enable, disable, cancel };
+  return {
+    available: clips === null || clips.length > 0,
+    enabled,
+    clip: enabled ? clip : null,
+    autoplay,
+    confirming,
+    toggle,
+    enable,
+    disable,
+    cancel,
+  };
 }
 
 export type ZoomerMode = ReturnType<typeof useZoomerMode>;

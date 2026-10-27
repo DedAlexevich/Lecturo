@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseClipListing } from "../src/features/zoomer/listing.ts";
 import { nextClipIndex, parseStoredIndex, parseStoredMode } from "../src/features/zoomer/rotation.ts";
 
 test("no clip is picked when the folder is empty", () => {
@@ -35,4 +36,25 @@ test("mode is off unless explicitly stored as on", () => {
   assert.equal(parseStoredMode("off"), false);
   assert.equal(parseStoredMode("true"), false);
   assert.equal(parseStoredMode("on"), true);
+});
+
+test("listing keeps only mp4 and webm files in name order", () => {
+  const body = [
+    { name: "rugs.webm", is_dir: false },
+    { name: "notes.txt", is_dir: false },
+    { name: "Run.MP4", is_dir: false },
+    { name: "old.mp4", is_dir: true },
+    { name: "carpet wash.mp4", is_dir: false },
+  ];
+  assert.deepEqual(parseClipListing(body), [
+    "/zoomer/Run.MP4",
+    "/zoomer/carpet%20wash.mp4",
+    "/zoomer/rugs.webm",
+  ]);
+});
+
+test("listing that is not a file list gives no clips", () => {
+  assert.deepEqual(parseClipListing(null), []);
+  assert.deepEqual(parseClipListing({ name: "a.mp4" }), []);
+  assert.deepEqual(parseClipListing([null, 3, { name: 5 }]), []);
 });

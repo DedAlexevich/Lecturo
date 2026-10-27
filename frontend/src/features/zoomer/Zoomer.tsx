@@ -9,9 +9,9 @@ export function ZoomerToggle({ mode }: { mode: ZoomerMode }) {
   return (
     <>
       <Button
-        variant={mode.clip !== null ? "secondary" : "ghost"}
+        variant={mode.enabled ? "secondary" : "ghost"}
         size="sm"
-        aria-pressed={mode.clip !== null}
+        aria-pressed={mode.enabled}
         onClick={mode.toggle}
       >
         Режим зумера

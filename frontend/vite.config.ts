@@ -55,6 +55,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8000",
       "/media": "http://localhost:80",
+      "/zoomer": "http://localhost:80",
       "/files": "http://localhost:8080",
     },
   },

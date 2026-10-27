@@ -1,9 +1,11 @@
-const modules = import.meta.glob<string>("/src/assets/zoomer/*.{mp4,webm}", {
-  eager: true,
-  query: "?url",
-  import: "default",
-});
+import { parseClipListing } from "./listing";
 
-export const zoomerClips: string[] = Object.keys(modules)
-  .sort()
-  .map((path) => modules[path]);
+let request: Promise<string[]> | null = null;
+
+export function loadZoomerClips(): Promise<string[]> {
+  request ??= fetch("/zoomer/", { headers: { Accept: "application/json" } })
+    .then((response) => (response.ok ? response.json() : []))
+    .then(parseClipListing)
+    .catch(() => []);
+  return request;
+}
