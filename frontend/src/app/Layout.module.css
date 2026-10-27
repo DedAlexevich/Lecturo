@@ -202,8 +202,12 @@
   }
 
   .bottomNav .navLink {
-    flex: 1;
+    flex: 1 1 0;
     justify-content: center;
+    min-width: 0;
+    padding: 0 var(--space-1);
+    font-size: var(--text-sm);
+    white-space: nowrap;
     height: var(--bar-height);
     border-radius: 0;
   }
