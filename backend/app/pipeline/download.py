@@ -223,9 +223,11 @@ async def probe_duration(url: str) -> float | None:
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), PROBE_TIMEOUT_SEC)
     except TimeoutError:
-        process.kill()
-        await process.wait()
         return None
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
     try:
         return float(stdout.decode().strip())
     except ValueError:

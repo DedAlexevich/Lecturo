@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -81,6 +82,9 @@ async def test_transcribe_uploads_polls_and_cleans_up(tmp_path: Path):
     assert upload.url.path.startswith("/lecturo-audio/stt/")
     assert upload.headers["authorization"].startswith("AWS4-HMAC-SHA256 Credential=access/")
     assert upload.content == b"OggS-audio"
+    assert upload.headers["content-length"] == str(len(b"OggS-audio"))
+    assert "transfer-encoding" not in upload.headers
+    assert upload.headers["x-amz-content-sha256"] == hashlib.sha256(b"OggS-audio").hexdigest()
     body = json.loads(start.content)
     assert start.headers["authorization"] == "Api-Key api-key"
     assert body["config"]["specification"]["languageCode"] == "ru-RU"

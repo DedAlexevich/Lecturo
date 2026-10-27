@@ -20,6 +20,7 @@ PROBE_TIMEOUT_SEC = 60.0
 PROGRESS_INTERVAL_SEC = 2.0
 VIDEO_HEIGHT = 720
 VIDEO_PRESET = "veryfast"
+LOCAL_PROTOCOLS = "file,pipe"
 PLAYER_PROFILES = {"Constrained Baseline", "Baseline", "Main", "High"}
 
 
@@ -36,6 +37,8 @@ async def probe(path: Path, entries: str) -> dict[str, Any]:
         "ffprobe",
         "-v",
         "error",
+        "-protocol_whitelist",
+        LOCAL_PROTOCOLS,
         "-show_entries",
         entries,
         "-of",
@@ -47,9 +50,11 @@ async def probe(path: Path, entries: str) -> dict[str, Any]:
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), PROBE_TIMEOUT_SEC)
     except TimeoutError:
-        process.kill()
-        await process.wait()
         raise MediaError("Не удалось прочитать файл") from None
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
     try:
         return json.loads(stdout or b"{}")
     except ValueError as error:
@@ -148,6 +153,8 @@ async def run_ffmpeg(args: list[str], duration: float | None, report: Report, er
         "-progress",
         "pipe:1",
         "-y",
+        "-protocol_whitelist",
+        LOCAL_PROTOCOLS,
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,

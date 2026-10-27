@@ -1,11 +1,17 @@
+import os
+import time
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, SourceType, TranscriptSegment
-from app.pipeline.retention import delete_expired_videos, extend_video_retention
+from app.pipeline.retention import (
+    delete_expired_videos,
+    delete_stale_uploads,
+    extend_video_retention,
+)
 
 SETTINGS = Settings(free_video_retention_days=3, subscription_video_retention_days=30)
 
@@ -62,6 +68,52 @@ async def test_missing_video_file_is_cleared(user, tmp_path):
     await delete_expired_videos({})
 
     assert (await reload(lecture)).video_path is None
+
+
+async def test_failed_video_deletion_does_not_stop_batch(user, tmp_path):
+    expired = datetime.now(UTC) - timedelta(minutes=1)
+    stuck_path = tmp_path / "stuck.mp4"
+    stuck_path.mkdir()
+    video_file = tmp_path / "video.mp4"
+    video_file.write_bytes(b"video")
+    stuck = await add_lecture(user, stuck_path, expired)
+    other = await add_lecture(user, video_file, expired)
+
+    await delete_expired_videos({})
+
+    assert stuck_path.exists()
+    assert (await reload(stuck)).video_path == str(stuck_path)
+    assert not video_file.exists()
+    assert (await reload(other)).video_path is None
+
+
+def touch(path, hours_ago: float) -> None:
+    path.write_bytes(b"data")
+    moment = time.time() - hours_ago * 3600
+    os.utime(path, (moment, moment))
+
+
+async def test_stale_uploads_are_deleted(tmp_path, monkeypatch):
+    monkeypatch.setattr(get_settings(), "storage_dir", tmp_path)
+    monkeypatch.setattr(get_settings(), "upload_stale_hours", 24)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    touch(uploads / "abandoned", 30)
+    touch(uploads / "abandoned.info", 30)
+    touch(uploads / "active", 1)
+    touch(uploads / "active.info", 30)
+    touch(uploads / "orphan.info", 48)
+
+    removed = await delete_stale_uploads({})
+
+    assert removed == 2
+    assert sorted(path.name for path in uploads.iterdir()) == ["active", "active.info"]
+
+
+async def test_stale_uploads_without_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(get_settings(), "storage_dir", tmp_path)
+
+    assert await delete_stale_uploads({}) == 0
 
 
 async def test_subscription_extends_uploaded_videos(user, tmp_path):

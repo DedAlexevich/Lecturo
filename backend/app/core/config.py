@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     eta_audio_ratio: float = 0.01
     eta_summarize_ratio: float = 0.05
     eta_embed_ratio: float = 0.01
+    upload_stale_hours: int = 24
+    upload_max_pending: int = 5
+    worker_max_jobs: int = 4
 
     llm_provider: str = "stub"
     llm_base_url: str = "https://api.deepseek.com"

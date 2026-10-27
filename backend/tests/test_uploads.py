@@ -121,6 +121,25 @@ async def test_pre_create_binds_upload_to_user(client, user, auth_headers):
     assert upload_id.startswith(user.id.hex)
 
 
+async def test_pre_create_limits_pending_uploads(client, user, auth_headers, storage, monkeypatch):
+    monkeypatch.setattr(get_settings(), "upload_max_pending", 2)
+    for index in range(2):
+        (storage / "uploads" / f"{user.id.hex}{index:032x}.info").write_text("{}")
+    (storage / "uploads" / f"{uuid.uuid4().hex}{'0' * 32}.info").write_text("{}")
+    request = hook("pre-create", auth_headers, Size=1000, MetaData={"filename": "a.mp4"})
+
+    response = await client.post(HOOKS_URL, json=request)
+
+    body = response.json()
+    assert body["RejectUpload"] is True
+    assert body["HTTPResponse"]["StatusCode"] == 429
+
+    (storage / "uploads" / f"{user.id.hex}{0:032x}.info").unlink()
+    response = await client.post(HOOKS_URL, json=request)
+
+    assert "ChangeFileInfo" in response.json()
+
+
 async def test_pre_finish_creates_lecture(client, user, auth_headers, storage, enqueued):
     course = await client.post("/api/v1/courses", json={"title": "Физика"}, headers=auth_headers)
     course_id = course.json()["id"]
