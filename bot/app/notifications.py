@@ -12,7 +12,6 @@ from aiogram.exceptions import (
 )
 from aiogram.types import InlineKeyboardMarkup
 from redis.asyncio import Redis
-from redis.exceptions import RedisError
 
 from app.handlers import open_app_markup
 
@@ -232,7 +231,7 @@ async def lecture_notices_loop(pool: asyncpg.Pool, bot: Bot, public_url: str):
         pause = 0
         try:
             pause = await deliver_lecture_notices(pool, bot, public_url)
-        except (asyncpg.PostgresError, OSError):
+        except Exception:
             logger.exception("Не удалось получить уведомления о лекциях")
         await asyncio.sleep(max(pause, LECTURE_NOTICE_INTERVAL_SECONDS))
 
@@ -268,7 +267,7 @@ async def legal_notices_loop(pool: asyncpg.Pool, redis: Redis, bot: Bot):
         pause = 0
         try:
             pause = await deliver_legal_notices(pool, redis, bot)
-        except (asyncpg.PostgresError, OSError, RedisError):
+        except Exception:
             logger.exception("Не удалось получить уведомления о новых редакциях документов")
         await asyncio.sleep(max(pause, LEGAL_NOTICE_INTERVAL_SECONDS))
 
@@ -335,6 +334,6 @@ async def quota_loop(
         pause = 0
         try:
             pause = await check_quotas(pool, redis, bot, free_limit, subscription_limit)
-        except (asyncpg.PostgresError, OSError, RedisError):
+        except Exception:
             logger.exception("Не удалось проверить лимиты")
         await asyncio.sleep(pause or QUOTA_INTERVAL_SECONDS)
