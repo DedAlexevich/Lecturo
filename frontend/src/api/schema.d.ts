@@ -2747,7 +2747,9 @@ export interface operations {
     };
     list_courses_api_v1_courses_get: {
         parameters: {
-            query?: never;
+            query?: {
+                lecture_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2761,6 +2763,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
