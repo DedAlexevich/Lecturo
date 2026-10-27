@@ -18,7 +18,7 @@ class RegisterIn(Schema):
 
 class LoginIn(Schema):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class TokenOut(Schema):
