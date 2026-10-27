@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 LINE_WIDTH = 42
 MAX_LINES = 2
-UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+UNSAFE_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f\x7f]+')
 
 
 class Segment(Protocol):
@@ -74,13 +74,13 @@ def to_vtt(segments: Iterable[Segment]) -> str:
 
 
 def safe_filename(title: str) -> str:
-    cleaned = " ".join(UNSAFE_FILENAME_CHARS.sub(" ", title).split()).strip(" .")
-    return cleaned[:150] or "lecture"
+    cleaned = " ".join(UNSAFE_FILENAME_CHARS.sub(" ", title).split())
+    return cleaned[:150].strip(" .") or "lecture"
 
 
 def content_disposition(title: str, extension: str) -> str:
     name = safe_filename(title)
-    ascii_name = " ".join(name.encode("ascii", "ignore").decode().split()).strip(" .") or "lecture"
+    ascii_name = name if name.isascii() else "lecture"
     return (
         f'attachment; filename="{ascii_name}.{extension}"; '
         f"filename*=UTF-8''{quote(f'{name}.{extension}', safe='')}"

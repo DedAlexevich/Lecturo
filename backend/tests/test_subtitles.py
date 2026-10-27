@@ -70,12 +70,17 @@ def test_to_vtt():
 def test_safe_filename():
     assert safe_filename('Лекция 1: "Пределы" / часть 2') == "Лекция 1 Пределы часть 2"
     assert safe_filename(" ... ") == "lecture"
+    assert safe_filename("a\x7fb") == "a b"
+    assert safe_filename("x" * 149 + " .y") == "x" * 149
 
 
 def test_content_disposition():
     header = content_disposition("Матанализ 1", "srt")
-    assert header.startswith('attachment; filename="1.srt"; ')
+    assert header.startswith('attachment; filename="lecture.srt"; ')
     assert unquote(header.split("filename*=UTF-8''")[1]) == "Матанализ 1.srt"
+    assert content_disposition("Calculus 1", "vtt").startswith(
+        'attachment; filename="Calculus 1.vtt"; '
+    )
 
 
 @pytest.fixture
