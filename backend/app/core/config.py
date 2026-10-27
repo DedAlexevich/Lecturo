@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     regenerate_summary_rate_window_seconds: int = 300
     complaints_rate_limit: int = 5
     complaints_rate_window_seconds: int = 3600
+    public_copy_daily_limit: int = 20
+    public_export_rate_limit: int = 30
+    public_export_rate_window_seconds: int = 3600
     lecture_chat_rate_limit: int = 40
     lecture_chat_rate_window_seconds: int = 60
     auth_mail_rate_limit: int = 3

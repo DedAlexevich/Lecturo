@@ -9,9 +9,11 @@ from app.core.config import get_settings
 
 ALGORITHM = "HS256"
 EXPORT_SCOPE = "export"
+PUBLIC_EXPORT_SCOPE = "public-export"
 EXPORT_TOKEN_TTL = timedelta(minutes=2)
 
 ExportFormat = Literal["pdf", "srt", "vtt"]
+PublicExportFormat = Literal["pdf", "md", "srt", "vtt"]
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,48 @@ def decode_export_token(token: str) -> ExportGrant | None:
             return None
         return ExportGrant(
             user_id=uuid.UUID(payload["sub"]),
+            lecture_id=uuid.UUID(payload["lecture_id"]),
+            export_format=str(payload["format"]),
+        )
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
+        return None
+
+
+@dataclass(frozen=True)
+class PublicExportGrant:
+    share_token: str
+    lecture_id: uuid.UUID
+    export_format: str
+
+
+def create_public_export_token(
+    share_token: str, lecture_id: uuid.UUID, export_format: PublicExportFormat
+) -> tuple[str, datetime]:
+    expires = datetime.now(UTC) + EXPORT_TOKEN_TTL
+    payload = {
+        "sub": share_token,
+        "aud": PUBLIC_EXPORT_SCOPE,
+        "scope": PUBLIC_EXPORT_SCOPE,
+        "lecture_id": str(lecture_id),
+        "format": export_format,
+        "exp": expires,
+    }
+    return jwt.encode(payload, get_settings().secret_key, algorithm=ALGORITHM), expires
+
+
+def decode_public_export_token(token: str) -> PublicExportGrant | None:
+    try:
+        payload = jwt.decode(
+            token,
+            get_settings().secret_key,
+            algorithms=[ALGORITHM],
+            audience=PUBLIC_EXPORT_SCOPE,
+            options={"require": ["exp", "aud", "sub"]},
+        )
+        if payload.get("scope") != PUBLIC_EXPORT_SCOPE:
+            return None
+        return PublicExportGrant(
+            share_token=str(payload["sub"]),
             lecture_id=uuid.UUID(payload["lecture_id"]),
             export_format=str(payload["format"]),
         )
