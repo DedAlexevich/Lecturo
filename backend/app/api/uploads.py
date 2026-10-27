@@ -23,6 +23,7 @@ from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
 from app.pipeline.tasks import enqueue_lecture
 from app.services import quota
+from app.services.consents import require_ai_transfer_consent
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,7 @@ def title_from(upload: HookUpload) -> str:
 
 async def pre_create(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     user = await hook_user(session, hook)
+    require_ai_transfer_consent(user)
     upload = hook.event.upload
     if upload.size_is_deferred or upload.size <= 0:
         raise HTTPException(status.HTTP_411_LENGTH_REQUIRED, "Нужно указать размер файла")
