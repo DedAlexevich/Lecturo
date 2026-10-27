@@ -20,4 +20,7 @@ test("handles empty text and oversized words", () => {
   assert.deepEqual(splitTranscript([{ start: 0, end: 1, text: "  " }]), []);
   const chunks = splitTranscript([{ start: 1, end: 2, text: "abcdefghijk" }], 5);
   assert.deepEqual(chunks.map((chunk) => chunk.text), ["abcde", "fghij", "k"]);
+  assert.equal(chunks[0].start, 1);
+  assert.equal(chunks.at(-1).end, 2);
+  assert.ok(chunks.every((chunk, index) => index === 0 || chunks[index - 1].end <= chunk.start));
 });
