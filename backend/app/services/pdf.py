@@ -153,8 +153,8 @@ def format_duration(total_seconds: float) -> str:
     return f"{hours} ч" if rest == 0 else f"{hours} ч {rest} мин"
 
 
-def lecture_html(lecture: Lecture, base_url: str) -> str:
-    lecture_url = f"{base_url}/lectures/{lecture.id}"
+def lecture_html(lecture: Lecture, base_url: str, lecture_url: str | None = None) -> str:
+    lecture_url = lecture_url or f"{base_url}/lectures/{lecture.id}"
     meta = [lecture.created_at.astimezone(MOSCOW).strftime("%d.%m.%Y")]
     if lecture.duration_sec:
         meta.append(format_duration(lecture.duration_sec))
