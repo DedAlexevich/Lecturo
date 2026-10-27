@@ -9,18 +9,20 @@ from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
 from app.core.deps import CurrentUser, RequireSubscription, SessionDep
-from app.core.errors import not_ready
 from app.models import (
     Lecture,
     LectureStatus,
     ProcessingStep,
+    Quiz,
     SourceType,
+    StepName,
     StepStatus,
     course_lectures,
 )
 from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
-from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture
+from app.pipeline.runner import get_step
+from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture, enqueue_quiz, quiz_job_active
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -226,10 +228,47 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)
-async def create_quiz(lecture_id: uuid.UUID, user: RequireSubscription) -> None:
-    not_ready()
+async def create_quiz(
+    lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
+) -> None:
+    require_ai_transfer_consent(user)
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .with_for_update()
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    if lecture.status != LectureStatus.ready:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Квиз можно сделать, когда лекция обработана")
+    step = await get_step(session, lecture.id, StepName.quiz)
+    try:
+        if step.status in (StepStatus.pending, StepStatus.running) and await quiz_job_active(
+            lecture.id
+        ):
+            return
+        step.status = StepStatus.pending
+        step.progress = 0.0
+        step.error = None
+        await session.commit()
+        await enqueue_quiz(lecture.id)
+    except (OSError, RedisError) as error:
+        step.status = StepStatus.failed
+        step.error = QUEUE_UNAVAILABLE
+        await session.commit()
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
 
 
 @router.get("/{lecture_id}/quiz")
-async def get_quiz(lecture_id: uuid.UUID, user: RequireSubscription) -> QuizOut:
-    not_ready()
+async def get_quiz(
+    lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
+) -> QuizOut:
+    owned = await session.scalar(
+        select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+    )
+    if owned is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    quiz = await session.scalar(select(Quiz).where(Quiz.lecture_id == lecture_id))
+    if quiz is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Квиз ещё не готов")
+    return QuizOut.model_validate(quiz)
