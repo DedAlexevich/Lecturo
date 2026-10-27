@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Lecture, SearchChunk, TranscriptSegment
 from app.pipeline.runner import Report
-from app.pipeline.stages import load_segments
+from app.pipeline.stages import load_segments, require_ai_transfer
 from app.providers import get_embeddings
 
 MIN_CHUNK_SECONDS = 30.0
@@ -22,6 +22,7 @@ class Chunk:
 
 
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
+    await require_ai_transfer(session, lecture)
     chunks = split_into_chunks(await load_segments(session, lecture))
     embeddings = get_embeddings()
     vectors: list[list[float]] = []

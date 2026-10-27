@@ -13,9 +13,11 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.models import AuthIdentity, AuthProvider, User
 from app.schemas.user import TelegramLoginIn
+from app.services.consents import record_signup_consents, require_telegram_signup_consents
 
 AUTH_MAX_AGE_SECONDS = 24 * 60 * 60
 CLOCK_SKEW_SECONDS = 5 * 60
+TELEGRAM_PROFILE_FIELDS = {"first_name", "last_name", "username", "photo_url"}
 
 
 def bot_token() -> str:
@@ -26,7 +28,9 @@ def bot_token() -> str:
 
 
 def verify_login_widget(data: TelegramLoginIn) -> None:
-    fields = data.model_dump(exclude={"hash"}, exclude_none=True)
+    fields = data.model_dump(
+        include=set(TelegramLoginIn.model_fields) - {"hash"}, exclude_none=True
+    )
     check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
     secret = hashlib.sha256(bot_token().encode()).digest()
     expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
@@ -73,14 +77,20 @@ async def find_identity(session: AsyncSession, telegram_id: int) -> AuthIdentity
 
 
 async def get_or_create_telegram_user(
-    session: AsyncSession, telegram_id: int, profile: dict
+    session: AsyncSession,
+    telegram_id: int,
+    profile: dict,
+    accept_terms: bool = False,
+    accept_personal_data: bool = False,
 ) -> User:
     identity = await find_identity(session, telegram_id)
     if identity is None:
+        require_telegram_signup_consents(accept_terms, accept_personal_data)
         display_name = " ".join(
             part for part in (profile.get("first_name"), profile.get("last_name")) if part
         )
         user = User(display_name=display_name[:120], telegram_chat_id=telegram_id)
+        record_signup_consents(user)
         user.identities.append(
             AuthIdentity(
                 provider=AuthProvider.telegram, provider_user_id=str(telegram_id), data=profile

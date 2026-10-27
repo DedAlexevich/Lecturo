@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuthIdentity, AuthProvider, User
+from app.services.consents import record_signup_consents
 
 hasher = PasswordHasher()
 missing_user_hash = hasher.hash("missing-user")
@@ -32,6 +33,7 @@ async def register_user(
     email = normalize_email(email)
     user = User(email=email, password_hash=hash_password(password), display_name=display_name)
     user.identities.append(AuthIdentity(provider=AuthProvider.email, provider_user_id=email))
+    record_signup_consents(user)
     session.add(user)
     try:
         await session.commit()

@@ -21,7 +21,7 @@
 }
 
 .lecture__title {
-  max-width: 40rem;
+  max-width: 42rem;
   font-size: var(--text-2xl);
   overflow-wrap: anywhere;
 }
@@ -64,8 +64,8 @@
 .lecture__panel-title {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
-  font-family: var(--font-sans);
   font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   letter-spacing: 0;
 }
 
@@ -109,7 +109,7 @@ button.transcript__phrase {
 }
 
 button.transcript__phrase:hover {
-  background: var(--color-surface-sunken);
+  background: var(--color-accent-soft);
 }
 
 button.transcript__phrase:focus-visible {
@@ -125,11 +125,11 @@ button.transcript__phrase:focus-visible {
 
 .transcript__item--current .transcript__phrase,
 .transcript__item--current button.transcript__phrase:hover {
-  background: var(--color-accent-soft);
+  background: var(--color-data-soft);
 }
 
 .transcript__item--current .transcript__time {
-  color: var(--color-accent);
+  color: var(--color-data);
   font-weight: var(--weight-semibold);
 }
 
@@ -146,9 +146,9 @@ button.transcript__phrase:focus-visible {
 
 .lecture__no-video-title {
   margin: 0;
-  font-family: var(--font-display);
   font-size: var(--text-xl);
   font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
 }
 
 .lecture__no-video-text {
@@ -159,7 +159,7 @@ button.transcript__phrase:focus-visible {
 
 .lecture__source {
   margin-top: var(--space-2);
-  color: var(--color-accent);
+  color: var(--color-text);
   font-weight: var(--weight-medium);
 }
 
@@ -170,8 +170,9 @@ button.transcript__phrase:focus-visible {
   justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--color-danger);
-  background: var(--color-surface-sunken);
+  border-radius: var(--radius-lg);
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
 
 .lecture__error p {

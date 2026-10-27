@@ -14,6 +14,7 @@ from app.models import (
     UsageEntry,
     UsageSource,
 )
+from app.services import rate_limit as rate_limit_service
 
 TEXT = "слово " * 40
 URL = "/api/v1/local-results"
@@ -45,7 +46,7 @@ def queue(monkeypatch):
         return False
 
     monkeypatch.setattr(local_results_api, "enqueue_lecture", fake_enqueue)
-    monkeypatch.setattr(local_results_api, "is_rate_limited", not_limited)
+    monkeypatch.setattr(rate_limit_service, "is_rate_limited", not_limited)
     return enqueued
 
 
@@ -136,7 +137,7 @@ async def test_rate_limit(client, user, auth_headers, monkeypatch):
     async def limited(*args):
         return True
 
-    monkeypatch.setattr(local_results_api, "is_rate_limited", limited)
+    monkeypatch.setattr(rate_limit_service, "is_rate_limited", limited)
 
     response = await client.post(URL, json=result_body(), headers=auth_headers)
 

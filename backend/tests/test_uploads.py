@@ -161,7 +161,7 @@ async def test_pre_finish_creates_lecture(client, user, auth_headers, storage, e
     assert len(await user_lectures(user.id)) == 1
 
 
-async def test_pre_finish_publishes_failed_when_queue_is_down(
+async def test_pre_finish_keeps_lecture_when_queue_is_down(
     client, user, auth_headers, storage, monkeypatch
 ):
     published = []
@@ -180,9 +180,13 @@ async def test_pre_finish_publishes_failed_when_queue_is_down(
     request = hook("pre-finish", auth_headers, ID=upload_id, MetaData={"filename": "a.mp4"})
     response = await client.post(HOOKS_URL, json=request)
 
-    assert response.json()["HTTPResponse"]["StatusCode"] == 503
+    answer = response.json()["HTTPResponse"]
+    assert answer["StatusCode"] == 200
     [lecture] = await user_lectures(user.id)
+    assert json.loads(answer["Body"]) == {"lecture_id": str(lecture.id)}
     assert lecture.status == LectureStatus.failed
+    assert lecture.audio_path == str(storage / "originals" / str(lecture.id))
+    assert list((storage / "uploads").iterdir()) == []
     assert published == [
         (lecture.id, user.id, LectureStatus.failed, "Очередь недоступна, попробуйте позже")
     ]
@@ -232,3 +236,26 @@ async def test_pre_finish_keeps_incomplete_upload(client, user, auth_headers, st
     assert response.json()["HTTPResponse"]["StatusCode"] == 409
     assert await user_lectures(user.id) == []
     assert path.exists()
+
+
+async def test_pre_finish_over_quota_waits_without_queue(
+    client, user, auth_headers, storage, enqueued, monkeypatch
+):
+    published = []
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, status))
+
+    monkeypatch.setattr(uploads_api, "publish_status", fake_publish)
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
+    upload_id = user.id.hex + "f" * 32
+    put_upload(storage, upload_id, sample_audio(storage))
+
+    request = hook("pre-finish", auth_headers, ID=upload_id, MetaData={"filename": "a.mp4"})
+    response = await client.post(HOOKS_URL, json=request)
+
+    assert response.json()["HTTPResponse"]["StatusCode"] == 200
+    [lecture] = await user_lectures(user.id)
+    assert lecture.status == LectureStatus.waiting_quota
+    assert enqueued == []
+    assert published == [(lecture.id, LectureStatus.waiting_quota)]

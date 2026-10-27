@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Button } from "../../ui/Button";
-import { Checkbox } from "../../ui/Checkbox";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
+import { ConsentFields } from "./ConsentFields";
 import { AuthLayout } from "./AuthLayout";
 import { SocialLogin } from "./SocialLogin";
 import { fieldErrorsOf, messageOf, type FieldErrors } from "./errors";
@@ -15,7 +15,8 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accepted, setAccepted] = useState(false);
+  const [terms, setTerms] = useState(false);
+  const [personalData, setPersonalData] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
   const register = useRegister();
@@ -27,14 +28,21 @@ export function RegisterPage() {
     const next: FieldErrors = {
       email: validateEmail(email),
       password: validateNewPassword(password),
-      accept_terms: accepted ? undefined : "Без согласия мы не можем создать аккаунт",
+      accept_terms: terms ? undefined : "Нужно принять пользовательское соглашение",
+      accept_personal_data: personalData ? undefined : "Нужно дать согласие на обработку персональных данных",
     };
     setErrors(next);
     setFormError(undefined);
-    if (next.email || next.password || next.accept_terms) return;
+    if (next.email || next.password || next.accept_terms || next.accept_personal_data) return;
 
     register.mutate(
-      { email: email.trim(), password, display_name: displayName.trim(), accept_terms: accepted },
+      {
+        email: email.trim(),
+        password,
+        display_name: displayName.trim(),
+        accept_terms: terms,
+        accept_personal_data: personalData,
+      },
       {
         onSuccess: () => navigate(redirectTarget(location.state), { replace: true }),
         onError: (error) => {
@@ -99,25 +107,13 @@ export function RegisterPage() {
             />
           )}
         </Field>
-        <div>
-          <Checkbox
-            checked={accepted}
-            invalid={Boolean(errors.accept_terms)}
-            onChange={(event) => setAccepted(event.target.checked)}
-            label={
-              <>
-                Принимаю <Link to="/legal/terms" target="_blank" rel="noopener noreferrer">пользовательское соглашение</Link>,{" "}
-                <Link to="/legal/privacy" target="_blank" rel="noopener noreferrer">политику обработки данных</Link> и{" "}
-                <Link to="/legal/personal-data-consent" target="_blank" rel="noopener noreferrer">согласие на обработку персональных данных</Link>
-              </>
-            }
-          />
-          {errors.accept_terms && (
-            <p className="field__error" role="alert">
-              {errors.accept_terms}
-            </p>
-          )}
-        </div>
+        <ConsentFields
+          terms={terms}
+          personalData={personalData}
+          onTermsChange={setTerms}
+          onPersonalDataChange={setPersonalData}
+          errors={errors}
+        />
         <Button type="submit" fullWidth loading={register.isPending}>
           Создать аккаунт
         </Button>

@@ -29,8 +29,8 @@ class UsageSource(enum.StrEnum):
 class Payment(UUIDPk, CreatedAt, Base):
     __tablename__ = "payments"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     kind: Mapped[PaymentKind] = mapped_column(Enum(PaymentKind, name="payment_kind"))
     product_code: Mapped[str] = mapped_column(String(64))

@@ -34,4 +34,5 @@ class WorkerSettings:
     on_startup = startup
     job_timeout = 4 * 3600
     keep_result = 0
+    allow_abort_jobs = True
     cron_jobs = [cron(delete_expired_videos, minute=0)]
