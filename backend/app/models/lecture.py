@@ -8,11 +8,13 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,6 +55,15 @@ class StepStatus(enum.StrEnum):
 
 class Lecture(UUIDPk, CreatedAt, Base):
     __tablename__ = "lectures"
+    __table_args__ = (
+        Index(
+            "uq_lectures_owner_copied_from",
+            "owner_id",
+            "copied_from_id",
+            unique=True,
+            postgresql_where=text("copied_from_id IS NOT NULL"),
+        ),
+    )
 
     owner_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
@@ -71,6 +82,7 @@ class Lecture(UUIDPk, CreatedAt, Base):
     audio_path: Mapped[str | None] = mapped_column(Text)
     video_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     processed_locally: Mapped[bool] = mapped_column(Boolean, default=False)
+    copied_from_id: Mapped[uuid.UUID | None] = mapped_column()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
