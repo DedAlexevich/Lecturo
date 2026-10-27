@@ -332,7 +332,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           ) : (
             <audio ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ))}
-          {!file && saved && mediaState === "loading" && <p className="local-media-loading"><Spinner size="sm" label="Загружаем запись" />Загружаем запись</p>}
+          {!file && saved && mediaState === "loading" && <p className="local-media-loading"><Spinner size="sm" label="Загружаем запись" /></p>}
           {!file && saved && mediaState === "missing" && <MissingMedia disabled={busy} onPick={relinkMedia} />}
           {stage === "done" && segments.length > 0 ? (
             <Transcript segments={segments} chapters={saved?.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
