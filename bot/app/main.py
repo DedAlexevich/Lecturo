@@ -4,9 +4,11 @@ import logging
 import asyncpg
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
+from redis.asyncio import Redis
 
 from app.config import load_settings
 from app.handlers import build_router
+from app.notifications import delivery_loop, listen_events, quota_loop
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +28,32 @@ async def run() -> None:
     bot = Bot(settings.token)
     dispatcher = Dispatcher()
     dispatcher.include_router(build_router(settings.public_url, pool))
+    events_redis = Redis.from_url(settings.redis_url)
+    redis = Redis.from_url(settings.bot_redis_url)
+    tasks = []
+    if pool is not None:
+        tasks = [
+            asyncio.create_task(listen_events(pool, events_redis, redis, bot, settings.public_url)),
+            asyncio.create_task(delivery_loop(redis, bot, settings.public_url)),
+            asyncio.create_task(
+                quota_loop(
+                    pool,
+                    redis,
+                    bot,
+                    settings.free_weekly_seconds,
+                    settings.subscription_weekly_seconds,
+                )
+            ),
+        ]
     try:
         await bot.set_my_commands([BotCommand(command="start", description="Открыть Lecturo")])
         await dispatcher.start_polling(bot)
     finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await events_redis.aclose()
+        await redis.aclose()
         await bot.session.close()
         if pool is not None:
             await pool.close()

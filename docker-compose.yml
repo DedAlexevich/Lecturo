@@ -21,6 +21,13 @@ services:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     restart: unless-stopped
 
+  bot-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
+    volumes:
+      - botredisdata:/data
+    restart: unless-stopped
+
   api:
     build: ./backend
     env_file:
@@ -79,6 +86,8 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
+      REDIS_URL: redis://redis:6379/0
+      BOT_REDIS_URL: redis://bot-redis:6379/0
     depends_on:
       db:
         condition: service_healthy
@@ -113,5 +122,6 @@ services:
 
 volumes:
   pgdata:
+  botredisdata:
   storage:
   caddy_data:
