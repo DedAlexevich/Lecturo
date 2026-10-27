@@ -4,7 +4,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { PublicCourse } from "./PublicCourse";
 import { PublicLecture } from "./PublicLecture";
-import { usePublicShare } from "./queries";
+import { fetchPublicShare, usePublicShare } from "./queries";
 import "../lecture/lecture.css";
 import "./public.css";
 
@@ -59,7 +59,7 @@ export function PublicSharePage() {
         key={token}
         token={token}
         lecture={lecture}
-        refreshVideo={async () => (await share.refetch()).data?.lecture?.video_url ?? null}
+        refreshVideo={async () => (await fetchPublicShare(token)).lecture?.video_url ?? null}
       />
     );
   }

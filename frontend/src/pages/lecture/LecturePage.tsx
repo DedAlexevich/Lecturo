@@ -18,7 +18,7 @@ import { usePlayer, videoIdentity } from "./players/player";
 import { Processing } from "./Processing";
 import { formatDuration, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
-import { isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
+import { fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
 import "./lecture.css";
 
 type Lecture = components["schemas"]["LectureDetail"];
@@ -281,7 +281,7 @@ export function LecturePage() {
               key={videoIdentity(videoUrl)}
               src={videoUrl}
               title={data.title}
-              refreshSrc={async () => (await lecture.refetch()).data?.video_url ?? null}
+              refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
               {...bind}
             />
           ) : embed ? (

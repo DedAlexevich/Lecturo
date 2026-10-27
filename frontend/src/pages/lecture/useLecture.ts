@@ -25,16 +25,18 @@ function lectureStatusQueryKey(id: string) {
   return ["lecture-status", id] as const;
 }
 
+export async function fetchLecture(id: string) {
+  const { data, error, response } = await api.GET("/api/v1/lectures/{lecture_id}", {
+    params: { path: { lecture_id: id } },
+  });
+  if (data === undefined) throw new ApiError(response.status, error);
+  return data;
+}
+
 export function useLecture(id: string) {
   return useQuery({
     queryKey: lectureQueryKey(id),
-    queryFn: async () => {
-      const { data, error, response } = await api.GET("/api/v1/lectures/{lecture_id}", {
-        params: { path: { lecture_id: id } },
-      });
-      if (data === undefined) throw new ApiError(response.status, error);
-      return data;
-    },
+    queryFn: () => fetchLecture(id),
   });
 }
 
