@@ -1,12 +1,17 @@
+import hashlib
 import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import User
 from app.services.legal import read_document
+
+pytestmark = pytest.mark.usefixtures("reset_auth_rate_limits")
 
 
 @pytest.fixture
@@ -16,6 +21,10 @@ async def email() -> AsyncIterator[str]:
     async with SessionLocal() as session:
         await session.execute(delete(User).where(User.email == address))
         await session.commit()
+    digest = hashlib.sha256(address.encode()).hexdigest()
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete(f"rate:login:email:{digest}")
+    await redis.aclose()
 
 
 def register_body(email: str, **overrides) -> dict:
@@ -101,3 +110,68 @@ async def test_login_wrong_password_and_unknown_email(client, email):
 async def test_me_requires_auth(client):
     response = await client.get("/api/v1/me")
     assert response.status_code == 401
+
+
+async def login(client, email: str, password: str) -> int:
+    response = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    return response.status_code
+
+
+async def test_login_is_rate_limited_per_email(client, email, monkeypatch):
+    await client.post("/api/v1/auth/register", json=register_body(email))
+    monkeypatch.setattr(get_settings(), "login_rate_limit", 2)
+    statuses = [
+        await login(client, email, "другой-пароль"),
+        await login(client, email.upper(), "другой-пароль"),
+        await login(client, email, "секретный-пароль"),
+    ]
+    assert statuses == [401, 401, 429]
+
+
+async def test_successful_login_resets_email_limit(client, email, monkeypatch):
+    await client.post("/api/v1/auth/register", json=register_body(email))
+    monkeypatch.setattr(get_settings(), "login_rate_limit", 2)
+    statuses = [
+        await login(client, email, "другой-пароль"),
+        await login(client, email, "секретный-пароль"),
+        await login(client, email, "другой-пароль"),
+        await login(client, email, "другой-пароль"),
+        await login(client, email, "другой-пароль"),
+    ]
+    assert statuses == [401, 200, 401, 401, 429]
+
+
+async def test_login_ip_limit_counts_only_failures(client, email, monkeypatch):
+    await client.post("/api/v1/auth/register", json=register_body(email))
+    monkeypatch.setattr(get_settings(), "login_ip_rate_limit", 2)
+    redis = Redis.from_url(get_settings().redis_url)
+    unknown = [f"{index}-{email}" for index in range(2)]
+    try:
+        statuses = [await login(client, email, "секретный-пароль") for _ in range(3)]
+        statuses += [await login(client, address, "секретный-пароль") for address in unknown]
+        statuses.append(await login(client, email, "секретный-пароль"))
+    finally:
+        for address in unknown:
+            digest = hashlib.sha256(address.encode()).hexdigest()
+            await redis.delete(f"rate:login:email:{digest}")
+        await redis.aclose()
+    assert statuses == [200, 200, 200, 401, 401, 429]
+
+
+async def test_login_rejects_too_long_password(client, email):
+    assert await login(client, email, "x" * 129) == 422
+
+
+async def test_register_ip_limit_counts_only_failures(client, email, monkeypatch):
+    monkeypatch.setattr(get_settings(), "register_rate_limit", 2)
+    second = f"second-{email}"
+    try:
+        statuses = [
+            (await client.post("/api/v1/auth/register", json=register_body(address))).status_code
+            for address in (email, second, email, email.upper(), f"third-{email}")
+        ]
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(User).where(User.email == second))
+            await session.commit()
+    assert statuses == [201, 201, 409, 409, 429]

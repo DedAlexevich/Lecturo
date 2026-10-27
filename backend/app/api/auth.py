@@ -1,7 +1,9 @@
+import hashlib
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import delete, select, update
 
 from app.core.config import get_settings
@@ -30,7 +32,13 @@ from app.services.auth import authenticate, hash_password, normalize_email, regi
 from app.services.auth_tokens import consume_token, issue_token
 from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
-from app.services.rate_limit import enforce_mail_rate_limit, enforce_rate_limit
+from app.services.rate_limit import (
+    count_failure,
+    enforce_mail_rate_limit,
+    enforce_rate_limit,
+    ensure_below_limit,
+    reset_rate_limit,
+)
 from app.services.telegram_auth import (
     TELEGRAM_PROFILE_FIELDS,
     get_or_create_telegram_user,
@@ -48,16 +56,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
-    require_signup_consents(body.accept_terms, body.accept_personal_data)
-    user = await register_user(session, body.email, body.password, body.display_name)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток регистрации"}
+    },
+)
+async def register(body: RegisterIn, session: SessionDep, request: Request) -> TokenOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    ip_key = f"rate:register:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.register_rate_limit)
+    try:
+        require_signup_consents(body.accept_terms, body.accept_personal_data)
+        user = await register_user(session, body.email, body.password, body.display_name)
+    except (HTTPException, RequestValidationError):
+        await count_failure(settings.redis_url, ip_key, settings.register_rate_window_seconds)
+        raise
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/login")
-async def login(body: LoginIn, session: SessionDep) -> TokenOut:
-    user = await authenticate(session, body.email, body.password)
+@router.post(
+    "/login",
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"}},
+)
+async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    email_digest = hashlib.sha256(normalize_email(body.email).encode()).hexdigest()
+    email_key = f"rate:login:email:{email_digest}"
+    ip_key = f"rate:login:ip:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.login_ip_rate_limit)
+    await enforce_rate_limit(
+        settings.redis_url,
+        email_key,
+        settings.login_rate_limit,
+        settings.login_rate_window_seconds,
+    )
+    try:
+        user = await authenticate(session, body.email, body.password)
+    except HTTPException:
+        await count_failure(settings.redis_url, ip_key, settings.login_rate_window_seconds)
+        raise
+    await reset_rate_limit(settings.redis_url, email_key)
     return TokenOut(access_token=create_access_token(user.id))
 
 
