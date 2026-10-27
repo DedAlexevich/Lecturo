@@ -60,6 +60,25 @@ class TelegramWebAppIn(Schema):
     accept_personal_data: bool = False
 
 
+class ProvidersOut(Schema):
+    vk: bool
+
+
+class VkStartIn(Schema):
+    accept_terms: bool = False
+    accept_personal_data: bool = False
+
+
+class VkStartOut(Schema):
+    url: str
+
+
+class VkCallbackIn(Schema):
+    code: str = Field(min_length=1, max_length=2048)
+    state: str = Field(min_length=1, max_length=256)
+    device_id: str = Field(min_length=1, max_length=256)
+
+
 class EmailIn(Schema):
     email: EmailStr
 

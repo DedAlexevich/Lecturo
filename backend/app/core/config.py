@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
 
+    vk_client_id: str = ""
+    vk_redirect_uri: str = ""
+    vk_authorize_url: str = "https://id.vk.com/authorize"
+    vk_token_url: str = "https://id.vk.com/oauth2/auth"
+    vk_user_info_url: str = "https://id.vk.com/oauth2/user_info"
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_api_url: str = "https://api.yookassa.ru/v3"
@@ -76,6 +82,10 @@ class Settings(BaseSettings):
     account_delete_rate_window_seconds: int = 3600
     password_change_rate_limit: int = 10
     password_change_rate_window_seconds: int = 3600
+
+    @property
+    def vk_enabled(self) -> bool:
+        return bool(self.vk_client_id and self.vk_redirect_uri)
 
 
 @lru_cache
