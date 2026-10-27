@@ -6,6 +6,11 @@ main() {
   cd "$(dirname "$0")/.."
 
   git fetch --quiet origin main
+  if ! git merge-base --is-ancestor HEAD "$target"; then
+    echo "$(git rev-parse --short "$target") is not newer than $(git rev-parse --short HEAD), skipping"
+    exit 0
+  fi
+
   local previous previous_revision
   previous=$(git rev-parse HEAD)
   previous_revision=$(docker compose exec -T api alembic current 2>/dev/null | awk 'NR==1 {print $1}' || true)
