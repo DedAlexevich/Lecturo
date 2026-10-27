@@ -10,7 +10,7 @@ import { useVkEnabled } from "../auth/vk";
 import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
 import styles from "./SettingsSection.module.css";
-import { settingsError, useLinkEmail, useLinkTelegram, useUnlink, type Me, type Provider, type TelegramUser } from "./settings";
+import { settingsError, useLinkEmail, useUnlink, type Me, type Provider } from "./settings";
 
 const providerNames: Record<Provider, string> = { telegram: "Telegram", email: "Почта", vk: "VK", yandex: "Яндекс" };
 
@@ -114,25 +114,11 @@ function identityNote(me: Me, provider: Provider, createdAt: string) {
 }
 
 function LinkTelegram() {
-  const link = useLinkTelegram();
-  const toast = useToast();
-  const { mutate } = link;
-
-  const onAuth = useCallback(
-    (user: TelegramUser) => mutate(user, { onSuccess: () => toast.show("Telegram привязан", "success") }),
-    [mutate, toast],
-  );
-
   if (!telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
 
   return (
     <div className={styles.identityAction}>
-      <TelegramButton onAuth={onAuth} />
-      {link.isError && (
-        <p className={styles.alert} role="alert">
-          {settingsError(link.error)}
-        </p>
-      )}
+      <TelegramButton mode="link" />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { LoginPage } from "../pages/auth/LoginPage";
 import { LegalPage } from "../pages/legal/LegalPage";
 import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
+import { TelegramCallbackPage } from "../pages/auth/TelegramCallbackPage";
 import { VkCallbackPage } from "../pages/auth/VkCallbackPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { LecturePage } from "../pages/lecture/LecturePage";
@@ -18,6 +19,7 @@ export const guestRoutes: RouteObject[] = [
 
 export const publicRoutes: RouteObject[] = [
   { path: "/legal/:slug", element: <LegalPage /> },
+  { path: "/auth/telegram/:mode", element: <TelegramCallbackPage /> },
   { path: "/auth/vk", element: <VkCallbackPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },

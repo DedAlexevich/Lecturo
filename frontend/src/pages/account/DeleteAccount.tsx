@@ -8,7 +8,7 @@ import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import styles from "./SettingsSection.module.css";
 import { getMiniAppInitData } from "./miniApp";
-import { settingsError, useDeleteAccount, type TelegramUser } from "./settings";
+import { settingsError, useDeleteAccount } from "./settings";
 
 export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
   const [open, setOpen] = useState(false);
@@ -39,11 +39,6 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
     }
     mutate({ password }, { onSuccess: finish });
   };
-
-  const confirmTelegram = useCallback(
-    (user: TelegramUser) => mutate({ telegram: user }, { onSuccess: finish }),
-    [mutate, finish],
-  );
 
   const confirmMiniApp = () => mutate({ telegram_init_data: getMiniAppInitData() }, { onSuccess: finish });
 
@@ -108,7 +103,7 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
             <div className={styles.confirmTelegram}>
               <p>Для подтверждения нажмите кнопку Telegram: аккаунт удалится сразу после входа.</p>
               {telegramEnabled ? (
-                <TelegramButton onAuth={confirmTelegram} />
+                <TelegramButton mode="delete" />
               ) : (
                 <p className={styles.alert}>Подтверждение через Telegram сейчас недоступно.</p>
               )}
