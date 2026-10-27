@@ -40,6 +40,7 @@ dump_database() {
   part="$(dirname "$target")/.$(basename "$target").part"
   umask 077
   mkdir -p "$(dirname "$target")"
+  rm -f "$(dirname "$target")"/.*.dump.part
   if ! db_exec sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$part"; then
     rm -f "$part"
     fail "pg_dump failed"
