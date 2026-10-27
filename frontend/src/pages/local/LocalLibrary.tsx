@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { downloadLecture } from "../../local/export";
 import type { ExportFormat } from "../../local/export";
 import { deleteLocalLecture, getLocalLecture, listLocalLectures } from "../../local/storage";
 import type { LocalLecture, LocalLectureSummary } from "../../local/storage";
 import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
+import { useLocalExport } from "./ExportDialog";
 
 const formats: { id: ExportFormat; label: string }[] = [
   { id: "srt", label: "SRT" },
@@ -25,6 +25,7 @@ type LocalLibraryProps = {
 export function LocalLibrary({ disabled, version, activeId, onOpen, onRemoved }: LocalLibraryProps) {
   const [items, setItems] = useState<LocalLectureSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const { deliver, dialog } = useLocalExport();
 
   const refresh = useCallback(async () => {
     try {
@@ -77,13 +78,14 @@ export function LocalLibrary({ disabled, version, activeId, onOpen, onRemoved }:
             <div className="local-library__actions">
               <Button disabled={disabled} size="sm" variant="secondary" onClick={() => void withLecture(item.id, onOpen)}>Открыть</Button>
               {formats.map((format) => (
-                <Button key={format.id} disabled={disabled} size="sm" variant="ghost" aria-label={`Скачать «${item.title}» в формате ${format.label}`} onClick={() => void withLecture(item.id, (lecture) => downloadLecture(lecture, format.id))}>{format.label}</Button>
+                <Button key={format.id} disabled={disabled} size="sm" variant="ghost" aria-label={`Скачать «${item.title}» в формате ${format.label}`} onClick={() => void withLecture(item.id, (lecture) => deliver(lecture, format.id))}>{format.label}</Button>
               ))}
               <Button disabled={disabled} size="sm" variant="ghost" aria-label={`Удалить «${item.title}»`} onClick={() => void remove(item)}>Удалить</Button>
             </div>
           </li>
         ))}
       </ul>
+      {dialog}
     </section>
   );
 }
