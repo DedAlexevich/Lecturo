@@ -120,6 +120,14 @@ async def pre_create(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     course_id = course_id_from(upload)
     if course_id is not None:
         await get_own_course(session, course_id, user)
+    settings = get_settings()
+    uploads_dir = settings.storage_dir / "uploads"
+    pending = await asyncio.to_thread(pending_uploads, uploads_dir, user.id.hex)
+    if pending >= settings.upload_max_pending:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Слишком много незавершённых загрузок, дождитесь окончания текущих",
+        )
     return {"ChangeFileInfo": {"ID": user.id.hex + secrets.token_hex(16)}}
 
 
@@ -188,6 +196,10 @@ async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
             await session.commit()
             await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
     return {"HTTPResponse": json_response(status.HTTP_200_OK, {"lecture_id": str(lecture.id)})}
+
+
+def pending_uploads(directory: Path, prefix: str) -> int:
+    return sum(1 for _ in directory.glob(f"{prefix}*.info"))
 
 
 def upload_complete(path: Path, info_path: Path) -> bool:

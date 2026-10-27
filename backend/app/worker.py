@@ -7,7 +7,7 @@ from arq.connections import RedisSettings
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.pipeline.exam import build_exam_sheet
-from app.pipeline.retention import delete_expired_videos
+from app.pipeline.retention import delete_expired_videos, delete_stale_uploads
 from app.pipeline.tasks import (
     LECTURE_TIMEOUT_SEC,
     process_lecture,
@@ -51,5 +51,6 @@ class WorkerSettings:
     allow_abort_jobs = True
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
+        cron(delete_stale_uploads, minute=30),
         cron(process_legal_revisions, minute=set(range(0, 60, 10))),
     ]
