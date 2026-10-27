@@ -72,7 +72,7 @@ Lecturo помогает учиться по записям лекций. Вы �
 flowchart LR
     user["Браузер, PWA, APK"] --> caddy["Caddy, HTTPS"]
     tg["Telegram"] --> caddy
-    tg <--> bot["Бот, aiogram"]
+    tg --> bot["Бот, aiogram"]
     caddy --> front["Фронтенд, React"]
     caddy --> api["API, FastAPI"]
     caddy --> tusd["tusd, загрузка файлов"]
@@ -87,10 +87,11 @@ flowchart LR
     worker --> stt["Yandex SpeechKit"]
     worker --> llm["LLM, DeepSeek"]
     worker --> emb["Эмбеддинги Yandex"]
-    worker -- "события лекций" --> redis
+    worker -->|события лекций| redis
     redis --> bot
+    bot --> tg
     bot --> db
-    user -. "локальный режим" .-> local["Whisper и WebLLM в браузере"]
+    user -.->|локальный режим| local["Whisper и WebLLM в браузере"]
 ```
 
 Пользователь загружает видео через tusd или даёт ссылку. API ставит задачу в очередь, воркер скачивает видео, пережимает его, отправляет аудио на распознавание, собирает главы, конспект и эмбеддинги для поиска. Когда лекция готова, воркер публикует событие, и бот присылает уведомление. Подробнее о шагах обработки: [backend/app/pipeline/README.md](backend/app/pipeline/README.md).

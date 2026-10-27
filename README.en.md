@@ -72,7 +72,7 @@ Server-side recognition uses Yandex SpeechKit, notes and quizzes are written by 
 flowchart LR
     user["Browser, PWA, APK"] --> caddy["Caddy, HTTPS"]
     tg["Telegram"] --> caddy
-    tg <--> bot["Bot, aiogram"]
+    tg --> bot["Bot, aiogram"]
     caddy --> front["Frontend, React"]
     caddy --> api["API, FastAPI"]
     caddy --> tusd["tusd, uploads"]
@@ -87,10 +87,11 @@ flowchart LR
     worker --> stt["Yandex SpeechKit"]
     worker --> llm["LLM, DeepSeek"]
     worker --> emb["Yandex embeddings"]
-    worker -- "lecture events" --> redis
+    worker -->|lecture events| redis
     redis --> bot
+    bot --> tg
     bot --> db
-    user -. "local mode" .-> local["Whisper and WebLLM in the browser"]
+    user -.->|local mode| local["Whisper and WebLLM in the browser"]
 ```
 
 ## Stack
