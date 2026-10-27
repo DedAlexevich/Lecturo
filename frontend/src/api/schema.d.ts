@@ -1048,6 +1048,8 @@ export interface components {
             accept_offer: boolean;
             /** Return Url */
             return_url?: string | null;
+            /** Receipt Email */
+            receipt_email?: string | null;
         };
         /**
          * PaymentKind

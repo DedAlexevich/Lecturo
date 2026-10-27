@@ -20,6 +20,7 @@ from app.models import (
     User,
 )
 from app.schemas.billing import PaymentOut, ProductOut
+from app.services.auth import normalize_email
 from app.services.quota import list_products
 
 YOOKASSA_ID = re.compile(r"[\w-]{1,64}")
@@ -108,7 +109,11 @@ def payment_request(
         "capture": True,
         "confirmation": {"type": "redirect", "return_url": return_url},
         "description": product.title,
-        "metadata": {"payment_id": str(payment.id), "user_id": str(payment.user_id)},
+        "metadata": {
+            "payment_id": str(payment.id),
+            "user_id": str(payment.user_id),
+            "receipt_email": email,
+        },
     }
     if settings.yookassa_receipt:
         body["receipt"] = {
@@ -162,10 +167,12 @@ async def create_payment(
     idempotence_key: str,
     return_url: str,
     settings: Settings,
+    receipt_email: str | None = None,
 ) -> Payment:
-    user_id, email = user.id, user.email
+    user_id = user.id
+    email = normalize_email(receipt_email) if receipt_email else user.email
     if not email:
-        raise PaymentError("Для чека нужен email: укажите его в профиле")
+        raise PaymentError("Для чека нужен email: укажите адрес, на который отправить чек")
     payment = await find_by_key(session, user_id, idempotence_key)
     if payment is None:
         payment = Payment(

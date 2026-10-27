@@ -82,6 +82,7 @@ async def create_payment(
             idempotence_key or str(uuid.uuid4()),
             return_url,
             get_settings(),
+            body.receipt_email,
         )
     except yookassa.IdempotenceKeyConflict as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error

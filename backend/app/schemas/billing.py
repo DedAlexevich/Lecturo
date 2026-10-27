@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 
+from pydantic import EmailStr
+
 from app.models import PaymentKind, PaymentStatus
 from app.schemas.common import Schema
 
@@ -25,6 +27,7 @@ class PaymentIn(Schema):
     product_code: str
     accept_offer: bool
     return_url: str | None = None
+    receipt_email: EmailStr | None = None
 
 
 class PaymentOut(Schema):
