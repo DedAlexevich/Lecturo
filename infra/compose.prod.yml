@@ -44,6 +44,7 @@ services:
 
   worker:
     restart: always
+    stop_grace_period: 60s
 
   tusd:
     restart: always
