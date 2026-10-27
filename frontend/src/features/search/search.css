@@ -1,0 +1,151 @@
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.search__form {
+  position: relative;
+}
+
+.search__form .input {
+  padding-right: calc(var(--space-4) + 1.5rem);
+}
+
+.search__spinner {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  display: flex;
+  transform: translateY(-50%);
+}
+
+.search__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.search__note,
+.search__count {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+
+.search__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.search__error {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.search__error p {
+  margin: 0;
+}
+
+.search__hits {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transition: opacity var(--transition);
+}
+
+.search__hits--stale {
+  opacity: 0.6;
+}
+
+.search__hit {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-decoration: none;
+  transition: background var(--transition);
+}
+
+.search__hit:hover {
+  background: var(--color-accent-soft);
+}
+
+.search__hit:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.search__time {
+  color: var(--color-data);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.search__content {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.search__lecture {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.search__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
+}
+
+.search__text mark {
+  border-radius: 2px;
+  background: var(--color-data-soft);
+  color: inherit;
+  font-weight: var(--weight-semibold);
+}
+
+.search--lecture {
+  flex: 1;
+  padding: var(--space-3) var(--space-2) 0;
+}
+
+.search--lecture .search__form {
+  padding: 0 var(--space-1);
+}
+
+.search--lecture .search__body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--space-2);
+}
+
+.search--lecture .search__note,
+.search--lecture .search__count,
+.search--lecture .search__error {
+  padding: 0 var(--space-1);
+}
+
+.search--course {
+  max-width: 44rem;
+}
+
+.search--course .search__hit {
+  padding-inline: var(--space-2);
+}
