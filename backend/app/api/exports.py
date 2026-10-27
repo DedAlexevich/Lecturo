@@ -20,6 +20,8 @@ from app.services.subtitles import Segment, build_cues, content_disposition, to_
 
 router = APIRouter(prefix="/lectures/{lecture_id}", tags=["exports"])
 
+PRIVATE_HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+
 ENDPOINTS: dict[ExportFormat, str] = {"pdf": "export_pdf", "srt": "export_srt", "vtt": "export_vtt"}
 
 
@@ -75,7 +77,10 @@ def subtitles_response(
     return Response(
         render(lecture.segments),
         media_type=media_type,
-        headers={"Content-Disposition": content_disposition(lecture.title, extension)},
+        headers={
+            "Content-Disposition": content_disposition(lecture.title, extension),
+            **PRIVATE_HEADERS,
+        },
     )
 
 
@@ -125,5 +130,8 @@ async def export_pdf(
     return Response(
         content,
         media_type="application/pdf",
-        headers={"Content-Disposition": content_disposition(lecture.title, "pdf")},
+        headers={
+            "Content-Disposition": content_disposition(lecture.title, "pdf"),
+            **PRIVATE_HEADERS,
+        },
     )

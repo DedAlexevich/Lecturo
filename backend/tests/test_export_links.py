@@ -62,6 +62,8 @@ async def test_link_downloads_without_header(client, user, auth_headers, export_
     assert response.status_code == 200
     assert response.headers["content-disposition"].startswith("attachment;")
     assert "раз" in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
 
 
 async def test_pdf_link_needs_summary(client, user, auth_headers):
