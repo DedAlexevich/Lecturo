@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     public_export_rate_limit: int = 30
     public_export_rate_window_seconds: int = 3600
     lecture_chat_rate_limit: int = 40
+    search_rate_limit: int = 30
+    search_rate_window_seconds: int = 60
+    pdf_export_rate_limit: int = 10
+    pdf_export_rate_window_seconds: int = 60
+    pdf_render_concurrency: int = 2
     lecture_chat_rate_window_seconds: int = 60
     auth_mail_rate_limit: int = 3
     auth_mail_ip_rate_limit: int = 20

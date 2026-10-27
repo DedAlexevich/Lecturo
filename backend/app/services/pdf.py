@@ -1,9 +1,11 @@
+import asyncio
 from html import escape
 from zoneinfo import ZoneInfo
 
 from weasyprint import CSS, HTML
 from weasyprint.text.fonts import FontConfiguration
 
+from app.core.config import get_settings
 from app.models import Lecture
 from app.services.summary_markdown import katex_css, render_summary
 
@@ -194,3 +196,11 @@ def render_pdf(html: str) -> bytes:
     return HTML(string=html, url_fetcher=refuse_fetch).write_pdf(
         stylesheets=[KATEX_STYLE, STYLE], font_config=FONT_CONFIG
     )
+
+
+pdf_renders = asyncio.Semaphore(get_settings().pdf_render_concurrency)
+
+
+async def render_pdf_limited(html: str) -> bytes:
+    async with pdf_renders:
+        return await asyncio.to_thread(render_pdf, html)

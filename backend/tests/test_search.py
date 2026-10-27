@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import (
     ChunkKind,
@@ -536,3 +537,17 @@ async def test_summary_pieces_join_by_section(client, user, auth_headers):
     response = await search(client, auth_headers, q=QUESTION)
 
     assert sorted(hit["section"] for hit in response.json()) == [1, 2]
+
+
+async def test_search_rate_limit(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "search_rate_limit", 2)
+    lecture_id = await create_lecture(user.id, "Лекция", "Формула Ньютона — Лейбница")
+
+    statuses = [
+        (await search(client, auth_headers, q="формула", lecture_id=str(lecture_id))).status_code
+        for _ in range(3)
+    ]
+
+    assert statuses == [200, 200, 429]
+    response = await search(client, auth_headers, q="формула", lecture_id=str(lecture_id))
+    assert response.json()["detail"] == "Слишком много поисковых запросов, попробуйте через минуту"

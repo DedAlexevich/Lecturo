@@ -2474,6 +2474,9 @@
           "200": {
             "description": "Successful Response"
           },
+          "429": {
+            "description": "Слишком много выгрузок PDF"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2560,6 +2563,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много поисковых запросов"
           },
           "422": {
             "description": "Validation Error",
