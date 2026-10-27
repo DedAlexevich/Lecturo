@@ -67,7 +67,7 @@ async def create_local_lecture(user: User) -> Lecture:
 
 
 class ForbiddenEmbeddings:
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         raise AssertionError("Текст ушёл провайдеру эмбеддингов")
 
 

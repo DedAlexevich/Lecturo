@@ -11,6 +11,6 @@ async def test_stub_providers():
 
     assert await get_llm().complete("system", "текст")
 
-    vectors = await get_embeddings().embed(["один", "два"])
+    vectors = await get_embeddings().embed_documents(["один", "два"])
     assert len(vectors) == 2
     assert all(len(v) == EMBEDDING_DIM for v in vectors)

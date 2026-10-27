@@ -61,9 +61,9 @@ class RecordingEmbeddings(StubEmbeddings):
     def __init__(self) -> None:
         self.batches: list[list[str]] = []
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         self.batches.append(texts)
-        return await super().embed(texts)
+        return await super().embed_documents(texts)
 
 
 @pytest.fixture

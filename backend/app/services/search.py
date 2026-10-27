@@ -23,7 +23,7 @@ LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
 
 async def embed_query(q: str) -> list[float] | None:
     try:
-        [vector] = await get_embeddings().embed([q])
+        vector = await get_embeddings().embed_query(q)
     except OpenAICompatibleError:
         logger.exception("Не удалось получить эмбеддинг запроса, ищем только по тексту")
         return None

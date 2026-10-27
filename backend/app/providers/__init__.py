@@ -3,7 +3,7 @@ from app.providers.base import LLM, Embeddings, Segment, SpeechToText
 from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleLLM
 from app.providers.salute import SaluteSpeechToText
 from app.providers.stub import StubEmbeddings, StubLLM, StubSpeechToText
-from app.providers.yandex import YandexSpeechToText
+from app.providers.yandex import YandexEmbeddings, YandexSpeechToText
 
 __all__ = [
     "LLM",
@@ -45,4 +45,6 @@ def get_embeddings(settings: Settings | None = None) -> Embeddings:
             return StubEmbeddings()
         case "openai":
             return OpenAICompatibleEmbeddings(settings)
+        case "yandex":
+            return YandexEmbeddings(settings)
     raise ValueError(f"Неизвестный EMBEDDINGS_PROVIDER: {settings.embeddings_provider}")

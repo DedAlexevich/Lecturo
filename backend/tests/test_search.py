@@ -11,7 +11,7 @@ from app.services.search import LIMIT, RRF_K, add_prefixes, rrf
 
 
 async def create_lecture(owner_id: uuid.UUID, title: str, *texts: str) -> uuid.UUID:
-    vectors = await StubEmbeddings().embed(list(texts))
+    vectors = await StubEmbeddings().embed_documents(list(texts))
     async with SessionLocal() as session:
         lecture = Lecture(owner_id=owner_id, title=title, source_type=SourceType.upload)
         session.add(lecture)
@@ -101,7 +101,7 @@ async def test_odd_queries_do_not_fail(client, user, auth_headers, q):
 
 
 class BrokenEmbeddings(StubEmbeddings):
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_query(self, text: str) -> list[float]:
         raise OpenAICompatibleError("/embeddings: нет ответа от API")
 
 

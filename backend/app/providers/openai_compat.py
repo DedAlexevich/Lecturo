@@ -23,6 +23,7 @@ class OpenAICompatibleClient:
         retry_delay: float = 1.0,
         timeout: float = 120,
         transport: httpx.AsyncBaseTransport | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -30,14 +31,14 @@ class OpenAICompatibleClient:
         self.retry_delay = retry_delay
         self.timeout = timeout
         self.transport = transport
+        self.headers = headers or {"Authorization": f"Bearer {api_key}"}
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             for attempt in range(1, self.attempts + 1):
                 try:
                     response = await client.post(
-                        f"{self.base_url}{path}", json=body, headers=headers
+                        f"{self.base_url}{path}", json=body, headers=self.headers
                     )
                 except httpx.TransportError as error:
                     if attempt == self.attempts:
@@ -143,7 +144,11 @@ class OpenAICompatibleEmbeddings:
             **options,
         )
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed_query(self, text: str) -> list[float]:
+        [vector] = await self.embed_documents([text])
+        return vector
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), self.batch_size):
             vectors.extend(await self._embed_batch(texts[start : start + self.batch_size]))
