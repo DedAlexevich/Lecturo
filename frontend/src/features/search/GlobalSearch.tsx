@@ -6,7 +6,7 @@ import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
 import { buildMatcher, highlight } from "./highlight";
 import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch, type SearchHit } from "./queries";
-import { fragmentsCount } from "./SearchPanel";
+import { momentsCount } from "./SearchPanel";
 import "./search.css";
 
 const kindLabels: Record<SearchHit["kind"], string> = {
@@ -85,7 +85,7 @@ export function GlobalSearch({ children }: { children: ReactNode }) {
         )}
         {hits && hits.length > 0 && (
           <>
-            <p className="search__count">Найдено {fragmentsCount(hits.length)}</p>
+            <p className="search__count">Найдено {momentsCount(hits.length)}</p>
             <div className={search.isPlaceholderData ? "search__groups search__hits--stale" : "search__groups"}>
               {groups.map((group) => (
                 <section key={group.id} className="search__group" aria-labelledby={`search-group-${group.id}`}>

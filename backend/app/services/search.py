@@ -1,12 +1,15 @@
 import logging
+import math
 import re
+import uuid
 from collections.abc import Collection
+from typing import Any
 
 from sqlalchemy import ColumnElement, Text, cast, func, literal, select, text
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Lecture, SearchChunk
+from app.models import ChunkKind, Lecture, SearchChunk, TranscriptSegment
 from app.providers import get_embeddings
 from app.providers.openai_compat import OpenAICompatibleError
 from app.schemas.search import SearchHit
@@ -17,8 +20,12 @@ CANDIDATES = 50
 LIMIT = 20
 MIN_PREFIX_LENGTH = 4
 MIN_SIMILARITY = 0.2
-MARGIN = 0.15
+MARGIN = 0.08
 KEYWORD_BONUS = 0.03
+NEIGHBOR_GAP = 10.0
+PINPOINTED_MOMENTS = 3
+MAX_SEGMENT_EMBEDDINGS = 16
+CONTEXT_SECONDS = 30.0
 LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
 
 
@@ -31,39 +38,214 @@ async def embed_query(q: str) -> list[float] | None:
     return vector
 
 
+class Moment:
+    def __init__(self, chunk: SearchChunk, score: float) -> None:
+        self.best = chunk
+        self.best_score = score
+        self.score = score
+        self.start = chunk.start
+        self.end = chunk.end
+        self.at = chunk.start
+        self.text = chunk.text
+
+    @property
+    def lecture_id(self) -> uuid.UUID:
+        return self.best.lecture_id
+
+    def absorb(self, chunk: SearchChunk, score: float) -> None:
+        self.score = max(self.score, score)
+        if chunk.kind != self.best.kind:
+            return
+        if score > self.best_score:
+            self.best, self.best_score = chunk, score
+            self.at, self.text = chunk.start, chunk.text
+        if self.end is not None and chunk.end is not None:
+            self.end = max(self.end, chunk.end)
+
+    def overlaps(self, chunk: SearchChunk) -> bool:
+        return (
+            self.lecture_id == chunk.lecture_id
+            and self.start is not None
+            and self.end is not None
+            and chunk.start is not None
+            and chunk.end is not None
+            and self.start < chunk.end
+            and chunk.start < self.end
+        )
+
+
 async def semantic_search(
     session: AsyncSession, scope: ColumnElement[bool], q: str, vector: list[float] | None
 ) -> list[SearchHit]:
-    keyword = await fulltext_ranks(session, scope, q)
+    query = await build_tsquery(session, q)
+    keyword = await fulltext_ranks(session, scope, query) if query is not None else {}
     if vector is None:
         scores = keyword
     else:
         candidates = set(keyword) | set(await vector_ids(session, scope, vector))
         scores = relevant(await similarities(session, candidates, vector), keyword.keys())
-    top = sorted(
-        scores, key=lambda chunk_id: (scores[chunk_id], keyword.get(chunk_id, 0.0)), reverse=True
-    )[:LIMIT]
-    if not top:
+    if not scores:
         return []
-    rows = await session.execute(
-        select(SearchChunk, Lecture.title)
-        .join(Lecture, Lecture.id == SearchChunk.lecture_id)
-        .where(SearchChunk.id.in_(top))
-    )
-    hits = {
-        chunk.id: SearchHit(
-            lecture_id=chunk.lecture_id,
-            lecture_title=title,
-            kind=chunk.kind,
-            start=chunk.start,
-            end=chunk.end,
-            section=chunk.section,
-            text=chunk.text,
-            score=scores[chunk.id],
+    rows = (
+        await session.execute(
+            select(SearchChunk, Lecture.title)
+            .join(Lecture, Lecture.id == SearchChunk.lecture_id)
+            .where(SearchChunk.id.in_(scores))
         )
-        for chunk, title in rows
-    }
-    return [hits[chunk_id] for chunk_id in top]
+    ).all()
+    titles = {chunk.lecture_id: title for chunk, title in rows}
+    moments = sorted(
+        group_moments([chunk for chunk, _ in rows], scores),
+        key=lambda moment: (moment.score, keyword.get(moment.best.id, 0.0)),
+        reverse=True,
+    )[:LIMIT]
+    await pinpoint(session, moments, query, vector)
+    return [
+        SearchHit(
+            lecture_id=moment.lecture_id,
+            lecture_title=titles[moment.lecture_id],
+            kind=moment.best.kind,
+            start=moment.at,
+            end=moment.end,
+            section=moment.best.section,
+            text=moment.text,
+            score=moment.score,
+        )
+        for moment in moments
+    ]
+
+
+def group_moments(chunks: list[SearchChunk], scores: dict[int, float]) -> list[Moment]:
+    timed = sorted(
+        (chunk for chunk in chunks if chunk.start is not None and chunk.end is not None),
+        key=lambda chunk: (str(chunk.lecture_id), chunk.start),
+    )
+    moments = merge_neighbors(
+        [chunk for chunk in timed if chunk.kind == ChunkKind.transcript], scores
+    )
+    unmatched: list[SearchChunk] = []
+    for chunk in timed:
+        if chunk.kind == ChunkKind.transcript:
+            continue
+        overlapping = [moment for moment in moments if moment.overlaps(chunk)]
+        if overlapping:
+            max(overlapping, key=lambda moment: moment.score).absorb(chunk, scores[chunk.id])
+        else:
+            unmatched.append(chunk)
+    moments.extend(merge_neighbors(unmatched, scores))
+    sections: dict[tuple[uuid.UUID, int | None], Moment] = {}
+    for chunk in chunks:
+        if chunk.start is not None and chunk.end is not None:
+            continue
+        if chunk.kind != ChunkKind.summary:
+            moments.append(Moment(chunk, scores[chunk.id]))
+        elif (key := (chunk.lecture_id, chunk.section)) in sections:
+            sections[key].absorb(chunk, scores[chunk.id])
+        else:
+            sections[key] = Moment(chunk, scores[chunk.id])
+            moments.append(sections[key])
+    return moments
+
+
+def merge_neighbors(chunks: list[SearchChunk], scores: dict[int, float]) -> list[Moment]:
+    moments: list[Moment] = []
+    for chunk in chunks:
+        last = moments[-1] if moments else None
+        if (
+            last is not None
+            and last.lecture_id == chunk.lecture_id
+            and last.end is not None
+            and chunk.start is not None
+            and chunk.start <= last.end + NEIGHBOR_GAP
+        ):
+            last.absorb(chunk, scores[chunk.id])
+        else:
+            moments.append(Moment(chunk, scores[chunk.id]))
+    return moments
+
+
+async def pinpoint(
+    session: AsyncSession,
+    moments: list[Moment],
+    query: ColumnElement[Any] | None,
+    vector: list[float] | None,
+) -> None:
+    targets = [
+        moment
+        for moment in moments
+        if moment.best.kind == ChunkKind.transcript and moment.start is not None
+    ][:PINPOINTED_MOMENTS]
+    spans = [await moment_segments(session, moment, query) for moment in targets]
+    candidates = [
+        narrow(
+            [segment for segment in span if moment.best.start <= segment[0].start < moment.best.end]
+        )
+        for moment, span in zip(targets, spans, strict=True)
+    ]
+    texts = [segment.text for options in candidates if len(options) > 1 for segment, _ in options]
+    closeness = iter(await segment_closeness(texts[:MAX_SEGMENT_EMBEDDINGS], vector))
+    for moment, span, options in zip(targets, spans, candidates, strict=True):
+        if not options:
+            continue
+        scored = [
+            (
+                (next(closeness, 0.0) if len(options) > 1 else 0.0)
+                + (KEYWORD_BONUS if matched else 0.0),
+                segment,
+            )
+            for segment, matched in options
+        ]
+        best = max(scored, key=lambda pair: pair[0])[1]
+        moment.at = best.start
+        moment.text = " ".join(
+            segment.text.strip()
+            for segment, _ in span
+            if best.start <= segment.start < best.start + CONTEXT_SECONDS
+        )
+
+
+def narrow(
+    options: list[tuple[TranscriptSegment, bool]],
+) -> list[tuple[TranscriptSegment, bool]]:
+    matched = [option for option in options if option[1]]
+    return matched or options
+
+
+async def moment_segments(
+    session: AsyncSession, moment: Moment, query: ColumnElement[Any] | None
+) -> list[tuple[TranscriptSegment, bool]]:
+    matched = (
+        func.to_tsvector(literal("russian", REGCONFIG), TranscriptSegment.text).op("@@")(query)
+        if query is not None
+        else literal(False)
+    )
+    rows = await session.execute(
+        select(TranscriptSegment, matched)
+        .where(
+            TranscriptSegment.lecture_id == moment.lecture_id,
+            TranscriptSegment.start >= moment.start,
+            TranscriptSegment.start < moment.end,
+            func.trim(TranscriptSegment.text) != "",
+        )
+        .order_by(TranscriptSegment.start, TranscriptSegment.idx)
+    )
+    return [(segment, bool(flag)) for segment, flag in rows]
+
+
+async def segment_closeness(texts: list[str], vector: list[float] | None) -> list[float]:
+    if vector is None or not texts:
+        return [0.0] * len(texts)
+    try:
+        embedded = await get_embeddings().embed_documents(texts)
+    except OpenAICompatibleError:
+        logger.exception("Не удалось получить эмбеддинги сегментов, таймкод по словам")
+        return [0.0] * len(texts)
+    return [cosine(item, vector) for item in embedded]
+
+
+def cosine(left: list[float], right: list[float]) -> float:
+    norm = math.hypot(*left) * math.hypot(*right)
+    return sum(a * b for a, b in zip(left, right, strict=True)) / norm if norm else 0.0
 
 
 def relevant(similarity: dict[int, float], keyword: Collection[int]) -> dict[int, float]:
@@ -97,15 +279,18 @@ async def similarities(
     return {chunk_id: float(value) for chunk_id, value in rows}
 
 
-async def fulltext_ranks(
-    session: AsyncSession, scope: ColumnElement[bool], q: str
-) -> dict[int, float]:
+async def build_tsquery(session: AsyncSession, q: str) -> ColumnElement[Any] | None:
     stemmed = await session.scalar(
         select(cast(func.websearch_to_tsquery(literal("russian", REGCONFIG), q), Text))
     )
     if not stemmed:
-        return {}
-    query = func.to_tsquery(literal("simple", REGCONFIG), add_prefixes(stemmed))
+        return None
+    return func.to_tsquery(literal("simple", REGCONFIG), add_prefixes(stemmed))
+
+
+async def fulltext_ranks(
+    session: AsyncSession, scope: ColumnElement[bool], query: ColumnElement[Any]
+) -> dict[int, float]:
     rank = func.ts_rank_cd(SearchChunk.tsv, query)
     rows = await session.execute(
         select(SearchChunk.id, rank)
