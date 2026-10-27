@@ -176,7 +176,7 @@ async def inspect_link(url: str) -> LinkInfo:
         try:
             info = await asyncio.to_thread(extract_info, url)
         except YoutubeDLError as error:
-            logger.warning("yt-dlp не смог получить %s: %s", url, error)
+            logger.warning("yt-dlp не смог получить видео (%s): %s", urlparse(url).hostname, error)
             raise LinkError("Не удалось получить видео по ссылке") from error
         if info.get("_type") == "playlist":
             raise LinkError("Нужна ссылка на одно видео, а не на плейлист")

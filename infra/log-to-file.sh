@@ -11,6 +11,10 @@ fifo=$(mktemp -u)
 mkfifo "$fifo"
 
 rotate() {
+  if [ "$keep" -lt 1 ]; then
+    : > "$file"
+    return
+  fi
   i=$((keep - 1))
   while [ "$i" -ge 1 ]; do
     if [ -f "$file.$i" ]; then
