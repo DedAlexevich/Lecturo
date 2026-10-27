@@ -8,6 +8,7 @@
 | `data/storage` | загрузки, оригиналы, аудио и видео лекций | `api`, `worker`, `tusd`, читает `caddy` |
 | `data/bot-redis` | очередь уведомлений бота (Redis с AOF) | `bot-redis` |
 | `data/caddy` | сертификаты и состояние Caddy | `caddy` |
+| `data/mail/dkim` | ключ DKIM для подписи писем, только на сервере | `mail` |
 
 ## Запуск
 
