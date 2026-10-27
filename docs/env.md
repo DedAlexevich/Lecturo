@@ -67,7 +67,7 @@ cp .env.example .env
 | `STT_EXPECTED_RATIO` | Ожидаемая длительность распознавания как доля длительности записи. По ней считаются прогресс шага «Распознавание речи» и оценка оставшегося времени. Не больше 95% до ответа провайдера. Для длинных записей считается на одну часть | нет | `0.3` | `backend/app/providers/yandex.py, backend/app/pipeline/estimate.py` |
 | `STT_EXPECTED_MIN_SECONDS` | Нижняя граница ожидаемой длительности распознавания, секунды | нет | `45` | `backend/app/pipeline/estimate.py`, `backend/app/providers/yandex.py` |
 | `STT_CHUNK_THRESHOLD_SECONDS` | Записи длиннее этого порога режутся на части и распознаются параллельно, секунды. Более короткие уходят в SpeechKit одним запросом | нет | `720` | `backend/app/providers/yandex.py`, `backend/app/pipeline/estimate.py` |
-| `STT_CHUNK_TARGET_SECONDS` | Целевая длина одной части, секунды. Границы ищутся в паузах в пределах 30 секунд от целевой точки, если пауз нет, режется ровно по цели | нет | `420` | `backend/app/pipeline/chunks.py` |
+| `STT_CHUNK_TARGET_SECONDS` | Целевая длина одной части, секунды. Границы ищутся в паузах в пределах 30 секунд от целевой точки, если пауз нет, режется ровно по цели | нет | `420` | `backend/app/providers/chunks.py` |
 | `STT_PARALLEL_PARTS` | Сколько частей одной лекции распознаются одновременно. Учитывайте лимит SpeechKit на число одновременных операций в облаке | нет | `3` | `backend/app/providers/yandex.py`, `backend/app/pipeline/estimate.py` |
 | `ETA_DOWNLOAD_RATIO` | Ожидаемая длительность скачивания как доля длительности записи, для оценки оставшегося времени | нет | `0.1` | `backend/app/pipeline/estimate.py` |
 | `ETA_AUDIO_RATIO` | То же для извлечения звука | нет | `0.01` | `backend/app/pipeline/estimate.py` |

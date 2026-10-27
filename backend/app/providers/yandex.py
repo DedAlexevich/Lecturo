@@ -17,9 +17,9 @@ import httpx
 
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
-from app.pipeline.chunks import ChunkingError, Part, merge_segments, split_audio
 from app.pipeline.estimate import is_chunked, recognition_seconds
 from app.providers.base import RecognitionProgress, Segment
+from app.providers.chunks import ChunkingError, Part, merge_segments, split_audio
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
     OpenAICompatibleError,

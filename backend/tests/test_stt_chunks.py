@@ -8,11 +8,10 @@ import pytest
 
 from app.core.config import Settings
 from app.models import StepName
-from app.pipeline import chunks
-from app.pipeline.chunks import Part, merge_segments, parse_silences, plan_parts, split_audio
 from app.pipeline.estimate import expected_seconds
 from app.pipeline.media import probe_duration
-from app.providers import Segment
+from app.providers import Segment, chunks
+from app.providers.chunks import Part, merge_segments, parse_silences, plan_parts, split_audio
 from app.providers.retry import RetryPolicy
 from app.providers.yandex import RECOGNIZE_URL, YandexSpeechKitError, YandexSpeechToText
 from tests.test_yandex_stt import yandex_settings
