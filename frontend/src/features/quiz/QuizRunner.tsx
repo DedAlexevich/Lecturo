@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
+import { fromQuizState, momentLink } from "./moment";
+import { clearProgress, emptyProgress, loadProgress, saveProgress, type QuizAnswer, type QuizProgress } from "./progress";
 import type { QuizQuestion } from "./queries";
 
 type QuizRunnerProps = {
@@ -10,12 +12,49 @@ type QuizRunnerProps = {
   duration: number | null;
   onRegenerate: () => void;
   regenerating: boolean;
+  onMoment?: (seconds: number) => void;
 };
 
-type Answer = number | null;
+type Answer = QuizAnswer;
 
-function momentLink(lectureId: string, seconds: number) {
-  return `/lectures/${lectureId}?t=${Math.floor(seconds)}`;
+type MomentProps = {
+  lectureId: string;
+  seconds: number;
+  onMoment?: (seconds: number) => void;
+  className: string;
+  children?: ReactNode;
+  label?: string;
+  title?: string;
+  style?: CSSProperties;
+};
+
+function Moment({ lectureId, seconds, onMoment, className, children, label, title, style }: MomentProps) {
+  if (onMoment) {
+    return (
+      <button
+        type="button"
+        className={className}
+        style={style}
+        aria-label={label}
+        title={title}
+        onClick={() => onMoment(seconds)}
+      >
+        {children}
+      </button>
+    );
+  }
+  return (
+    <Link
+      to={momentLink(lectureId, seconds)}
+      state={fromQuizState}
+      className={className}
+      style={style}
+      aria-label={label}
+      title={title}
+    >
+      {children}
+    </Link>
+  );
 }
 
 function answersWord(count: number) {
@@ -27,13 +66,19 @@ function answersWord(count: number) {
   return "ответов";
 }
 
-export function QuizRunner({ lectureId, questions, duration, onRegenerate, regenerating }: QuizRunnerProps) {
-  const [answers, setAnswers] = useState<Answer[]>(() => questions.map(() => null));
-  const [index, setIndex] = useState(0);
+export function QuizRunner({ lectureId, questions, duration, onRegenerate, regenerating, onMoment }: QuizRunnerProps) {
+  const [progress, setProgress] = useState<QuizProgress>(
+    () => loadProgress(lectureId, questions) ?? emptyProgress(questions),
+  );
+  const { answers, index } = progress;
+
+  useEffect(() => {
+    saveProgress(lectureId, questions, progress);
+  }, [lectureId, questions, progress]);
 
   const restart = () => {
-    setAnswers(questions.map(() => null));
-    setIndex(0);
+    clearProgress(lectureId);
+    setProgress(emptyProgress(questions));
   };
 
   if (index >= questions.length) {
@@ -46,6 +91,7 @@ export function QuizRunner({ lectureId, questions, duration, onRegenerate, regen
         onRestart={restart}
         onRegenerate={onRegenerate}
         regenerating={regenerating}
+        onMoment={onMoment}
       />
     );
   }
@@ -57,8 +103,14 @@ export function QuizRunner({ lectureId, questions, duration, onRegenerate, regen
       questions={questions}
       index={index}
       answers={answers}
-      onAnswer={(choice) => setAnswers((current) => current.map((value, at) => (at === index ? choice : value)))}
-      onNext={() => setIndex(index + 1)}
+      onAnswer={(choice) =>
+        setProgress((current) => ({
+          ...current,
+          answers: current.answers.map((value, at) => (at === current.index ? choice : value)),
+        }))
+      }
+      onNext={() => setProgress((current) => ({ ...current, index: current.index + 1 }))}
+      onMoment={onMoment}
     />
   );
 }
@@ -75,9 +127,10 @@ type QuestionStepProps = {
   answers: Answer[];
   onAnswer: (choice: number) => void;
   onNext: () => void;
+  onMoment?: (seconds: number) => void;
 };
 
-function QuestionStep({ lectureId, questions, index, answers, onAnswer, onNext }: QuestionStepProps) {
+function QuestionStep({ lectureId, questions, index, answers, onAnswer, onNext, onMoment }: QuestionStepProps) {
   const question = questions[index];
   const answer = answers[index];
   const answered = answer !== null;
@@ -137,9 +190,9 @@ function QuestionStep({ lectureId, questions, index, answers, onAnswer, onNext }
           </p>
           {question.explanation && <p className="quiz-feedback__text">{question.explanation}</p>}
           <div className="quiz-feedback__actions">
-            <Link to={momentLink(lectureId, question.timestamp)} className="quiz-moment">
+            <Moment lectureId={lectureId} seconds={question.timestamp} onMoment={onMoment} className="quiz-moment">
               Смотреть в лекции с {formatTimecode(question.timestamp)}
-            </Link>
+            </Moment>
             <Button onClick={onNext}>{last ? "Показать итог" : "Следующий вопрос"}</Button>
           </div>
         </div>
@@ -156,9 +209,19 @@ type QuizResultProps = {
   onRestart: () => void;
   onRegenerate: () => void;
   regenerating: boolean;
+  onMoment?: (seconds: number) => void;
 };
 
-function QuizResult({ lectureId, questions, answers, duration, onRestart, onRegenerate, regenerating }: QuizResultProps) {
+function QuizResult({
+  lectureId,
+  questions,
+  answers,
+  duration,
+  onRestart,
+  onRegenerate,
+  regenerating,
+  onMoment,
+}: QuizResultProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const results = questions.map((question, at) => ({
     question,
@@ -190,12 +253,14 @@ function QuizResult({ lectureId, questions, answers, duration, onRestart, onRege
       <div className="quiz-timeline">
         <div className="quiz-timeline__track">
           {results.map((result, at) => (
-            <Link
+            <Moment
               key={at}
-              to={momentLink(lectureId, result.question.timestamp)}
+              lectureId={lectureId}
+              seconds={result.question.timestamp}
+              onMoment={onMoment}
               className={result.correct ? "quiz-timeline__mark" : "quiz-timeline__mark quiz-timeline__mark--wrong"}
               style={{ left: `${(result.question.timestamp / span) * 100}%` }}
-              aria-label={`${formatTimecode(result.question.timestamp)}, ${result.correct ? "верно" : "ошибка"}: ${result.question.question}`}
+              label={`${formatTimecode(result.question.timestamp)}, ${result.correct ? "верно" : "ошибка"}: ${result.question.question}`}
               title={result.question.question}
             />
           ))}
@@ -219,9 +284,9 @@ function QuizResult({ lectureId, questions, answers, duration, onRestart, onRege
                   {answer !== null && <span className="quiz-review__yours">Ваш ответ: {question.options[answer]}</span>}
                   <span>Правильно: {question.options[question.correct_index]}</span>
                 </p>
-                <Link to={momentLink(lectureId, question.timestamp)} className="quiz-moment">
+                <Moment lectureId={lectureId} seconds={question.timestamp} onMoment={onMoment} className="quiz-moment">
                   Смотреть с {formatTimecode(question.timestamp)}
-                </Link>
+                </Moment>
               </li>
             ))}
           </ul>
