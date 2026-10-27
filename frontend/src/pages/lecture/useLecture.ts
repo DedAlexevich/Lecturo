@@ -17,6 +17,20 @@ export function isPending(status: LectureStatus) {
   return pendingStatuses.has(status);
 }
 
+function videoUnfinished(steps: Step[]) {
+  const video = steps.find((step) => step.step === "video");
+  return video === undefined || video.status === "pending" || video.status === "running";
+}
+
+export function awaitsVideo(lecture: Lecture) {
+  return (
+    lecture.source_type === "upload" &&
+    lecture.status === "ready" &&
+    !lecture.video_url &&
+    videoUnfinished(lecture.steps)
+  );
+}
+
 export function lectureQueryKey(id: string) {
   return ["lectures", id] as const;
 }
@@ -41,7 +55,8 @@ export function useLecture(id: string) {
 }
 
 function signatureOf(status: LectureStatus, steps: Step[]) {
-  return `${status}:${steps.filter((step) => step.status === "done").length}`;
+  const settled = steps.filter((step) => step.status === "done" || step.status === "failed");
+  return `${status}:${settled.length}`;
 }
 
 export function useLectureStatus(id: string, lecture: Lecture | undefined) {
@@ -49,9 +64,13 @@ export function useLectureStatus(id: string, lecture: Lecture | undefined) {
   const failures = useRef(0);
   const query = useQuery({
     queryKey: lectureStatusQueryKey(id),
-    enabled: lecture !== undefined && isPending(lecture.status),
+    enabled: lecture !== undefined && (isPending(lecture.status) || awaitsVideo(lecture)),
     refetchInterval: (current) => {
-      if (current.state.data && !isPending(current.state.data.status)) return false;
+      const polled = current.state.data;
+      if (polled && !isPending(polled.status)) {
+        const videoAhead = lecture?.source_type === "upload" && polled.status === "ready";
+        if (!videoAhead || !videoUnfinished(polled.steps)) return false;
+      }
       if (failures.current === 0) return STATUS_POLL_INTERVAL_MS;
       return Math.min(STATUS_POLL_MAX_INTERVAL_MS, STATUS_POLL_INTERVAL_MS * 2 ** failures.current);
     },

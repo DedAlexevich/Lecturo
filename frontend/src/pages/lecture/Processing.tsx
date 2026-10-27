@@ -7,7 +7,7 @@ import { Progress } from "../../ui/Progress";
 type LectureStatus = components["schemas"]["LectureStatus"];
 type Step = components["schemas"]["StepOut"];
 
-const stepOrder: Step["step"][] = ["download", "audio", "video", "transcribe", "summarize", "embed"];
+const stepOrder: Step["step"][] = ["download", "audio", "transcribe", "summarize", "embed", "video"];
 
 const stepLabels: Record<Step["step"], string> = {
   download: "Скачивание",
