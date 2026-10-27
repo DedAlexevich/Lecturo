@@ -10,6 +10,7 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
   const requests = [];
   const payments = [];
   const errors = [];
+  const billing = { status: "pending" };
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("https://telegram.org/js/**", (route) => route.fulfill({ body: "", contentType: "text/javascript" }));
   await page.route("**/api/v1/**", async (route) => {
@@ -38,7 +39,7 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
       payments.push(route.request().postDataJSON());
       body = { id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null };
     } else if (path.endsWith("/billing/payments")) {
-      body = [{ id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null }];
+      body = [{ id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: billing.status, confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null }];
     } else if (rejectSaved && route.request().headers().authorization === "Bearer saved-token") {
       responseStatus = 401;
       body = { detail: "Недействительный токен" };
@@ -64,12 +65,12 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
         onClick: (fn) => mock.back.add(fn), offClick: (fn) => mock.back.delete(fn) },
     } };
   }, { platform, savedToken });
-  return { context, page, requests, errors, payments };
+  return { context, page, requests, errors, payments, billing };
 }
 
 try {
   for (const platform of ["android", "ios"]) {
-    const { context, page, requests, errors, payments } = await setup(platform, 403);
+    const { context, page, requests, errors, payments, billing } = await setup(platform, 403);
     await page.goto(base + "/login");
     await page.getByRole("dialog").waitFor();
     assert.equal(requests.length, 1);
@@ -97,6 +98,7 @@ try {
     await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click();
     await page.waitForURL(base + "/account");
     await page.waitForFunction(() => window.mock.visible);
+    await page.getByText("откроется в браузере. После оплаты вернитесь в Telegram").waitFor();
     await page.locator("label.checkbox").filter({ hasText: "Принимаю условия" }).locator(".checkbox__box").click();
     await page.getByRole("button", { name: "Оплатить 100" }).click();
     await page.getByRole("button", { name: "Открыть оплату в браузере" }).click();
@@ -113,6 +115,11 @@ try {
     assert.equal(await page.evaluate(() => window.mock.links.length), 2);
     assert.equal(await page.evaluate(() => window.mock.events.themeChanged.size), 1);
     assert.equal(payments.length, 1);
+    billing.status = "succeeded";
+    await page.evaluate(() => window.mock.events.activated.forEach((fn) => fn()));
+    await page.getByRole("button", { name: "Оплатить 100" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Открыть оплату в браузере" }).count(), 0);
+    billing.status = "pending";
     await page.getByRole("radio", { name: "Пять часов" }).check();
     assert.equal(await page.getByRole("button", { name: "Открыть оплату в браузере" }).count(), 0);
     await page.screenshot({ path: `/tmp/telegram-${platform}-account.png`, fullPage: true });
