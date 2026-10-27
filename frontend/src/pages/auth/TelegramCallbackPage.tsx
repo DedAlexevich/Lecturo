@@ -10,7 +10,7 @@ import { settingsError, useDeleteAccount, useLinkTelegram } from "../account/set
 import { AuthLayout } from "./AuthLayout";
 import { ConsentFields } from "./ConsentFields";
 import { messageOf } from "./errors";
-import { isTelegramMode, parseTelegramUser, type TelegramMode, type TelegramUser } from "./telegramParams";
+import { isTelegramMode, parseTelegramUser, takeTelegramRedirect, type TelegramMode, type TelegramUser } from "./telegramParams";
 import { useTelegramLogin } from "./useAuthRequests";
 
 const titles: Record<TelegramMode, string> = {
@@ -42,6 +42,7 @@ export function TelegramCallbackPage() {
   const [personalData, setPersonalData] = useState(false);
   const [failure, setFailure] = useState<string>();
   const started = useRef(false);
+  const redirect = useRef("/");
   const { mutate: signIn } = login;
   const { mutate: linkTelegram } = link;
   const { mutate: deleteAccount } = remove;
@@ -49,6 +50,7 @@ export function TelegramCallbackPage() {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    redirect.current = takeTelegramRedirect();
     const parsed = parseTelegramUser(params);
     if (!parsed) {
       setFailure(invalidMessage);
@@ -82,7 +84,7 @@ export function TelegramCallbackPage() {
     signIn(
       { ...parsed, accept_terms: false, accept_personal_data: false },
       {
-        onSuccess: () => navigate("/", { replace: true }),
+        onSuccess: () => navigate(redirect.current, { replace: true }),
         onError: (error) => {
           if (error instanceof ApiError && error.status === 403) {
             setNeedsConsents(true);
@@ -101,7 +103,7 @@ export function TelegramCallbackPage() {
     signIn(
       { ...user, accept_terms: terms, accept_personal_data: personalData },
       {
-        onSuccess: () => navigate("/", { replace: true }),
+        onSuccess: () => navigate(redirect.current, { replace: true }),
         onError: (error) => {
           setNeedsConsents(false);
           setFailure(messageOf(error));

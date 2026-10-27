@@ -17,7 +17,7 @@ export function SocialLogin() {
     <>
       <div className="auth__divider">или</div>
       <div className="auth-social">
-        {telegramEnabled && <TelegramButton mode="login" />}
+        {telegramEnabled && <TelegramButton mode="login" redirect={redirectTarget(location.state)} />}
         {vkEnabled && (
           <VkButton
             flow={{ mode: "login", redirect: redirectTarget(location.state) }}

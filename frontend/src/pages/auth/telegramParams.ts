@@ -13,6 +13,26 @@ export function telegramAuthUrl(origin: string, mode: TelegramMode) {
   return `${origin}/auth/telegram/${mode}`;
 }
 
+const REDIRECT_KEY = "lecturo.telegram-redirect";
+
+export function saveTelegramRedirect(path: string) {
+  try {
+    sessionStorage.setItem(REDIRECT_KEY, path);
+  } catch {
+    return;
+  }
+}
+
+export function takeTelegramRedirect(): string {
+  try {
+    const path = sessionStorage.getItem(REDIRECT_KEY);
+    sessionStorage.removeItem(REDIRECT_KEY);
+    return path && path.startsWith("/") && !path.startsWith("//") ? path : "/";
+  } catch {
+    return "/";
+  }
+}
+
 function integer(value: string | null) {
   if (value === null || !/^\d{1,16}$/.test(value)) return null;
   return Number(value);
