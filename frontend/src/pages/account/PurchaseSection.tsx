@@ -16,6 +16,7 @@ import {
 } from "./billing";
 import { formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
+import { pollInterval, pollLimit } from "./usePaymentReturn";
 
 export function PurchaseSection() {
   const titleId = useId();
@@ -62,11 +63,18 @@ function PurchaseForm({ products }: { products: Product[] }) {
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
   const queryClient = useQueryClient();
-  const { data: payments } = usePayments();
+  const [returnedAt, setReturnedAt] = useState<number>();
+  const createdId = createPayment.data?.id;
+  const { data: payments } = usePayments(returnedAt && createdId ? pollInterval : false);
   const selected = products.find((product) => product.code === code) ?? products[0];
   const { reset } = createPayment;
-  const createdId = createPayment.data?.id;
   const settled = payments?.some((payment) => payment.id === createdId && payment.status !== "pending") ?? false;
+
+  useEffect(() => {
+    if (returnedAt === undefined) return;
+    const timer = setTimeout(() => setReturnedAt(undefined), pollLimit);
+    return () => clearTimeout(timer);
+  }, [returnedAt]);
 
   useEffect(() => {
     if (settled) reset();
@@ -77,6 +85,7 @@ function PurchaseForm({ products }: { products: Product[] }) {
     if (!app) return;
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
+      setReturnedAt(Date.now());
       queryClient.invalidateQueries({ queryKey: quotaQueryKey });
       queryClient.invalidateQueries({ queryKey: paymentsQueryKey });
     };

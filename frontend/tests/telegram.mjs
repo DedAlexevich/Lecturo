@@ -115,8 +115,8 @@ try {
     assert.equal(await page.evaluate(() => window.mock.links.length), 2);
     assert.equal(await page.evaluate(() => window.mock.events.themeChanged.size), 1);
     assert.equal(payments.length, 1);
-    billing.status = "succeeded";
     await page.evaluate(() => window.mock.events.activated.forEach((fn) => fn()));
+    billing.status = "succeeded";
     await page.getByRole("button", { name: "Оплатить 100" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Открыть оплату в браузере" }).count(), 0);
     billing.status = "pending";
