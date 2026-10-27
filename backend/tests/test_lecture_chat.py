@@ -3,6 +3,7 @@ import uuid
 
 import pytest
 
+from app.models import ChunkKind
 from app.schemas.search import SearchHit
 from app.services.lecture_chat import InvalidChatReply, answer_question, parse_reply, select_sources
 
@@ -18,12 +19,14 @@ class ScriptedLLM:
         return self.response
 
 
-def hit(lecture_id, text="Предел равен двум", start=10, end=15):
+def hit(lecture_id, text="Предел равен двум", start=10, end=15, kind=ChunkKind.transcript):
     return SearchHit(
         lecture_id=lecture_id,
         lecture_title="Пределы",
+        kind=kind,
         start=start,
         end=end,
+        section=None,
         text=text,
         score=0.5,
     )
@@ -116,3 +119,13 @@ def test_sources_with_invalid_timestamps_are_discarded():
         hit(lecture_id, start=1, end=2),
     ]
     assert [source.start for source in select_sources(lecture_id, hits)] == [1]
+
+
+def test_only_timestamped_transcript_and_chapter_sources_are_selected():
+    lecture_id = uuid.uuid4()
+    hits = [
+        hit(lecture_id, "Конспект", start=None, end=None, kind=ChunkKind.summary),
+        hit(lecture_id, "Фрагмент без времени", start=None, end=None),
+        hit(lecture_id, "Глава", start=20, end=30, kind=ChunkKind.chapter),
+    ]
+    assert [source.text for source in select_sources(lecture_id, hits)] == ["Глава"]

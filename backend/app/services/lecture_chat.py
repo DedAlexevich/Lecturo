@@ -4,6 +4,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.models import ChunkKind
 from app.providers.base import LLM
 from app.schemas.search import SearchHit
 
@@ -41,6 +42,9 @@ def select_sources(lecture_id: uuid.UUID, hits: list[SearchHit]) -> list[ChatSou
     for hit in hits:
         if (
             hit.lecture_id != lecture_id
+            or hit.kind not in {ChunkKind.transcript, ChunkKind.chapter}
+            or hit.start is None
+            or hit.end is None
             or not math.isfinite(hit.start)
             or not math.isfinite(hit.end)
             or hit.start < 0
