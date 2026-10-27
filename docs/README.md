@@ -92,8 +92,7 @@ cd ../frontend && npm run gen:api
 
 ## Как работать с задачами
 
-1. Каждая задача или баг — это issue по шаблону: [задача](../.github/ISSUE_TEMPLATE/task.md) или [баг](../.github/ISSUE_TEMPLATE/bug.md). Зоны и ответственные — в [#1](https://github.com/DedAlexevich/Lecturo/issues/1).
-2. Ветка от свежего `main`: `<номер issue>-<коротко-латиницей>`, например `360-readme-docs`.
+1. Каждая задача или баг — это issue по шаблону: [задача](../.github/ISSUE_TEMPLATE/task.md) или [баг](../.github/ISSUE_TEMPLATE/bug.md).2. Ветка от свежего `main`: `<номер issue>-<коротко-латиницей>`, например `360-readme-docs`.
 3. Коммиты в формате Conventional Commits на русском: `feat(backend): добавить эндпоинт регистрации`.
 4. PR в `main` с заголовком в том же формате и `Closes #<номер>` в описании.
 5. Ревью и зелёный CI, затем squash-мерж. После мержа в `main` сервер обновляется автоматически, см. [deploy.md](deploy.md#автодеплой).
