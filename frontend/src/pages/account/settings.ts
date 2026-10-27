@@ -74,6 +74,12 @@ export function useLinkVk() {
   );
 }
 
+export function useLinkYandex() {
+  return useMeMutation(async (body: components["schemas"]["YandexCallbackIn"]) =>
+    unwrap(await api.POST("/api/v1/me/identities/yandex", { body })),
+  );
+}
+
 export function useLinkEmail() {
   return useMeMutation(async (body: components["schemas"]["EmailIdentityIn"]) =>
     unwrap(await api.POST("/api/v1/me/identities/email", { body })),

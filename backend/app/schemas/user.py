@@ -62,6 +62,7 @@ class TelegramWebAppIn(Schema):
 
 class ProvidersOut(Schema):
     vk: bool
+    yandex: bool
 
 
 class VkStartIn(Schema):
@@ -78,6 +79,22 @@ class VkCallbackIn(Schema):
     code: str = Field(min_length=1, max_length=2048)
     state: str = Field(min_length=1, max_length=256)
     device_id: str = Field(min_length=1, max_length=256)
+    nonce: str = Field(min_length=1, max_length=256)
+
+
+class YandexStartIn(Schema):
+    accept_terms: bool = False
+    accept_personal_data: bool = False
+
+
+class YandexStartOut(Schema):
+    url: str
+    nonce: str
+
+
+class YandexCallbackIn(Schema):
+    code: str = Field(min_length=1, max_length=2048)
+    state: str = Field(min_length=1, max_length=256)
     nonce: str = Field(min_length=1, max_length=256)
 
 

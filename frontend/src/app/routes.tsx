@@ -5,6 +5,7 @@ import { RegisterPage } from "../pages/auth/RegisterPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { TelegramCallbackPage } from "../pages/auth/TelegramCallbackPage";
 import { VkCallbackPage } from "../pages/auth/VkCallbackPage";
+import { YandexCallbackPage } from "../pages/auth/YandexCallbackPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { LecturePage } from "../pages/lecture/LecturePage";
 import { HomePage } from "../pages/home/HomePage";
@@ -21,6 +22,7 @@ export const publicRoutes: RouteObject[] = [
   { path: "/legal/:slug", element: <LegalPage /> },
   { path: "/auth/telegram/:mode", element: <TelegramCallbackPage /> },
   { path: "/auth/vk", element: <VkCallbackPage /> },
+  { path: "/auth/yandex", element: <YandexCallbackPage /> },
   { path: "/verify-email", element: <VerifyEmailPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/ui", element: <UiPage /> },

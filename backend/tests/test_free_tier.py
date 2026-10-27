@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
@@ -84,5 +85,38 @@ async def test_require_subscription_allows_subscriber(guarded_client, user, auth
 
 async def test_require_subscription_needs_login(guarded_client):
     response = await guarded_client.get("/guarded")
+
+    assert response.status_code == 401
+
+
+PAID_ENDPOINTS = [
+    ("post", "/api/v1/lectures/{id}/quiz"),
+    ("get", "/api/v1/lectures/{id}/quiz"),
+    ("post", "/api/v1/courses/{id}/exam-sheet"),
+    ("get", "/api/v1/courses/{id}/exam-sheet"),
+]
+
+
+@pytest.mark.parametrize(("method", "path"), PAID_ENDPOINTS)
+async def test_paid_endpoints_reject_free_user(client, user, auth_headers, method, path):
+    response = await client.request(method, path.format(id=uuid.uuid4()), headers=auth_headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "subscription_required"
+
+
+@pytest.mark.parametrize(("method", "path"), PAID_ENDPOINTS)
+async def test_paid_endpoints_pass_subscriber(client, user, auth_headers, method, path):
+    now = datetime.now(UTC)
+    await add_subscription(user, now - timedelta(days=1), now + timedelta(days=29))
+
+    response = await client.request(method, path.format(id=uuid.uuid4()), headers=auth_headers)
+
+    assert response.status_code == 501
+
+
+@pytest.mark.parametrize(("method", "path"), PAID_ENDPOINTS)
+async def test_paid_endpoints_need_login(client, method, path):
+    response = await client.request(method, path.format(id=uuid.uuid4()))
 
     assert response.status_code == 401

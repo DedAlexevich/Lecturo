@@ -9,8 +9,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import Lecture
+from app.models import Lecture, User
 from app.pipeline.runner import Report
+from app.services import quota
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,8 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
             "Не удалось пережать видео",
         )
         lecture.video_path = str(target)
-        lecture.video_expires_at = datetime.now(UTC) + timedelta(
-            days=settings.free_video_retention_days
-        )
+        owner = await session.get(User, lecture.owner_id)
+        now = datetime.now(UTC)
+        days = await quota.video_retention_days(session, owner, now=now, settings=settings)
+        lecture.video_expires_at = now + timedelta(days=days)
     await asyncio.to_thread(original.unlink, missing_ok=True)

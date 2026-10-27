@@ -12,8 +12,10 @@ from app.schemas.user import (
     UserOut,
     VkCallbackIn,
     VkStartOut,
+    YandexCallbackIn,
+    YandexStartOut,
 )
-from app.services import identities
+from app.services import identities, yandex_auth
 from app.services.account import (
     change_password,
     confirm_deletion,
@@ -102,6 +104,48 @@ async def link_vk(
         get_settings(), client, body.code, body.state, body.device_id, body.nonce, user.id
     )
     await identities.link_vk(session, user, vk_id, profile)
+    return await identities.user_out(session, user)
+
+
+@router.post(
+    "/identities/yandex/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток привязки"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def start_yandex_link(user: CurrentUser) -> YandexStartOut:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-link-start:{user.id}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
+    url, nonce = await yandex_auth.start_flow(get_settings(), user_id=user.id)
+    return YandexStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/identities/yandex",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия привязки не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
+        status.HTTP_409_CONFLICT: {"description": "Яндекс уже привязан к другому аккаунту"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def link_yandex(
+    body: YandexCallbackIn,
+    user: CurrentUser,
+    session: SessionDep,
+    client: yandex_auth.YandexClientDep,
+) -> UserOut:
+    yandex_id, profile, _ = await yandex_auth.complete_flow(
+        get_settings(), client, body.code, body.state, body.nonce, user.id
+    )
+    await identities.link_yandex(session, user, yandex_id, profile)
     return await identities.user_out(session, user)
 
 
