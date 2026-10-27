@@ -445,13 +445,26 @@ async def test_course_copy_reuses_saved_lecture(client, visitor, owner, auth_hea
 
 async def test_course_limit_counts_lectures(client, visitor, owner, auth_headers, monkeypatch):
     monkeypatch.setattr(get_settings(), "public_copy_daily_limit", 2)
-    lecture_ids = [await create_source(owner.id, f"Лекция {n}") for n in range(3)]
+    first = await create_share(owner.id, lecture_id=await create_source(owner.id, "Одна"))
+    assert (await client.post(copy_url(first), headers=auth_headers)).status_code == 201
+    lecture_ids = [await create_source(owner.id, f"Лекция {n}") for n in range(2)]
     token = await create_share(owner.id, course_id=await create_course(owner.id, lecture_ids))
 
     response = await client.post(copy_url(token), headers=auth_headers)
 
     assert response.status_code == 429
-    assert await lectures_of(visitor.id) == []
+    assert len(await lectures_of(visitor.id)) == 1
+
+
+async def test_large_course_fits_daily_limit(client, visitor, owner, auth_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "public_copy_daily_limit", 2)
+    lecture_ids = [await create_source(owner.id, f"Лекция {n}") for n in range(3)]
+    token = await create_share(owner.id, course_id=await create_course(owner.id, lecture_ids))
+
+    response = await client.post(copy_url(token), headers=auth_headers)
+
+    assert response.status_code == 201
+    assert len(response.json()["lecture_ids"]) == 3
 
 
 async def test_lecture_outside_course_is_not_copied(client, visitor, owner, auth_headers):

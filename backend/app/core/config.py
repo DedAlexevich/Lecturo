@@ -95,10 +95,10 @@ class Settings(BaseSettings):
     local_results_rate_window_seconds: int = 60
     regenerate_summary_rate_window_seconds: int = 300
     complaints_rate_limit: int = 5
+    complaints_rate_window_seconds: int = 3600
     public_copy_daily_limit: int = 20
     public_export_rate_limit: int = 30
     public_export_rate_window_seconds: int = 3600
-    complaints_rate_window_seconds: int = 3600
     auth_mail_rate_limit: int = 3
     auth_mail_ip_rate_limit: int = 20
     auth_mail_address_rate_limit: int = 10

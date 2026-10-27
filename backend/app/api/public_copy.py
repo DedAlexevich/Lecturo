@@ -95,7 +95,7 @@ async def copy_single(
     try:
         copy_id = await copy_lecture(session, source, user.id)
         await session.commit()
-    except BaseException:
+    except Exception:
         await session.rollback()
         await refund_budget(get_settings().redis_url, key, 1)
         raise
@@ -138,14 +138,15 @@ async def copy_whole_course(
     for lecture in lectures:
         if await existing_copy_id(session, user.id, lecture.id) is None:
             new_count += 1
-    key = await charge(user, new_count) if new_count else None
+    cost = min(new_count, get_settings().public_copy_daily_limit)
+    key = await charge(user, cost) if new_count else None
     try:
         course_id, lecture_ids = await copy_course(session, course, lectures, user.id)
         await session.commit()
-    except BaseException:
+    except Exception:
         await session.rollback()
         if key is not None:
-            await refund_budget(get_settings().redis_url, key, new_count)
+            await refund_budget(get_settings().redis_url, key, cost)
         raise
     return CopyOut(lecture_id=None, course_id=course_id, lecture_ids=lecture_ids, created=True)
 
