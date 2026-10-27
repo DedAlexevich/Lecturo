@@ -12,9 +12,18 @@ from sqlalchemy import or_, select, update
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
+from app.models import (
+    Lecture,
+    LectureStatus,
+    NotificationKind,
+    NotificationOutcome,
+    ProcessingStep,
+    SourceType,
+    StepName,
+    StepStatus,
+)
 from app.pipeline import download, embed, media, quiz, stages, summarize
-from app.pipeline.events import publish_status
+from app.pipeline.events import add_notification, publish_status
 from app.pipeline.runner import StepFailed, StepHandler, get_step, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
@@ -102,6 +111,13 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
                 .values(status=StepStatus.done, progress=1.0)
             )
         lecture.status = LectureStatus.ready
+        add_notification(
+            session,
+            lecture.id,
+            lecture.owner_id,
+            NotificationKind.regenerate,
+            NotificationOutcome.ready if outcome == StepStatus.done else NotificationOutcome.failed,
+        )
         await session.commit()
         await publish_status(lecture.id, lecture.owner_id, lecture.status, error)
         return outcome
@@ -133,6 +149,14 @@ async def restore_ready(lecture_id: uuid.UUID, error: str) -> None:
             .values(status=LectureStatus.ready)
             .returning(Lecture.owner_id)
         )
+        if owner_id is not None:
+            add_notification(
+                session,
+                lecture_id,
+                owner_id,
+                NotificationKind.regenerate,
+                NotificationOutcome.failed,
+            )
         await session.commit()
     if owner_id is not None:
         await publish_status(lecture_id, owner_id, LectureStatus.ready, error)
@@ -144,7 +168,14 @@ async def process_quiz(ctx: dict, lecture_id: str) -> str:
         if lecture is None:
             return "missing"
         try:
-            await run_step(session, lecture, StepName.quiz, quiz.build_quiz, fails_lecture=False)
+            await run_step(
+                session,
+                lecture,
+                StepName.quiz,
+                quiz.build_quiz,
+                fails_lecture=False,
+                notify=NotificationKind.quiz,
+            )
         except StepFailed:
             return StepStatus.failed
         return StepStatus.done
@@ -171,6 +202,13 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             for name in AFTER_READY.get(lecture.source_type, []):
                 await get_step(session, lecture.id, name)
             lecture.status = LectureStatus.ready
+            add_notification(
+                session,
+                lecture.id,
+                lecture.owner_id,
+                NotificationKind.lecture,
+                NotificationOutcome.ready,
+            )
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
         for name in AFTER_READY.get(lecture.source_type, []):
@@ -262,6 +300,9 @@ async def mark_failed(lecture_id: uuid.UUID, error: str) -> None:
         )
         if owner_id is not None:
             await quota.refund_failed_lecture(session, lecture_id)
+            add_notification(
+                session, lecture_id, owner_id, NotificationKind.lecture, NotificationOutcome.failed
+            )
         await session.commit()
     if owner_id is not None:
         await publish_status(lecture_id, owner_id, LectureStatus.failed, error)

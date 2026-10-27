@@ -7,8 +7,16 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Lecture, LectureStatus, ProcessingStep, StepName, StepStatus
-from app.pipeline.events import publish_status
+from app.models import (
+    Lecture,
+    LectureStatus,
+    NotificationKind,
+    NotificationOutcome,
+    ProcessingStep,
+    StepName,
+    StepStatus,
+)
+from app.pipeline.events import add_notification, publish_status
 from app.services.quota import QuotaExceeded
 
 logger = logging.getLogger(__name__)
@@ -45,6 +53,7 @@ async def run_step(
     handler: StepHandler,
     *,
     fails_lecture: bool = True,
+    notify: NotificationKind | None = None,
 ) -> None:
     step = await get_step(session, lecture.id, name)
     if step.status == StepStatus.done:
@@ -87,6 +96,11 @@ async def run_step(
         step.finished_at = datetime.now(UTC)
         if fails_lecture:
             lecture.status = LectureStatus.failed
+            notify = NotificationKind.lecture
+        if notify is not None:
+            add_notification(
+                session, lecture.id, lecture.owner_id, notify, NotificationOutcome.failed
+            )
         await session.commit()
         if fails_lecture:
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
@@ -96,4 +110,6 @@ async def run_step(
     step.progress = 1.0
     step.stage = None
     step.finished_at = datetime.now(UTC)
+    if notify is not None:
+        add_notification(session, lecture.id, lecture.owner_id, notify, NotificationOutcome.ready)
     await session.commit()
