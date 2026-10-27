@@ -7,7 +7,7 @@ project="${COMPOSE_PROJECT_NAME:-lecturo}"
 image="${MIGRATE_IMAGE:-alpine:3}"
 data_dir="${DATA_DIR:-}"
 if [ -z "$data_dir" ] && [ -f .env ]; then
-  data_dir=$(sed -n 's/^DATA_DIR=//p' .env | tail -n 1)
+  data_dir=$(sed -n 's/^DATA_DIR=//p' .env | tail -n 1 | tr -d '\"\r')
 fi
 data_dir="${data_dir:-./data}"
 mkdir -p "$data_dir"
@@ -41,15 +41,13 @@ migrate() {
   fi
   mkdir -p "$target"
   if [ -n "$(docker run --rm -v "$target:/d:ro" "$image" ls -A /d)" ]; then
-    echo "skip $volume: $target is not empty"
-    return
+    fail "$target is not empty, move it away or remove it before migrating $volume"
   fi
   echo "copy $volume -> $target"
   docker run --rm -v "$volume:/from:ro" -v "$target:/to" "$image" cp -a /from/. /to/
   local before after
   before=$(summarize "$volume")
-  after=$(docker run --rm -v "$target:/d:ro" "$image" sh -c \
-    'cd /d && echo "$(find . | wc -l) $(find . -type f -exec stat -c %s {} + | awk "{s+=\$1} END {print s+0}")"')
+  after=$(summarize "$target")
   if [ "$before" != "$after" ]; then
     fail "check failed for $volume: volume has '$before' (entries, bytes), folder has '$after'"
   fi
