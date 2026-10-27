@@ -113,7 +113,7 @@ export function ExamSheetPage() {
       {code === "subscription_required" && (
         <EmptyState
           title="Памятка доступна с подпиской"
-          description="В подписке больше часов распознавания в неделю, квиз, памятка к экзамену и долгое хранение видео."
+          description="В подписке больше часов распознавания в неделю, квиз, памятка к экзамену, чат по лекции и долгое хранение видео."
           action={
             <Link to="/account#purchase" className="button button--primary button--md exam-sheet__plans">
               Посмотреть тарифы
