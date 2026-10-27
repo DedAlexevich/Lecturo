@@ -16,6 +16,7 @@ from app.schemas.user import TelegramLoginIn
 from app.services.consents import record_signup_consents, require_telegram_signup_consents
 
 AUTH_MAX_AGE_SECONDS = 24 * 60 * 60
+WEBAPP_AUTH_MAX_AGE_SECONDS = 60 * 60
 CLOCK_SKEW_SECONDS = 5 * 60
 TELEGRAM_PROFILE_FIELDS = {"first_name", "last_name", "username", "photo_url"}
 
@@ -60,7 +61,7 @@ def verify_webapp_init_data(init_data: str) -> dict:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Неполные данные входа Telegram"
         ) from None
-    if age > AUTH_MAX_AGE_SECONDS or age < -CLOCK_SKEW_SECONDS:
+    if age > WEBAPP_AUTH_MAX_AGE_SECONDS or age < -CLOCK_SKEW_SECONDS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Данные входа Telegram устарели")
     return telegram_user
 
