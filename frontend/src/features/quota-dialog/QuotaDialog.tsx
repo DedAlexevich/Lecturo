@@ -55,7 +55,7 @@ export function QuotaDialog() {
     >
       <div className="quota-plan">
         {waiting.isPending && (
-          <p className="quota-plan__status" role="status">
+          <p className="quota-plan__status">
             <Spinner size="sm" label="Загружаем лекции" />
             Загружаем лекции, которые ждут лимита
           </p>
