@@ -182,3 +182,22 @@ def test_missing_settings_fail_on_start():
         get_llm(SETTINGS.model_copy(update={"llm_api_key": ""}))
     with pytest.raises(ValueError, match="EMBEDDINGS_MODEL"):
         get_embeddings(SETTINGS.model_copy(update={"embeddings_model": ""}))
+
+
+async def test_requests_share_one_http_client(monkeypatch):
+    created = []
+    original = httpx.AsyncClient
+
+    def tracking_client(*args, **kwargs):
+        client = original(*args, **kwargs)
+        created.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "AsyncClient", tracking_client)
+    embeddings = OpenAICompatibleEmbeddings(
+        SETTINGS, transport=httpx.MockTransport(embeddings_response), batch_size=1
+    )
+
+    await embeddings.embed_documents(["раз", "два", "три"])
+
+    assert len(created) == 1

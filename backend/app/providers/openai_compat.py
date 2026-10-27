@@ -36,34 +36,41 @@ class OpenAICompatibleClient:
         self.timeout = timeout
         self.transport = transport
         self.headers = headers or {"Authorization": f"Bearer {api_key}"}
+        self._http: httpx.AsyncClient | None = None
+
+    @property
+    def http(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(timeout=self.timeout, transport=self.transport)
+        return self._http
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
-            for attempt in range(1, self.attempts + 1):
-                try:
-                    response = await client.post(
-                        f"{self.base_url}{path}", json=body, headers=self.headers
+        client = self.http
+        for attempt in range(1, self.attempts + 1):
+            try:
+                response = await client.post(
+                    f"{self.base_url}{path}", json=body, headers=self.headers
+                )
+            except httpx.TransportError as error:
+                if attempt == self.attempts:
+                    raise OpenAICompatibleUnavailable(f"{path}: нет ответа от API") from error
+                await asyncio.sleep(self._delay(attempt, None))
+                continue
+            if response.status_code == 429 or response.is_server_error:
+                if attempt == self.attempts:
+                    raise OpenAICompatibleUnavailable(
+                        f"{path}: API ответил {response.status_code} после {attempt} попыток"
                     )
-                except httpx.TransportError as error:
-                    if attempt == self.attempts:
-                        raise OpenAICompatibleUnavailable(f"{path}: нет ответа от API") from error
-                    await asyncio.sleep(self._delay(attempt, None))
-                    continue
-                if response.status_code == 429 or response.is_server_error:
-                    if attempt == self.attempts:
-                        raise OpenAICompatibleUnavailable(
-                            f"{path}: API ответил {response.status_code} после {attempt} попыток"
-                        )
-                    await asyncio.sleep(self._delay(attempt, response))
-                    continue
-                if response.is_error:
-                    raise OpenAICompatibleError(
-                        f"{path}: API ответил {response.status_code}: {response.text[:500]}"
-                    )
-                try:
-                    return response.json()
-                except ValueError as error:
-                    raise OpenAICompatibleError(f"{path}: ответ API не в формате JSON") from error
+                await asyncio.sleep(self._delay(attempt, response))
+                continue
+            if response.is_error:
+                raise OpenAICompatibleError(
+                    f"{path}: API ответил {response.status_code}: {response.text[:500]}"
+                )
+            try:
+                return response.json()
+            except ValueError as error:
+                raise OpenAICompatibleError(f"{path}: ответ API не в формате JSON") from error
         raise OpenAICompatibleError(f"{path}: не было ни одной попытки запроса")
 
     def _delay(self, attempt: int, response: httpx.Response | None) -> float:
