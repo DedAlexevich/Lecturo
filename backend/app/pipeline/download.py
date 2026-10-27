@@ -3,14 +3,18 @@ import ipaddress
 import logging
 import re
 import socket
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlencode, urlparse
 
 import httpx
+import urllib3
 from sqlalchemy.ext.asyncio import AsyncSession
 from yt_dlp import YoutubeDL
+from yt_dlp.networking._requests import RequestsRH
+from yt_dlp.networking.exceptions import RequestError
 from yt_dlp.utils import YoutubeDLError
 
 from app.core.config import get_settings
@@ -21,6 +25,11 @@ from app.pipeline.runner import Report
 logger = logging.getLogger(__name__)
 
 PROGRESS_INTERVAL_SEC = 2.0
+MAX_DOWNLOAD_BYTES = 2 * 1024**3
+DOWNLOAD_TIMEOUT_SEC = 3600.0
+MAX_REDIRECTS = 5
+PROBE_FORMATS = "mov,matroska,mp3,ogg,wav,flac,aac,avi,flv,mpegts,asf"
+INTERNAL_NETWORK = "Ссылка ведёт во внутреннюю сеть"
 
 YANDEX_DISK_HOSTS = {
     "disk.yandex.ru",
@@ -46,16 +55,72 @@ BASE_OPTIONS: dict[str, Any] = {
     "no_warnings": True,
     "noplaylist": True,
     "noprogress": True,
-    "format": "bestaudio/best",
+    "format": f"bestaudio[filesize<?{MAX_DOWNLOAD_BYTES}][filesize_approx<?{MAX_DOWNLOAD_BYTES}]"
+    f"/best[filesize<?{MAX_DOWNLOAD_BYTES}][filesize_approx<?{MAX_DOWNLOAD_BYTES}]/bestaudio/best",
     "socket_timeout": 30,
     "retries": 3,
     "fragment_retries": 3,
     "extractor_retries": 2,
+    "external_downloader": {"default": "native"},
+    "external_downloader_args": {"ffmpeg_i": ["-protocol_whitelist", "file,crypto,data"]},
 }
 
 
 class LinkError(Exception):
     pass
+
+
+class BlockedAddress(RequestError):
+    pass
+
+
+def is_public_ip(address: str) -> bool:
+    return ipaddress.ip_address(address).is_global
+
+
+def public_address(host: str, port: int) -> str:
+    try:
+        addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return host
+    ips = [sockaddr[0] for *_, sockaddr in addresses]
+    if not ips or not all(is_public_ip(ip) for ip in ips):
+        raise BlockedAddress(INTERNAL_NETWORK)
+    return next((a[4][0] for a in addresses if a[0] == socket.AF_INET), ips[0])
+
+
+class PublicHTTPConnection(urllib3.connection.HTTPConnection):
+    def _new_conn(self):
+        self._dns_host = public_address(self._dns_host, self.port)
+        return super()._new_conn()
+
+
+class PublicHTTPSConnection(PublicHTTPConnection, urllib3.connection.HTTPSConnection):
+    pass
+
+
+class PublicHTTPConnectionPool(urllib3.HTTPConnectionPool):
+    ConnectionCls = PublicHTTPConnection
+
+
+class PublicHTTPSConnectionPool(urllib3.HTTPSConnectionPool):
+    ConnectionCls = PublicHTTPSConnection
+
+
+class PublicRequestsRH(RequestsRH):
+    def _create_instance(self, cookiejar, legacy_ssl_support=None):
+        session = super()._create_instance(cookiejar, legacy_ssl_support)
+        for adapter in session.adapters.values():
+            adapter.poolmanager.pool_classes_by_scheme = {
+                "http": PublicHTTPConnectionPool,
+                "https": PublicHTTPSConnectionPool,
+            }
+        return session
+
+
+class PublicYoutubeDL(YoutubeDL):
+    def build_request_director(self, handlers, preferences=None):
+        return super().build_request_director([PublicRequestsRH], preferences)
 
 
 @dataclass(frozen=True)
@@ -173,8 +238,22 @@ async def ensure_public_host(url: str) -> None:
     except socket.gaierror as error:
         raise LinkError("Не удалось открыть ссылку") from error
     for *_, sockaddr in addresses:
-        if not ipaddress.ip_address(sockaddr[0]).is_global:
-            raise LinkError("Ссылка ведёт во внутреннюю сеть")
+        if not is_public_ip(sockaddr[0]):
+            raise LinkError(INTERNAL_NETWORK)
+
+
+async def follow_redirects(url: str, transport: httpx.AsyncBaseTransport | None = None) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=30, transport=transport) as client:
+            for _ in range(MAX_REDIRECTS + 1):
+                await ensure_public_host(url)
+                async with client.stream("GET", url) as response:
+                    if not response.has_redirect_location:
+                        return url
+                    url = str(response.url.join(response.headers["location"]))
+    except httpx.HTTPError as error:
+        raise LinkError("Не удалось открыть ссылку") from error
+    raise LinkError("Слишком много перенаправлений по ссылке")
 
 
 async def resolve_yandex_disk(
@@ -201,7 +280,7 @@ async def resolve_yandex_disk(
 
 
 def extract_info(url: str) -> dict[str, Any]:
-    with YoutubeDL(ydl_options(url)) as ydl:
+    with PublicYoutubeDL(ydl_options(url)) as ydl:
         return ydl.extract_info(url, download=False)
 
 
@@ -212,6 +291,10 @@ async def probe_duration(url: str) -> float | None:
         "error",
         "-protocol_whitelist",
         "http,https,tls,tcp",
+        "-max_redirects",
+        "0",
+        "-format_whitelist",
+        PROBE_FORMATS,
         "-show_entries",
         "format=duration",
         "-of",
@@ -240,6 +323,8 @@ async def inspect_link(url: str) -> LinkInfo:
     else:
         try:
             info = await asyncio.to_thread(extract_info, url)
+        except BlockedAddress as error:
+            raise LinkError(INTERNAL_NETWORK) from error
         except YoutubeDLError as error:
             logger.warning("yt-dlp не смог получить видео (%s): %s", urlparse(url).hostname, error)
             raise LinkError("Не удалось получить видео по ссылке") from error
@@ -250,8 +335,7 @@ async def inspect_link(url: str) -> LinkInfo:
         title, embed_url, duration = info.get("title"), build_embed_url(url), info.get("duration")
         media_url = info.get("url") or url
     if not duration:
-        await ensure_public_host(media_url)
-        duration = await probe_duration(media_url)
+        duration = await probe_duration(await follow_redirects(media_url))
     if not duration:
         raise LinkError("Не удалось определить длительность видео")
     if duration > MAX_DURATION_SEC:
@@ -260,10 +344,19 @@ async def inspect_link(url: str) -> LinkInfo:
 
 
 def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
+    deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SEC
+
     def on_progress(status: dict[str, Any]) -> None:
+        if status["status"] != "downloading":
+            return
         total = status.get("total_bytes") or status.get("total_bytes_estimate")
-        if status["status"] == "downloading" and total:
-            progress["fraction"] = status.get("downloaded_bytes", 0) / total
+        downloaded = status.get("downloaded_bytes", 0)
+        if max(total or 0, downloaded) > MAX_DOWNLOAD_BYTES:
+            raise LinkError("Файл по ссылке больше 2 ГБ")
+        if time.monotonic() > deadline:
+            raise LinkError("Скачивание по ссылке заняло больше часа")
+        if total:
+            progress["fraction"] = downloaded / total
 
     options = {
         **ydl_options(url),
@@ -274,12 +367,17 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
         ],
         "postprocessor_args": {"extractaudio": ["-ac", "1"]},
     }
-    with YoutubeDL(options) as ydl:
+    with PublicYoutubeDL(options) as ydl:
         ydl.download([url])
     audio_path = target.with_suffix(".opus")
     if not audio_path.is_file():
         raise RuntimeError("Аудио не скачалось")
     return audio_path
+
+
+def remove_partial(target: Path) -> None:
+    for path in target.parent.glob(f"{target.name}.*"):
+        path.unlink(missing_ok=True)
 
 
 async def download(session: AsyncSession, lecture: Lecture, report: Report) -> None:
@@ -289,11 +387,17 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     await ensure_public_host(url)
     audio_dir = get_settings().storage_dir / "audio"
     await asyncio.to_thread(audio_dir.mkdir, parents=True, exist_ok=True)
+    target = audio_dir / str(lecture.id)
     progress = {"fraction": 0.0}
-    fetching = asyncio.create_task(
-        asyncio.to_thread(fetch_audio, url, audio_dir / str(lecture.id), progress)
-    )
+    fetching = asyncio.create_task(asyncio.to_thread(fetch_audio, url, target, progress))
     while not fetching.done():
         await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
         await report(progress["fraction"])
-    lecture.audio_path = str(fetching.result())
+    try:
+        audio_path = fetching.result()
+    except Exception as error:
+        await asyncio.to_thread(remove_partial, target)
+        if isinstance(error, BlockedAddress):
+            raise LinkError(INTERNAL_NETWORK) from error
+        raise
+    lecture.audio_path = str(audio_path)
