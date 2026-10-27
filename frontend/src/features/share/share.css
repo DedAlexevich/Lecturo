@@ -1,0 +1,64 @@
+.share {
+  display: grid;
+  gap: var(--space-4);
+  overflow-wrap: anywhere;
+}
+
+.share p {
+  margin: 0;
+}
+
+.share__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.share__status--error {
+  justify-content: space-between;
+  color: var(--color-danger);
+}
+
+.share__link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.share__link .input {
+  text-overflow: ellipsis;
+}
+
+.share__note {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.share__revoke {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.share__revoke-button,
+.share__error {
+  color: var(--color-danger);
+}
+
+.share__revoke-button {
+  margin-left: calc(var(--space-3) * -1);
+}
+
+.share__error {
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 30rem) {
+  .share__link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

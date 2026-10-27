@@ -4,6 +4,7 @@ import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { SearchPanel } from "../../features/search/SearchPanel";
+import { ShareButton } from "../../features/share/ShareButton";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
@@ -248,7 +249,10 @@ export function LecturePage() {
         <BackLink />
         <div className="lecture__title-row">
           <h1 className="lecture__title">{data.title}</h1>
-          <LectureActions lecture={data} />
+          <div className="lecture__title-actions">
+            {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
+            <LectureActions lecture={data} />
+          </div>
         </div>
         <LectureMeta lecture={data} />
         <ExportActions
