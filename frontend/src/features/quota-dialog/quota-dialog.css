@@ -1,0 +1,248 @@
+.quota-plan {
+  display: grid;
+  gap: var(--space-4);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.quota-plan__lead strong {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-plan__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.quota-plan__alert {
+  color: var(--color-danger);
+}
+
+.quota-plan__empty {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.quota-plan__empty p {
+  color: var(--color-text-muted);
+}
+
+.quota-plan__meter {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.quota-plan__meter-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+
+.quota-plan__meter-note {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-regular);
+}
+
+.quota-plan__meter--over .quota-plan__meter-note {
+  color: var(--color-danger);
+  font-weight: var(--weight-medium);
+}
+
+.quota-plan__track {
+  height: 0.5rem;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-pill);
+}
+
+.quota-plan__fill {
+  height: 100%;
+  background: var(--color-data);
+  border-radius: var(--radius-pill);
+  transition: width 200ms ease, background var(--transition);
+}
+
+.quota-plan__meter--over .quota-plan__fill {
+  background: var(--color-danger);
+}
+
+.quota-plan__list {
+  display: grid;
+  gap: 2px;
+  max-height: min(18rem, 40vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.quota-plan__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) 0 var(--space-1);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+  transition: background var(--transition), box-shadow var(--transition);
+}
+
+.quota-plan__row--selected {
+  background: var(--color-data-soft);
+}
+
+.quota-plan__row--dragging {
+  position: relative;
+  z-index: 1;
+  box-shadow: var(--shadow-2);
+}
+
+.quota-plan__handle {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: var(--tap-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.quota-plan__row--dragging .quota-plan__handle {
+  cursor: grabbing;
+}
+
+.quota-plan__handle:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.quota-plan__handle:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.quota-plan__handle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.quota-plan__handle svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
+.quota-plan__check {
+  min-width: 0;
+  padding: var(--space-2) 0;
+}
+
+.quota-plan__text {
+  display: grid;
+  min-width: 0;
+}
+
+.quota-plan__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quota-plan__state {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.quota-plan__duration {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
+.quota-plan__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.quota-plan__options {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.quota-plan__options h3 {
+  font-size: var(--text-base);
+}
+
+.quota-plan__options ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.quota-plan__options li {
+  display: grid;
+  gap: 2px;
+  color: var(--color-text-muted);
+}
+
+.quota-plan__option-title {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.quota-plan__options a {
+  justify-self: start;
+  margin-top: var(--space-1);
+  font-weight: var(--weight-medium);
+}
+
+.waiting-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-lg);
+}
+
+.waiting-notice strong {
+  font-weight: var(--weight-semibold);
+}
+
+@media (max-width: 30rem) {
+  .waiting-notice .button {
+    flex: 1 1 100%;
+  }
+
+  .quota-plan__row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .quota-plan__duration {
+    grid-column: 2;
+    padding: 0 0 var(--space-2) calc(1.25rem + var(--space-3));
+    text-align: left;
+  }
+}
