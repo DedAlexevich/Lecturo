@@ -30,14 +30,15 @@ STUB_OPTIONS = ["Первый вариант", "Второй вариант", "�
 
 
 def stub_quiz(user: str) -> str:
-    timestamps = [int(value) for value in re.findall(r"\[(\d+)\]", user)] or [0]
+    lines = re.findall(r"\[(\d+)\] ([^\n\\]+)", user) or [("0", "")]
     questions = [
         {
             "question": f"Вопрос {number + 1} по лекции",
             "options": STUB_OPTIONS,
             "correct_index": number % len(STUB_OPTIONS),
             "explanation": "Ответ есть в лекции на этом таймкоде.",
-            "timestamp": timestamps[number % len(timestamps)],
+            "evidence": lines[number % len(lines)][1],
+            "timestamp": int(lines[number % len(lines)][0]),
         }
         for number in range(STUB_QUIZ_SIZE)
     ]
