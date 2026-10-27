@@ -172,12 +172,18 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         return "ready"
 
 
+def queue_settings() -> RedisSettings:
+    settings = RedisSettings.from_dsn(get_settings().redis_url)
+    settings.conn_retries = 0
+    return settings
+
+
 def exam_sheet_job_id(course_id: uuid.UUID) -> str:
     return f"exam-sheet:{course_id}"
 
 
 async def enqueue_exam_sheet(course_id: uuid.UUID) -> None:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    redis = await create_pool(queue_settings())
     try:
         await redis.enqueue_job(
             "build_exam_sheet", str(course_id), _job_id=exam_sheet_job_id(course_id)
@@ -187,7 +193,7 @@ async def enqueue_exam_sheet(course_id: uuid.UUID) -> None:
 
 
 async def exam_sheet_in_progress(course_id: uuid.UUID) -> bool:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    redis = await create_pool(queue_settings())
     try:
         job = Job(exam_sheet_job_id(course_id), redis)
         return await job.status() in (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
