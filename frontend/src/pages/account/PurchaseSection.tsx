@@ -19,6 +19,7 @@ import {
 } from "./billing";
 import { formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
+import { SubscriptionBenefits } from "./SubscriptionBenefits";
 import { pollInterval, pollLimit } from "./usePaymentReturn";
 
 export function PurchaseSection() {
@@ -172,6 +173,7 @@ function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; ne
           </label>
         ))}
       </fieldset>
+      <SubscriptionBenefits products={products} onChoose={choose} />
       {needsReceiptEmail && (
         <div className={styles.receiptEmail}>
           <ReceiptEmailField
