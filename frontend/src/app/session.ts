@@ -3,6 +3,11 @@ import { api, tokenStorage } from "../api/client";
 import { queryClient } from "./queryClient";
 
 const listeners = new Set<() => void>();
+let signedOutByUser = false;
+
+export function wasSignedOutByUser() {
+  return signedOutByUser;
+}
 
 function notify() {
   listeners.forEach((listener) => listener());
@@ -18,15 +23,21 @@ function subscribe(listener: () => void) {
 }
 
 export function signIn(token: string) {
+  signedOutByUser = false;
   tokenStorage.set(token);
   queryClient.clear();
   notify();
 }
 
-export function signOut() {
+function resetSession() {
   tokenStorage.clear();
   queryClient.clear();
   notify();
+}
+
+export function signOut() {
+  signedOutByUser = true;
+  resetSession();
 }
 
 export function useToken() {
@@ -40,7 +51,7 @@ api.use({
     const token = tokenStorage.get();
     if (response.status !== 401 || token === null) return response;
     if (localAuthErrors.includes(new URL(request.url).pathname)) return response;
-    if (request.headers.get("Authorization") === `Bearer ${token}`) signOut();
+    if (request.headers.get("Authorization") === `Bearer ${token}`) resetSession();
     return response;
   },
 });

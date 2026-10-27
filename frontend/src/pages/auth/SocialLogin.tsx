@@ -4,6 +4,7 @@ import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { useToast } from "../../ui/Toast";
+import { getWebApp } from "../../telegram/sdk";
 import { ConsentFields } from "./ConsentFields";
 import { TelegramButton, telegramEnabled } from "./TelegramButton";
 import { VkButton } from "./VkButton";
@@ -24,6 +25,8 @@ export function SocialLogin() {
   const [pending, setPending] = useState<TelegramUser>();
   const [terms, setTerms] = useState(false);
   const [personalData, setPersonalData] = useState(false);
+  const inMiniApp = getWebApp() !== undefined;
+  const showTelegram = telegramEnabled && !inMiniApp;
   const vkEnabled = useVkEnabled();
   const yandexEnabled = useYandexEnabled();
   const { mutate } = login;
@@ -58,13 +61,13 @@ export function SocialLogin() {
     [submit],
   );
 
-  if (!telegramEnabled && !vkEnabled && !yandexEnabled) return null;
+  if (!showTelegram && !vkEnabled && !yandexEnabled) return null;
 
   return (
     <>
       <div className="auth__divider">или</div>
       <div className="auth-social">
-        {telegramEnabled && <TelegramButton onAuth={handleAuth} />}
+        {showTelegram && <TelegramButton onAuth={handleAuth} />}
         {vkEnabled && (
           <VkButton
             flow={{ mode: "login", redirect: redirectTarget(location.state) }}
