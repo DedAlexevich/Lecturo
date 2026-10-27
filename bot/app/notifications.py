@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import asyncpg
 from aiogram import Bot
+from aiogram.exceptions import TelegramForbiddenError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -29,6 +30,17 @@ SELECT u.id, u.telegram_chat_id, u.created_at,
         WHERE p.user_id = u.id) AS package_left
 FROM users u WHERE u.telegram_chat_id IS NOT NULL
 """
+
+PENDING_LEGAL_NOTICES = """
+SELECT n.id, u.telegram_chat_id, n.text, n.link FROM legal_notices n
+JOIN users u ON u.id = n.user_id
+WHERE n.channel = 'telegram' AND n.sent_at IS NULL AND u.telegram_chat_id IS NOT NULL
+ORDER BY n.created_at LIMIT 100
+"""
+
+MARK_LEGAL_NOTICE_SENT = "UPDATE legal_notices SET sent_at = now() WHERE id = $1"
+
+LEGAL_NOTICE_PAUSE_SECONDS = 0.05
 
 WEEKLY_USAGE = """
 SELECT coalesce(sum(seconds), 0) FROM usage_entries
@@ -126,6 +138,36 @@ async def delivery_loop(redis: Redis, bot: Bot, public_url: str):
         except (RedisError, OSError):
             logger.exception("Не удалось получить ожидающие уведомления")
         await asyncio.sleep(5)
+
+
+async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot):
+    for row in await pool.fetch(PENDING_LEGAL_NOTICES):
+        try:
+            delivered = await send_once(
+                redis,
+                bot,
+                f"legal:{row['id']}",
+                row["telegram_chat_id"],
+                row["text"],
+                open_app_markup(row["link"]),
+            )
+        except TelegramForbiddenError:
+            delivered = True
+        except Exception:
+            logger.exception("Не удалось отправить уведомление о новой редакции документа")
+            continue
+        if delivered:
+            await pool.execute(MARK_LEGAL_NOTICE_SENT, row["id"])
+        await asyncio.sleep(LEGAL_NOTICE_PAUSE_SECONDS)
+
+
+async def legal_notices_loop(pool: asyncpg.Pool, redis: Redis, bot: Bot):
+    while True:
+        try:
+            await deliver_legal_notices(pool, redis, bot)
+        except (asyncpg.PostgresError, OSError, RedisError):
+            logger.exception("Не удалось получить уведомления о новых редакциях документов")
+        await asyncio.sleep(60)
 
 
 async def check_quotas(

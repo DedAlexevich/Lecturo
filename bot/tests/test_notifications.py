@@ -4,8 +4,17 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from aiogram.exceptions import TelegramForbiddenError
+from aiogram.methods import SendMessage
 
-from app.notifications import check_quotas, deliver_pending, handle_event, send_once
+from app.notifications import (
+    MARK_LEGAL_NOTICE_SENT,
+    check_quotas,
+    deliver_legal_notices,
+    deliver_pending,
+    handle_event,
+    send_once,
+)
 
 
 class FakeRedis:
@@ -147,3 +156,30 @@ async def test_reset_is_sent_after_long_downtime():
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.args[1] == "Недельный лимит обработки обновлён."
+
+
+async def test_legal_notices_are_sent_once_and_marked():
+    first, blocked, failing = uuid4(), uuid4(), uuid4()
+    link = "https://lecturo.test/legal/ai-transfer"
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    pool.fetch.return_value = [
+        {"id": first, "telegram_chat_id": 11, "text": "Новая редакция", "link": link},
+        {"id": blocked, "telegram_chat_id": 22, "text": "Новая редакция", "link": link},
+        {"id": failing, "telegram_chat_id": 33, "text": "Новая редакция", "link": link},
+    ]
+
+    async def send(chat_id, text, reply_markup=None):
+        if chat_id == 22:
+            raise TelegramForbiddenError(SendMessage(chat_id=chat_id, text=text), "blocked")
+        if chat_id == 33:
+            raise RuntimeError()
+
+    bot.send_message.side_effect = send
+    await deliver_legal_notices(pool, redis, bot)
+    marked = [call.args for call in pool.execute.await_args_list]
+    assert marked == [(MARK_LEGAL_NOTICE_SENT, first), (MARK_LEGAL_NOTICE_SENT, blocked)]
+    args, kwargs = bot.send_message.await_args_list[0]
+    assert args == (11, "Новая редакция")
+    assert kwargs["reply_markup"].inline_keyboard[0][0].web_app.url == link
+    await deliver_legal_notices(pool, redis, bot)
+    assert [call.args[0] for call in bot.send_message.await_args_list].count(11) == 1
