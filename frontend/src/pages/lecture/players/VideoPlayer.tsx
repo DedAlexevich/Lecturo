@@ -12,7 +12,10 @@ type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
 type VideoPlayerProps = PlayerProps & {
   src: string;
   title: string;
+  refreshSrc: () => Promise<string | null>;
 };
+
+type Resume = { time: number; play: boolean };
 
 function Icon({ path }: { path: string }) {
   return (
@@ -31,9 +34,12 @@ const icons = {
   exitFullscreen: "M8 4h2v6H4V8h4zM14 4h2v4h4v2h-6zM4 14h6v6H8v-4H4zM14 14h6v2h-4v4h-2z",
 };
 
-export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerProps) {
+export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: VideoPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const resumeRef = useRef<Resume | null>(null);
+  const refreshedRef = useRef(false);
+  const [activeSrc, setActiveSrc] = useState(src);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -97,9 +103,36 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
     (video() as WebkitVideo | null)?.webkitEnterFullscreen?.();
   };
 
+  const onError = async () => {
+    const element = video();
+    if (!element || refreshedRef.current) {
+      setFailed(true);
+      return;
+    }
+    refreshedRef.current = true;
+    resumeRef.current = { time: element.currentTime, play: !element.paused };
+    setWaiting(true);
+    const fresh = await refreshSrc().catch(() => null);
+    if (!fresh || fresh === activeSrc) {
+      resumeRef.current = null;
+      setFailed(true);
+      return;
+    }
+    setActiveSrc(fresh);
+  };
+
   const onLoadedMetadata = () => {
     const element = video();
     if (!element) return;
+    const resume = resumeRef.current;
+    resumeRef.current = null;
+    refreshedRef.current = false;
+    if (resume) {
+      element.currentTime = resume.time;
+      element.playbackRate = rate;
+      if (resume.play) void element.play().catch(() => undefined);
+      else setWaiting(false);
+    }
     setDuration(element.duration);
     onReady({
       seek: seekTo,
@@ -145,7 +178,7 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
         <video
           ref={videoRef}
           className="video-player__video"
-          src={src}
+          src={activeSrc}
           preload="metadata"
           playsInline
           aria-label={title}
@@ -156,6 +189,7 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
           onLoadedMetadata={onLoadedMetadata}
           onDurationChange={(event) => setDuration(event.currentTarget.duration)}
           onTimeUpdate={(event) => {
+            if (resumeRef.current) return;
             setTime(event.currentTarget.currentTime);
             onTimeUpdate(event.currentTarget.currentTime);
           }}
@@ -164,7 +198,7 @@ export function VideoPlayer({ src, title, onReady, onTimeUpdate }: VideoPlayerPr
           onWaiting={() => setWaiting(true)}
           onPlaying={() => setWaiting(false)}
           onCanPlay={() => setWaiting(false)}
-          onError={() => setFailed(true)}
+          onError={() => void onError()}
         />
         {waiting && !failed && (
           <div className="video-player__overlay">

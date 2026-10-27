@@ -4,7 +4,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { PublicCourse } from "./PublicCourse";
 import { PublicLecture } from "./PublicLecture";
-import { usePublicShare } from "./queries";
+import { fetchPublicShare, usePublicShare } from "./queries";
 import "../lecture/lecture.css";
 import "./public.css";
 
@@ -53,7 +53,16 @@ export function PublicSharePage() {
   }
 
   const { lecture, course } = share.data;
-  if (lecture) return <PublicLecture key={token} token={token} lecture={lecture} />;
+  if (lecture) {
+    return (
+      <PublicLecture
+        key={token}
+        token={token}
+        lecture={lecture}
+        refreshVideo={async () => (await fetchPublicShare(token)).lecture?.video_url ?? null}
+      />
+    );
+  }
   if (course) return <PublicCourse course={course} />;
   return <Unavailable />;
 }

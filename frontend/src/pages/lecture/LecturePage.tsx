@@ -14,11 +14,11 @@ import { ExportActions } from "./ExportActions";
 import { EmbedPlayer } from "./players/EmbedPlayer";
 import { resolveEmbed } from "./players/embed";
 import { VideoPlayer } from "./players/VideoPlayer";
-import { usePlayer } from "./players/player";
+import { usePlayer, videoIdentity } from "./players/player";
 import { Processing } from "./Processing";
 import { formatDuration, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
-import { isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
+import { fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
 import "./lecture.css";
 
 type Lecture = components["schemas"]["LectureDetail"];
@@ -277,7 +277,13 @@ export function LecturePage() {
       <div className="lecture__body">
         <div className="lecture__media">
           {videoUrl ? (
-            <VideoPlayer key={videoUrl} src={videoUrl} title={data.title} {...bind} />
+            <VideoPlayer
+              key={videoIdentity(videoUrl)}
+              src={videoUrl}
+              title={data.title}
+              refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
+              {...bind}
+            />
           ) : embed ? (
             <EmbedPlayer
               key={data.embed_url}
