@@ -81,6 +81,7 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -111,8 +112,10 @@ jobs:
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
       - name: Telegram Mini App tests
+        env:
+          VITE_TELEGRAM_BOT_USERNAME: lecturo_test_bot
         run: |
-          npx vite preview --host 127.0.0.1 --port 5186 --strictPort &
+          npx vite --host 127.0.0.1 --port 5186 --strictPort &
           timeout 30 bash -c 'until curl -fsS http://127.0.0.1:5186/ >/dev/null; do sleep 1; done'
           npm run test:telegram
 
