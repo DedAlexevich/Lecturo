@@ -9,12 +9,13 @@ import { SocialLogin } from "./SocialLogin";
 import { fieldErrorsOf, messageOf, type FieldErrors } from "./errors";
 import { redirectTarget } from "./redirect";
 import { useRegister } from "./useAuthRequests";
-import { validateEmail, validateNewPassword } from "./validation";
+import { validateEmail, validateNewPassword, validatePasswordConfirm } from "./validation";
 
 export function RegisterPage() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
   const [terms, setTerms] = useState(false);
   const [personalData, setPersonalData] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -28,12 +29,13 @@ export function RegisterPage() {
     const next: FieldErrors = {
       email: validateEmail(email),
       password: validateNewPassword(password),
+      password_repeat: validatePasswordConfirm(password, repeat),
       accept_terms: terms ? undefined : "Нужно принять пользовательское соглашение",
       accept_personal_data: personalData ? undefined : "Нужно дать согласие на обработку персональных данных",
     };
     setErrors(next);
     setFormError(undefined);
-    if (next.email || next.password || next.accept_terms || next.accept_personal_data) return;
+    if (next.email || next.password || next.password_repeat || next.accept_terms || next.accept_personal_data) return;
 
     register.mutate(
       {
@@ -104,6 +106,18 @@ export function RegisterPage() {
               autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Повторите пароль" error={errors.password_repeat}>
+          {(control) => (
+            <Input
+              {...control}
+              type="password"
+              name="password_repeat"
+              autoComplete="new-password"
+              value={repeat}
+              onChange={(event) => setRepeat(event.target.value)}
             />
           )}
         </Field>

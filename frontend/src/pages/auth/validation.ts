@@ -11,3 +11,8 @@ export function validateNewPassword(password: string): string | undefined {
   if (password.length > 128) return "Не больше 128 символов";
   return undefined;
 }
+
+export function validatePasswordConfirm(password: string, confirm: string): string | undefined {
+  if (password !== confirm) return "Пароли не совпадают";
+  return undefined;
+}

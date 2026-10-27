@@ -3,7 +3,7 @@ import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
-import { validateNewPassword } from "../auth/validation";
+import { validateNewPassword, validatePasswordConfirm } from "../auth/validation";
 import styles from "./SettingsSection.module.css";
 import { settingsError, useChangePassword } from "./settings";
 
@@ -12,6 +12,8 @@ export function PasswordForm() {
   const [next, setNext] = useState("");
   const [currentError, setCurrentError] = useState<string>();
   const [nextError, setNextError] = useState<string>();
+  const [repeat, setRepeat] = useState("");
+  const [repeatError, setRepeatError] = useState<string>();
   const change = useChangePassword();
   const toast = useToast();
 
@@ -20,14 +22,17 @@ export function PasswordForm() {
     const missingCurrent = current === "" ? "Введите текущий пароль" : undefined;
     const invalidNext = validateNewPassword(next);
     setCurrentError(missingCurrent);
+    const mismatch = validatePasswordConfirm(next, repeat);
     setNextError(invalidNext);
-    if (missingCurrent || invalidNext) return;
+    setRepeatError(mismatch);
+    if (missingCurrent || invalidNext || mismatch) return;
     change.mutate(
       { current_password: current, new_password: next },
       {
         onSuccess: () => {
           setCurrent("");
           setNext("");
+          setRepeat("");
           toast.show("Пароль изменён", "success");
         },
       },
@@ -63,6 +68,21 @@ export function PasswordForm() {
             onChange={(event) => {
               setNext(event.target.value);
               setNextError(undefined);
+              change.reset();
+            }}
+          />
+        )}
+      </Field>
+      <Field label="Повторите новый пароль" error={repeatError}>
+        {(control) => (
+          <Input
+            {...control}
+            type="password"
+            autoComplete="new-password"
+            value={repeat}
+            onChange={(event) => {
+              setRepeat(event.target.value);
+              setRepeatError(undefined);
               change.reset();
             }}
           />
