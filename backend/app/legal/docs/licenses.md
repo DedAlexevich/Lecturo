@@ -8,9 +8,9 @@
 
 1.1.1. **Документ** — настоящие сведения о лицензиях сторонних компонентов.
 
-1.1.2. **Администрация** — [ФИО владельца], физическое лицо, применяющее специальный налоговый режим «Налог на профессиональный доход», ИНН [ИНН владельца], владелец Сервиса.
+1.1.2. **Администрация** — Чернов Арсений Сергеевич, физическое лицо, применяющее специальный налоговый режим «Налог на профессиональный доход», ИНН [ИНН владельца], владелец Сервиса.
 
-1.1.3. **Сервис** — сайт [адрес сайта], его версия в мессенджере Telegram (Telegram Mini App), устанавливаемое веб-приложение (PWA) и Telegram-бот Lecturo.
+1.1.3. **Сервис** — сайт lecturo.ru, его версия в мессенджере Telegram (Telegram Mini App), устанавливаемое веб-приложение (PWA) и Telegram-бот Lecturo.
 
 1.1.4. **Пользователь** — физическое лицо, использующее Сервис.
 
@@ -18,7 +18,7 @@
 
 1.1.6. **Локальный режим** — обработка Материалов на устройстве Пользователя в браузере без передачи Материалов на серверы Сервиса.
 
-1.1.7. **Компонент** — программа для ЭВМ, библиотека, шрифт или модель распознавания речи, исключительное право на которые принадлежит третьему лицу и которые передаются в браузер Пользователя при работе Сервиса.
+1.1.7. **Компонент** — программа для ЭВМ, библиотека, шрифт, модель распознавания речи или языковая модель, исключительное право на которые принадлежит третьему лицу и которые передаются в браузер Пользователя при работе Сервиса.
 
 1.1.8. **Открытая лицензия** — лицензионный договор, условия которого доступны неопределённому кругу лиц и по которому правообладатель предоставляет право использования Компонента (статья 1286.1 ГК РФ).
 
@@ -114,6 +114,12 @@
 - Правообладатель: `Copyright (c) Microsoft Corporation.`
 - Исходный код: [github.com/microsoft/onnxruntime, коммит 8d85527a010e294a26b274749f74294b2a32cec5](https://github.com/microsoft/onnxruntime/tree/8d85527a010e294a26b274749f74294b2a32cec5), [коммит 2a43ec07e67df9263c7c56c15da76cc7f74d7b32](https://github.com/microsoft/onnxruntime/tree/2a43ec07e67df9263c7c56c15da76cc7f74d7b32), [тег v1.30.0](https://github.com/microsoft/onnxruntime/tree/v1.30.0). Сведения о компонентах третьих лиц, включённых в ONNX Runtime, приведены в файле [ThirdPartyNotices.txt](https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/ThirdPartyNotices.txt).
 
+3.2.6. **WebLLM** версии 0.2.86 (пакет `@mlc-ai/web-llm`) — библиотека запуска языковой модели, которая в Локальном режиме составляет конспект и главы по расшифровке. В неё включены среда выполнения **Apache TVM** (пакет `@mlc-ai/web-runtime` версии 0.28.0-dev0), библиотека токенизации **tokenizers-cpp** (пакет `@mlc-ai/web-tokenizers` версии 0.1.6), библиотека ограничения формата ответа **XGrammar** (пакет `@mlc-ai/web-xgrammar` версии 0.1.27), фрагменты описания программного интерфейса из библиотеки **openai-node**, библиотеки **loglevel** версии 1.9.2 и **tslib** версии 2.8.1.
+
+- Открытые лицензии: WebLLM, Apache TVM, tokenizers-cpp, XGrammar, openai-node — Apache License 2.0 (Apache-2.0); loglevel — MIT; tslib — BSD Zero Clause License (0BSD).
+- Правообладатели: WebLLM — `Copyright 2023-2026 WebLLM Team`; XGrammar — `Copyright (c) 2024 by XGrammar Contributors`; tokenizers-cpp — проект MLC (mlc-ai), строка об авторском праве в файле LICENSE tokenizers-cpp не заполнена правообладателем; Apache TVM — `Copyright 2019-2023 The Apache Software Foundation`; openai-node — `Copyright 2024 OpenAI`; loglevel — `Copyright (c) 2013 Tim Perry`; tslib — `Copyright (c) Microsoft Corporation.`
+- Исходный код: [github.com/mlc-ai/web-llm, тег v0.2.86](https://github.com/mlc-ai/web-llm/tree/v0.2.86) (коммит c42c36670cfc426c75e53ee297443882f1ae8d84), [пакет @mlc-ai/web-runtime 0.28.0-dev0](https://www.npmjs.com/package/@mlc-ai/web-runtime/v/0.28.0-dev0), собранный из каталога `web` репозитория [github.com/apache/tvm](https://github.com/apache/tvm/tree/v0.28.dev0/web) (коммит сборки в пакете не указан, ближайший тег — v0.28.dev0), [github.com/mlc-ai/tokenizers-cpp, коммит d54e3683dc44d37163cf8e77c243b505e12a1616](https://github.com/mlc-ai/tokenizers-cpp/tree/d54e3683dc44d37163cf8e77c243b505e12a1616), из которого собран [пакет @mlc-ai/web-tokenizers 0.1.6](https://www.npmjs.com/package/@mlc-ai/web-tokenizers/v/0.1.6), [github.com/mlc-ai/xgrammar, коммит ace2321a29471130f3f64fb1882741a5547c6f36](https://github.com/mlc-ai/xgrammar/tree/ace2321a29471130f3f64fb1882741a5547c6f36), из которого собран [пакет @mlc-ai/web-xgrammar 0.1.27](https://www.npmjs.com/package/@mlc-ai/web-xgrammar/v/0.1.27), [github.com/openai/openai-node](https://github.com/openai/openai-node) (версия, из которой взяты фрагменты, в Исходном коде WebLLM не указана), [github.com/pimterry/loglevel, тег v1.9.2](https://github.com/pimterry/loglevel/tree/v1.9.2), [github.com/microsoft/tslib, тег v2.8.1](https://github.com/microsoft/tslib/tree/v2.8.1).
+
 3.3. Модели распознавания речи загружаются браузером Пользователя с сайта huggingface.co при первом запуске Локального режима и не передаются с серверов Сервиса:
 
 3.3.1. **Whisper tiny**, **Whisper base** и **Whisper small** в формате ONNX — репозитории [onnx-community/whisper-tiny](https://huggingface.co/onnx-community/whisper-tiny), [onnx-community/whisper-base](https://huggingface.co/onnx-community/whisper-base) и [onnx-community/whisper-small](https://huggingface.co/onnx-community/whisper-small), созданные на основе моделей [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny), [openai/whisper-base](https://huggingface.co/openai/whisper-base) и [openai/whisper-small](https://huggingface.co/openai/whisper-small).
@@ -121,6 +127,15 @@
 - Открытая лицензия: программный код и веса моделей Whisper опубликованы правообладателем на условиях лицензии [MIT](https://github.com/openai/whisper/blob/main/LICENSE); в карточках моделей openai/whisper-tiny, openai/whisper-base и openai/whisper-small на сайте huggingface.co указана лицензия Apache-2.0.
 - Правообладатель: `Copyright (c) 2022 OpenAI`.
 - Версия: файлы моделей загружаются из основной ветки указанных репозиториев. На дату редакции Документа основная ветка соответствует коммитам ff4177021cc41f7db950912b73ea4fdf7d01d8e7 (whisper-tiny), 1846881b6b3a3024392c1eea3ad983695bc23925 (whisper-base) и 36050c46d777d46dc4b5f43f6d90574fc38f8732 (whisper-small).
+
+3.4. Языковая модель загружается браузером Пользователя при первом составлении конспекта в Локальном режиме и не передаётся с серверов Сервиса. Веса модели загружаются с сайта huggingface.co, библиотека модели для WebGPU — с сайта raw.githubusercontent.com:
+
+3.4.1. **Qwen2.5-1.5B-Instruct** в формате MLC с квантованием q4f32_1 — репозиторий [mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC](https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC), созданный на основе модели [Qwen/Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct).
+
+- Открытая лицензия: веса модели Qwen2.5-1.5B-Instruct опубликованы правообладателем на условиях лицензии [Apache-2.0](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/blob/main/LICENSE).
+- Правообладатель: `Copyright 2024 Alibaba Cloud`.
+- Версия: файлы весов загружаются из основной ветки указанного репозитория. На дату редакции Документа основная ветка соответствует коммиту a822ee410075710c9673005eafa017b90136b85d, основная ветка репозитория исходной модели Qwen/Qwen2.5-1.5B-Instruct — коммиту 989aa7980e4cf806f80c7fef2b1adb7bc71aa306.
+- Библиотека модели для WebGPU: файл `Qwen2-1.5B-Instruct-q4f32_1_cs1k-webgpu.wasm` из каталога `web-llm-models/v0_2_86/base` основной ветки репозитория [github.com/mlc-ai/binary-mlc-llm-libs](https://github.com/mlc-ai/binary-mlc-llm-libs/tree/00fe7a40e57e5e8eb9fef87526a4bf28ad5846c0/web-llm-models/v0_2_86/base) (на дату редакции Документа — коммит 00fe7a40e57e5e8eb9fef87526a4bf28ad5846c0), собранный проектом MLC средствами [MLC LLM](https://github.com/mlc-ai/mlc-llm) (Apache-2.0). Отдельная лицензия в репозитории библиотек не указана.
 
 ## 4. Ядро ffmpeg.wasm
 
@@ -133,7 +148,7 @@
 - Открытая лицензия: GNU General Public License версии 2 или любой более поздней версии (GPL-2.0-or-later);
 - правообладатели: разработчики FFmpeg (the FFmpeg developers), авторы ffmpeg.wasm и правообладатели библиотек, указанных в пункте 4.5 Документа.
 
-4.3. Текст GNU General Public License версии 2 размещён рядом с файлами Ядра ffmpeg.wasm по адресу `[адрес сайта]/assets/ffmpeg-core/LICENSE.txt` и опубликован Фондом свободного программного обеспечения на сайте [gnu.org](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html). Сведения о версии и Исходном коде Ядра ffmpeg.wasm размещены по адресу `[адрес сайта]/assets/ffmpeg-core/README.txt`.
+4.3. Текст GNU General Public License версии 2 размещён рядом с файлами Ядра ffmpeg.wasm по адресу `https://lecturo.ru/assets/ffmpeg-core/LICENSE.txt` и опубликован Фондом свободного программного обеспечения на сайте [gnu.org](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html). Сведения о версии и Исходном коде Ядра ffmpeg.wasm размещены по адресу `https://lecturo.ru/assets/ffmpeg-core/README.txt`.
 
 4.4. Исходный код Ядра ffmpeg.wasm:
 
@@ -166,6 +181,7 @@
 
 - MIT: [opensource.org/license/mit](https://opensource.org/license/mit);
 - BSD-3-Clause: [opensource.org/license/bsd-3-clause](https://opensource.org/license/bsd-3-clause);
+- BSD Zero Clause License (0BSD): [opensource.org/license/0bsd](https://opensource.org/license/0bsd);
 - ISC: [opensource.org/license/isc-license-txt](https://opensource.org/license/isc-license-txt);
 - Zlib: [opensource.org/license/zlib](https://opensource.org/license/zlib);
 - Apache License 2.0: [apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0);
@@ -197,10 +213,26 @@
 >
 > THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-5.4. Тексты лицензий приведены на языке оригинала.
+5.4. Тексты файлов NOTICE, воспроизводимые в соответствии с подпунктом (d) пункта 4 Apache License 2.0:
+
+5.4.1. Apache TVM — файл NOTICE из [github.com/apache/tvm, тег v0.28.dev0](https://github.com/apache/tvm/blob/v0.28.dev0/NOTICE) (коммит 5398c27e76c7c858d7fae655496e68b297fc99fc). Точный коммит, из которого собран пакет `@mlc-ai/web-runtime` версии 0.28.0-dev0, в пакете не указан; использован ближайший тег, на дату редакции Документа текст файла в основной ветке совпадает:
+
+> Apache TVM
+>
+> Copyright 2019-2023 The Apache Software Foundation
+>
+> This product includes software developed at The Apache Software Foundation (http://www.apache.org/).
+
+5.4.2. XGrammar — файл NOTICE из [github.com/mlc-ai/xgrammar, коммит ace2321a29471130f3f64fb1882741a5547c6f36](https://github.com/mlc-ai/xgrammar/blob/ace2321a29471130f3f64fb1882741a5547c6f36/NOTICE), из которого собран пакет `@mlc-ai/web-xgrammar` версии 0.1.27:
+
+> XGrammar
+>
+> Copyright (c) 2024 by XGrammar Contributors
+
+5.5. Тексты лицензий приведены на языке оригинала.
 
 ## 6. Заключительные положения
 
 6.1. Администрация актуализирует Документ при изменении состава или версий Компонентов. Новая редакция Документа размещается на настоящей странице с указанием даты редакции.
 
-6.2. Обращения по вопросам использования Компонентов и запросы Исходного кода направляются Администрации по адресу электронной почты [email для обращений].
+6.2. Обращения по вопросам использования Компонентов и запросы Исходного кода направляются Администрации по адресу электронной почты support@lecturo.ru.

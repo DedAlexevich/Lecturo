@@ -38,6 +38,11 @@ cp .env.example .env
 | `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
 | `LOG_MAX_MB` | Размер лог-файла в `data/logs`, при котором он ротируется. См. [logs.md](logs.md) | нет | `10` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
 | `LOG_BACKUP_COUNT` | Сколько прежних копий лог-файла хранить | нет | `5` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
+| `BACKUP_DIR` | Папка на хосте для бэкапов базы. Путь абсолютный или относительный к корню репозитория. См. [deploy.md](deploy.md#бэкапы-базы) | нет | `./backups` | `infra/backup` |
+| `BACKUP_KEEP` | Сколько последних бэкапов хранить, целое число от 1 | нет | `7` | `infra/backup/backup.sh` |
+| `BACKUP_DB_SERVICE` | Сервис compose с Postgres, к которому подключаются скрипты бэкапа | нет | `db` | `infra/backup` |
+| `BACKUP_DB_CONTAINER` | Имя контейнера с Postgres. Если задано, скрипты бэкапа идут через `docker exec` в него, а не через compose | нет | пусто | `infra/backup` |
+| `BACKUP_CHECK_CONTAINER` | Имя временного контейнера Postgres, в котором `check.sh` проверяет восстановление бэкапа | нет | `lecturo-backup-check` | `infra/backup/check.sh` |
 
 `DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
 
@@ -144,6 +149,8 @@ Gmail:
 | `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
 | `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
 | `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
+| `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота и алертов. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml`, `infra/health-alert.sh` |
+| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/health-alert.sh` |
 
 Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 

@@ -136,5 +136,11 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Tus-Resumable: 1.0.0' -H 'Upload-Length: 10' http://localhost/files/)" = 401
       - run: test "$(docker compose ps worker --format '{{.State}}')" = running
       - run: test "$(docker compose ps bot --format '{{.State}}')" = running
+      - name: Backup, check and restore database
+        run: |
+          infra/backup/backup.sh
+          infra/backup/check.sh
+          echo yes | infra/backup/restore.sh "$(ls backups/lecturo-*.dump)"
+          curl -fsS http://localhost/api/v1/health
       - if: failure()
         run: docker compose logs

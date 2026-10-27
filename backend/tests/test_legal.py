@@ -14,7 +14,7 @@ async def test_get_document(client):
     body = response.json()
     assert body["slug"] == "terms"
     assert body["title"] == "Пользовательское соглашение"
-    assert body["revision_date"] == "2026-10-26"
+    assert body["revision_date"] == "2026-10-27"
     assert body["content_md"].startswith("# Пользовательское соглашение")
 
 
