@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
 from app.models import Complaint, Course, Lecture, LectureStatus, ShareLink, User, course_lectures
+from app.pipeline.video_access import signed_video_url
 from app.schemas.share import (
     ComplaintIn,
     PublicCourseOut,
@@ -53,7 +54,9 @@ async def get_active_share(session: AsyncSession, token: str) -> ShareLink:
     return share
 
 
-async def public_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> PublicLectureOut:
+async def public_lecture(
+    session: AsyncSession, lecture_id: uuid.UUID, token: str
+) -> PublicLectureOut:
     lecture = await session.scalar(
         select(Lecture)
         .where(Lecture.id == lecture_id)
@@ -69,7 +72,7 @@ async def public_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> Public
         id=lecture.id,
         title=lecture.title,
         embed_url=lecture.embed_url,
-        video_url=f"/media/{lecture.id}.mp4" if lecture.video_path else None,
+        video_url=signed_video_url(lecture.id, token) if lecture.video_path else None,
         duration_sec=lecture.duration_sec,
         processed_locally=lecture.processed_locally,
         segments=lecture.segments,
@@ -183,7 +186,7 @@ async def revoke_share(token: str, user: CurrentUser, session: SessionDep) -> No
 async def get_public(token: str, session: SessionDep) -> PublicShareOut:
     share = await get_active_share(session, token)
     if share.lecture_id is not None:
-        return PublicShareOut(lecture=await public_lecture(session, share.lecture_id))
+        return PublicShareOut(lecture=await public_lecture(session, share.lecture_id, token))
     return PublicShareOut(course=await public_course(session, share.course_id))
 
 
