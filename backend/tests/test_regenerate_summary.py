@@ -248,4 +248,34 @@ async def test_queue_down_restores_ready_state(client, user, auth_headers, monke
     assert await lecture_status(lecture.id) == LectureStatus.ready
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.done
-    assert steps[StepName.embed].status == StepStatus.done
+
+    async def accepted(lecture_id):
+        return None
+
+    monkeypatch.setattr(lectures_api, "enqueue_regeneration", accepted)
+    retry = await client.post(url(lecture), headers=auth_headers)
+    assert retry.status_code == 202
+
+
+async def test_unexpected_error_restores_ready_state(
+    client, user, auth_headers, queue, monkeypatch
+):
+    class Aborted(BaseException):
+        pass
+
+    async def aborting_step(session, lecture, name, handler, *, fails_lecture=True):
+        raise Aborted
+
+    lecture = await create_lecture(user)
+    await client.post(url(lecture), headers=auth_headers)
+    monkeypatch.setattr(tasks, "run_step", aborting_step)
+
+    with pytest.raises(Aborted):
+        await tasks.process_regeneration({}, str(lecture.id))
+
+    assert await lecture_status(lecture.id) == LectureStatus.ready
+    titles, content, _ = await stored_texts(lecture.id)
+    assert titles == ["Старая глава"]
+    assert content == "Старый конспект"
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.summarize].status == StepStatus.done
