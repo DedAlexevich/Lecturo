@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { api } from "../../api/client";
+import { openExternalLink } from "../../telegram/sdk";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
-import { exportFileName, type ExportFormat as Format } from "./exportFileName";
+
+type Format = "pdf" | "srt" | "vtt";
 
 const formats: { format: Format; label: string; needs: "ready" | "segments" }[] = [
   { format: "pdf", label: "PDF", needs: "ready" },
@@ -10,52 +12,39 @@ const formats: { format: Format; label: string; needs: "ready" | "segments" }[] 
   { format: "vtt", label: "VTT", needs: "segments" },
 ];
 
-async function download(lectureId: string, format: Format) {
-  const params = { path: { lecture_id: lectureId } };
-  const result =
-    format === "pdf"
-      ? await api.GET("/api/v1/lectures/{lecture_id}/export.pdf", { params, parseAs: "blob" })
-      : format === "srt"
-        ? await api.GET("/api/v1/lectures/{lecture_id}/export.srt", { params, parseAs: "blob" })
-        : await api.GET("/api/v1/lectures/{lecture_id}/export.vtt", { params, parseAs: "blob" });
-  if (!result.response.ok || !(result.data instanceof Blob)) return result.response.status;
-  return { blob: result.data, disposition: result.response.headers.get("Content-Disposition") };
+async function requestLink(lectureId: string, format: Format) {
+  const { data, response } = await api.POST("/api/v1/lectures/{lecture_id}/exports/{export_format}/link", {
+    params: { path: { lecture_id: lectureId, export_format: format } },
+  });
+  return data === undefined ? response.status : data.url;
 }
 
-function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+function failureMessage(status: number) {
+  if (status === 409) return "Файл ещё не готов, попробуйте позже.";
+  if (status === 404) return "Лекция не найдена.";
+  if (status === 401) return "Войдите снова, чтобы скачать файл.";
+  return "Не удалось скачать файл. Попробуйте ещё раз.";
 }
 
 type ExportActionsProps = {
   lectureId: string;
-  title: string;
   ready: boolean;
   hasSegments: boolean;
 };
 
-export function ExportActions({ lectureId, title, ready, hasSegments }: ExportActionsProps) {
+export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsProps) {
   const toast = useToast();
   const [busy, setBusy] = useState<Format | null>(null);
 
   const run = async (format: Format) => {
     setBusy(format);
     try {
-      const result = await download(lectureId, format);
+      const result = await requestLink(lectureId, format);
       if (typeof result === "number") {
-        toast.show(
-          result === 501 ? "Этот формат пока не готов, попробуйте позже." : "Не удалось скачать файл.",
-          "error",
-        );
+        toast.show(failureMessage(result), "error");
         return;
       }
-      saveBlob(result.blob, exportFileName(title, format, result.disposition));
+      openExternalLink(result);
     } catch {
       toast.show("Не удалось скачать файл. Проверьте соединение.", "error");
     } finally {
