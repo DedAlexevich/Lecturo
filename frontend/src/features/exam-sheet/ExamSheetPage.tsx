@@ -101,7 +101,7 @@ export function ExamSheetPage() {
             </p>
           )}
         </div>
-        {data && <PrintButton courseId={id} />}
+        {data && <PrintButton key={id} courseId={id} />}
       </header>
 
       {sheet.isPending && <SheetSkeleton />}
