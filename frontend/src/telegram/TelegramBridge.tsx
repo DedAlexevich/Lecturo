@@ -8,6 +8,8 @@ import { messageOf } from "../pages/auth/errors";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { bindTheme, getWebApp } from "./sdk";
+import { TelegramIcon } from "./TelegramIcon";
+import "./TelegramBridge.css";
 
 const app = getWebApp();
 let automaticLoginDone = false;
@@ -95,9 +97,10 @@ export function TelegramBridge() {
   return (
     <>
       {!consent && (error || (token === null && wasSignedOutByUser())) && (
-        <div>
-          {error && <p role="alert">Вход через Telegram: {error}</p>}
-          <Button variant="ghost" loading={busy} onClick={submit}>
+        <div className="telegram-login">
+          {error && <p role="alert" className="telegram-login__error">Вход через Telegram: {error}</p>}
+          <Button fullWidth loading={busy} onClick={submit}>
+            {!busy && <TelegramIcon />}
             {error ? "Повторить вход" : "Войти через Telegram"}
           </Button>
         </div>
