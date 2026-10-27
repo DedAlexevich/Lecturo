@@ -1,11 +1,11 @@
 .empty-state {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: var(--space-3);
-  padding: var(--space-7) var(--space-5);
-  border: 1px dashed var(--color-border-strong);
+  padding: var(--space-6);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  text-align: center;
 }
 
 .empty-state__title {
@@ -13,7 +13,7 @@
 }
 
 .empty-state__description {
-  max-width: 28rem;
+  max-width: 32rem;
   color: var(--color-text-muted);
 }
 

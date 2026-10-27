@@ -154,6 +154,24 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Update Me */
+        patch: operations["update_me_api_v1_me_patch"];
+        trace?: never;
+    };
+    "/api/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change My Password */
+        post: operations["change_my_password_api_v1_me_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -236,7 +254,8 @@ export interface paths {
         put?: never;
         /** Accept Ai Transfer */
         post: operations["accept_ai_transfer_api_v1_me_consents_ai_transfer_post"];
-        delete?: never;
+        /** Revoke Ai Transfer */
+        delete: operations["revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1008,6 +1027,13 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** PasswordChangeIn */
+        PasswordChangeIn: {
+            /** Current Password */
+            current_password?: string | null;
+            /** New Password */
+            new_password: string;
+        };
         /** PasswordResetIn */
         PasswordResetIn: {
             /** Token */
@@ -1068,6 +1094,11 @@ export interface components {
             price_rub: number;
             /** Seconds */
             seconds: number | null;
+        };
+        /** ProfileUpdateIn */
+        ProfileUpdateIn: {
+            /** Display Name */
+            display_name: string;
         };
         /** PublicCourseOut */
         PublicCourseOut: {
@@ -1187,6 +1218,8 @@ export interface components {
             display_name: string;
             /** Accept Terms */
             accept_terms: boolean;
+            /** Accept Personal Data */
+            accept_personal_data: boolean;
         };
         /** SearchHit */
         SearchHit: {
@@ -1286,10 +1319,47 @@ export interface components {
             /** Hash */
             hash: string;
         };
+        /** TelegramSignupIn */
+        TelegramSignupIn: {
+            /** Id */
+            id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name?: string | null;
+            /** Username */
+            username?: string | null;
+            /** Photo Url */
+            photo_url?: string | null;
+            /** Auth Date */
+            auth_date: number;
+            /** Hash */
+            hash: string;
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms: boolean;
+            /**
+             * Accept Personal Data
+             * @default false
+             */
+            accept_personal_data: boolean;
+        };
         /** TelegramWebAppIn */
         TelegramWebAppIn: {
             /** Init Data */
             init_data: string;
+            /**
+             * Accept Terms
+             * @default false
+             */
+            accept_terms: boolean;
+            /**
+             * Accept Personal Data
+             * @default false
+             */
+            accept_personal_data: boolean;
         };
         /** TokenIn */
         TokenIn: {
@@ -1467,7 +1537,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TelegramLoginIn"];
+                "application/json": components["schemas"]["TelegramSignupIn"];
             };
         };
         responses: {
@@ -1479,6 +1549,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
                 };
+            };
+            /** @description Новому пользователю нужны оба согласия */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1502,6 +1579,20 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Слишком много запросов писем */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Хранилище лимитов недоступно */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1569,6 +1660,20 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Слишком много запросов писем */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Хранилище лимитов недоступно */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     confirm_password_reset_api_v1_auth_password_reset_confirm_post: {
@@ -1618,6 +1723,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
+    update_me_api_v1_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_my_password_api_v1_me_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1770,6 +1939,26 @@ export interface operations {
             };
         };
     };
+    revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+        };
+    };
     login_webapp_api_v1_auth_telegram_webapp_post: {
         parameters: {
             query?: never;
@@ -1791,6 +1980,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenOut"];
                 };
+            };
+            /** @description Новому пользователю нужны оба согласия */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

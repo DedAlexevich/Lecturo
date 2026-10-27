@@ -22,6 +22,7 @@ from app.models import Lecture, LectureStatus, SourceType, User
 from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
 from app.pipeline.tasks import enqueue_lecture
+from app.services import quota
 
 logger = logging.getLogger(__name__)
 
@@ -170,16 +171,20 @@ async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
         await session.rollback()
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Загрузка не найдена") from error
     lecture.audio_path = str(original)
+    waiting = await quota.hold_if_over_quota(session, user, lecture)
     await session.commit()
     await asyncio.to_thread(info_path.unlink, missing_ok=True)
 
-    try:
-        await enqueue_lecture(lecture.id)
-    except (OSError, RedisError) as error:
-        lecture.status = LectureStatus.failed
-        await session.commit()
-        await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
+    if waiting:
+        await publish_status(lecture.id, user.id, lecture.status)
+    else:
+        try:
+            await enqueue_lecture(lecture.id)
+        except (OSError, RedisError):
+            logger.exception("Не удалось поставить лекцию %s в очередь", lecture.id)
+            lecture.status = LectureStatus.failed
+            await session.commit()
+            await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
     return {"HTTPResponse": json_response(status.HTTP_200_OK, {"lecture_id": str(lecture.id)})}
 
 

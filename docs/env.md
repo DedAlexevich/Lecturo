@@ -1,0 +1,192 @@
+# Переменные окружения
+
+Все настройки лежат в файле `.env` в корне репозитория. Он создаётся копированием образца:
+
+```
+cp .env.example .env
+```
+
+`.env` читают сервисы `api`, `worker` и `bot` (через `env_file` в `docker-compose.yml`). Postgres, Redis и Caddy берут значения из `docker-compose.yml`. Если переменная не задана, используется значение по умолчанию из таблиц ниже. Реальные ключи в репозиторий не коммитим.
+
+## Что нужно для запуска
+
+Локально ничего заполнять не нужно: `cp .env.example .env` и `docker compose up --build`. При `STT_PROVIDER=stub`, `LLM_PROVIDER=stub` и `EMBEDDINGS_PROVIDER=stub` провайдеры возвращают тестовые данные и обходятся без ключей. Без `SMTP_HOST` письма не отправляются, а пишутся в лог сервиса `api` (там же видны ссылки подтверждения почты и сброса пароля). Без `TELEGRAM_BOT_TOKEN` бот не запускается, а вход через Telegram отвечает 503.
+
+Для боевого сервера нужно:
+
+- `SITE_ADDRESS` и `PUBLIC_URL` с вашим доменом;
+- уникальный `SECRET_KEY` и свой `POSTGRES_PASSWORD`;
+- настоящие провайдеры `STT_PROVIDER`, `LLM_PROVIDER`, `EMBEDDINGS_PROVIDER` и их ключи;
+- SMTP, иначе пользователи не получат письма для подтверждения почты и сброса пароля;
+- Telegram-бот, если нужен вход через Telegram и бот;
+- ЮKassa, если нужна оплата.
+
+## Основные
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `SITE_ADDRESS` | Адрес, на котором Caddy принимает запросы. `:80` значит HTTP на любом хосте, домен (например `lecturo.example`) включает HTTPS с автоматическим сертификатом | на сервере | `:80` | `docker-compose.yml` (caddy), `infra/Caddyfile` |
+| `HTTP_PORT` | Порт хоста для HTTP | нет | `80` | `docker-compose.yml` (caddy) |
+| `HTTPS_PORT` | Порт хоста для HTTPS | нет | `443` | `docker-compose.yml` (caddy) |
+| `PUBLIC_URL` | Публичный адрес сайта, например `https://lecturo.example`. Из него строятся ссылки в письмах, ссылки на шаринг и адрес возврата после оплаты. Бот показывает кнопку «Открыть Lecturo» только если адрес начинается с `https://` | на сервере | `http://localhost` | `backend/app/services/mail.py`, `api/billing.py`, `api/shares.py`, `bot/app/config.py` |
+| `SECRET_KEY` | Секрет для подписи токенов входа (JWT). Длинная случайная строка, например из `openssl rand -hex 32`. После смены все пользователи будут разлогинены | на сервере | `dev-secret-change-me-before-production` | `backend/app/core/security.py` |
+| `POSTGRES_PASSWORD` | Пароль пользователя `lecturo` в Postgres. Из него же собираются `DATABASE_URL` для `api`, `worker` и `bot` | на сервере | `lecturo` | `docker-compose.yml` (db, api, worker, bot) |
+| `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
+| `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
+
+`DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
+
+## Распознавание речи (STT)
+
+`STT_PROVIDER` принимает `stub`, `yandex` или `salute`. Другое значение приведёт к ошибке «Неизвестный STT_PROVIDER». Если провайдер выбран, но не хватает обязательных значений, при его создании будет ошибка «Не заданы настройки ...» со списком недостающих переменных.
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `STT_PROVIDER` | `stub`, `yandex` или `salute` | нет | `stub` | `backend/app/providers/__init__.py` |
+| `YANDEX_SPEECHKIT_API_KEY` | API-ключ сервисного аккаунта для SpeechKit | при `yandex` | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_FOLDER_ID` | Идентификатор каталога Yandex Cloud, передаётся в запрос распознавания как `folderId` | рекомендуется при `yandex`, код работает и без него | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_STORAGE_BUCKET` | Имя бакета Object Storage, куда на время распознавания загружается аудио | при `yandex` | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_STORAGE_ACCESS_KEY` | Идентификатор статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_STORAGE_SECRET_KEY` | Секретная часть статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
+| `SALUTE_AUTH_KEY` | Ключ авторизации SaluteSpeech, подставляется в заголовок `Authorization: Basic ...` | при `salute` | пусто | `backend/app/providers/salute.py` |
+| `SALUTE_SCOPE` | Область доступа SaluteSpeech, например `SALUTE_SPEECH_PERS` для физических лиц | нет | `SALUTE_SPEECH_PERS` | `backend/app/providers/salute.py` |
+| `SALUTE_CA_BUNDLE` | Путь внутри контейнера к файлу с корневыми сертификатами в формате PEM | нет | пусто | `backend/app/providers/salute.py` |
+
+### Yandex Cloud: SpeechKit и Object Storage
+
+Названия разделов и кнопок в консоли могут меняться, ориентируйтесь на смысл.
+
+1. Зарегистрируйтесь в [консоли Yandex Cloud](https://console.yandex.cloud) и создайте платёжный аккаунт: SpeechKit и Object Storage платные.
+2. Создайте каталог или выберите существующий. Его идентификатор виден на странице каталога, это `YANDEX_FOLDER_ID`.
+3. В каталоге создайте сервисный аккаунт и назначьте ему роли `ai.speechkit-stt.user` (распознавание речи) и `storage.editor` (запись и удаление объектов в бакетах каталога).
+4. В сервисном аккаунте создайте API-ключ. Если консоль предлагает область действия, выберите распознавание речи SpeechKit. Секретная часть показывается один раз, её значение идёт в `YANDEX_SPEECHKIT_API_KEY`.
+5. В том же сервисном аккаунте создайте статический ключ доступа. Идентификатор ключа идёт в `YANDEX_STORAGE_ACCESS_KEY`, секретный ключ (тоже показывается один раз) в `YANDEX_STORAGE_SECRET_KEY`.
+6. В каталоге создайте бакет Object Storage. Имя бакета уникально для всего облака, оно идёт в `YANDEX_STORAGE_BUCKET`. Публичный доступ включать не нужно: бэкенд загружает файл подписанным запросом, а после распознавания удаляет его из бакета.
+7. В `.env` задайте `STT_PROVIDER=yandex` и примените настройки: `docker compose up -d`.
+
+Бэкенд обращается к `storage.yandexcloud.net` и к API распознавания `transcribe.api.cloud.yandex.net`.
+
+### SaluteSpeech
+
+1. Зарегистрируйтесь в [SberDevices Studio](https://developers.sber.ru/studio) и создайте проект с сервисом SaluteSpeech API.
+2. В настройках API сгенерируйте ключ авторизации. Он показывается один раз, его значение идёт в `SALUTE_AUTH_KEY`. Бэкенд подставляет его в заголовок `Authorization: Basic ...`, поэтому вставляйте строку в том виде, в каком её выдаёт студия.
+3. `SALUTE_SCOPE` зависит от типа доступа. Для физического лица подходит значение по умолчанию `SALUTE_SPEECH_PERS`. Для юридических лиц значения другие, их список указан в документации SaluteSpeech и в личном кабинете.
+4. API SaluteSpeech использует сертификат национального удостоверяющего центра. Если запросы падают с ошибкой проверки сертификата, скачайте корневой сертификат по ссылке из документации SaluteSpeech, положите его на сервер в формате PEM, примонтируйте файл в контейнеры `api` и `worker` и укажите путь внутри контейнера в `SALUTE_CA_BUNDLE`. Если ошибки нет, оставьте переменную пустой.
+5. Задайте `STT_PROVIDER=salute` и примените настройки: `docker compose up -d`.
+
+## LLM и эмбеддинги
+
+Оба провайдера работают с любым сервисом, совместимым с OpenAI API. Бэкенд отправляет запросы на `<BASE_URL>/chat/completions` и `<BASE_URL>/embeddings` с заголовком `Authorization: Bearer <KEY>`. Допустимые значения провайдера: `stub` и `openai`.
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `LLM_PROVIDER` | `stub` или `openai` | нет | `stub` | `backend/app/providers/__init__.py` |
+| `LLM_BASE_URL` | Базовый адрес API | при `openai` | `https://api.deepseek.com` | `backend/app/providers/openai_compat.py` |
+| `LLM_API_KEY` | Ключ API | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
+| `LLM_MODEL` | Название модели | при `openai` | `deepseek-chat` | `backend/app/providers/openai_compat.py` |
+| `EMBEDDINGS_PROVIDER` | `stub` или `openai` | нет | `stub` | `backend/app/providers/__init__.py` |
+| `EMBEDDINGS_BASE_URL` | Базовый адрес API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
+| `EMBEDDINGS_API_KEY` | Ключ API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
+| `EMBEDDINGS_MODEL` | Название модели эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
+
+### LLM: DeepSeek или другой OpenAI-совместимый сервис
+
+DeepSeek:
+
+1. Зарегистрируйтесь на [platform.deepseek.com](https://platform.deepseek.com) и пополните баланс.
+2. В разделе с API-ключами создайте ключ и впишите его в `LLM_API_KEY`.
+3. Оставьте `LLM_BASE_URL=https://api.deepseek.com` и `LLM_MODEL=deepseek-chat`, задайте `LLM_PROVIDER=openai`.
+
+Другой сервис (OpenAI, OpenRouter, свой сервер с OpenAI-совместимым API): получите у него ключ, в `LLM_BASE_URL` укажите базовый адрес, в `LLM_MODEL` название модели из его документации. Ключ не должен быть пустым: если сервер его не проверяет, впишите любую непустую строку. Адрес указывается без `/chat/completions`, этот путь бэкенд добавляет сам (у части сервисов базовый адрес оканчивается на `/v1`).
+
+### Эмбеддинги
+
+1. Выберите сервис с OpenAI-совместимым методом эмбеддингов (`<EMBEDDINGS_BASE_URL>/embeddings`). Подойдёт OpenAI или свой сервер. Доступность метода у конкретного сервиса проверьте в его документации.
+2. Получите у сервиса ключ и впишите его в `EMBEDDINGS_API_KEY`, адрес в `EMBEDDINGS_BASE_URL`, модель в `EMBEDDINGS_MODEL`.
+3. Размерность вектора в базе фиксирована: 1024 (`EMBEDDING_DIM` в `backend/app/models/base.py`). Модель должна отдавать векторы такой длины или позволять её задать. Проверьте это в документации модели.
+4. Задайте `EMBEDDINGS_PROVIDER=openai` и примените настройки: `docker compose up -d`.
+
+## Почта (SMTP)
+
+Почта нужна для писем подтверждения адреса и сброса пароля. Если `SMTP_HOST` пуст, письма не уходят, а пишутся в лог `api`.
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `SMTP_HOST` | Адрес SMTP-сервера | на сервере | пусто | `backend/app/services/mail.py` |
+| `SMTP_PORT` | Порт. `465` включает SSL сразу при подключении, любой другой порт работает через STARTTLS (обычно `587`) | нет | `587` | `backend/app/services/mail.py` |
+| `SMTP_USER` | Логин. Если пуст, авторизация не выполняется | обычно да | пусто | `backend/app/services/mail.py` |
+| `SMTP_PASSWORD` | Пароль. Для Яндекса и Gmail нужен пароль приложения | обычно да | пусто | `backend/app/services/mail.py` |
+| `SMTP_FROM` | Адрес в поле «От». Если пуст, берётся `SMTP_USER` | нет | пусто | `backend/app/services/mail.py` |
+
+Яндекс Почта:
+
+1. В настройках почты Яндекса разрешите доступ с почтовых клиентов по протоколу IMAP, иначе вход по SMTP может не заработать.
+2. В [Яндекс ID](https://id.yandex.ru) в разделе безопасности создайте пароль приложения для почты. Яндекс может потребовать включить двухфакторную защиту.
+3. Заполните: `SMTP_HOST=smtp.yandex.ru`, `SMTP_PORT=465`, `SMTP_USER` полный адрес ящика, `SMTP_PASSWORD` пароль приложения, `SMTP_FROM` тот же адрес.
+
+Gmail:
+
+1. В аккаунте Google включите двухэтапную аутентификацию.
+2. На странице [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) создайте пароль приложения. Он состоит из 16 символов, в `.env` пробелы уберите.
+3. Заполните: `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587` (STARTTLS) или `465` (SSL), `SMTP_USER` и `SMTP_FROM` адрес Gmail, `SMTP_PASSWORD` пароль приложения.
+
+Для других провайдеров возьмите параметры SMTP из их документации. Порт `465` идёт через SSL, все остальные через STARTTLS. Если письмо не отправилось, в логе `api` будет запись «Не удалось отправить письмо».
+
+## Telegram
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
+| `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
+| `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
+
+Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
+
+Получение токена и настройка бота:
+
+1. В Telegram откройте [@BotFather](https://t.me/BotFather) и отправьте `/newbot`.
+2. Задайте имя и username бота (оканчивается на `bot`). BotFather пришлёт токен, его значение идёт в `TELEGRAM_BOT_TOKEN`. Username без `@` впишите в `TELEGRAM_BOT_USERNAME`.
+3. Для Login Widget отправьте BotFather `/setdomain`, выберите бота и укажите домен сайта, например `lecturo.example`. Виджет работает только на этом домене, на `localhost` проверить вход не получится.
+4. Примените настройки: `docker compose up -d`. Бот отвечает на `/start`, сохраняет `chat_id` пользователя и, если `PUBLIC_URL` начинается с `https://`, показывает кнопку открытия приложения.
+
+Бэкенд проверяет подпись данных входа по токену бота и принимает данные не старше суток. Токен никому не передавайте. Если он утёк, выпустите новый через BotFather.
+
+## Оплата (ЮKassa)
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `YOOKASSA_SHOP_ID` | Идентификатор магазина | для оплаты | пусто | `backend/app/services/yookassa.py` |
+| `YOOKASSA_SECRET_KEY` | Секретный ключ магазина | для оплаты | пусто | `backend/app/services/yookassa.py` |
+| `YOOKASSA_RECEIPT` | `true`: добавлять в платёж данные чека. Тогда у пользователя должен быть email, иначе платёж не создаётся | нет | `false` | `backend/app/services/yookassa.py` |
+
+Без `YOOKASSA_SHOP_ID` и `YOOKASSA_SECRET_KEY` оплата недоступна.
+
+Тестовый магазин:
+
+1. Зарегистрируйтесь в [личном кабинете ЮKassa](https://yookassa.ru) и создайте тестовый магазин.
+2. В настройках магазина найдите идентификатор магазина и впишите его в `YOOKASSA_SHOP_ID`.
+3. В разделе с ключами API выпустите секретный ключ и впишите его в `YOOKASSA_SECRET_KEY`. Ключ показывается один раз.
+4. В настройках HTTP-уведомлений укажите адрес `https://<домен>/api/v1/billing/webhook` и событие `payment.succeeded`. Адрес должен быть доступен из интернета, поэтому на локальной машине для проверки уведомлений нужен туннель.
+5. Для оплаты в тестовом магазине используйте тестовые карты из документации ЮKassa: реальные деньги не списываются.
+6. Для боевого магазина пройдите подключение в ЮKassa и замените идентификатор и ключ на боевые. Если нужен чек, включите `YOOKASSA_RECEIPT=true`.
+
+Адрес API (`YOOKASSA_API_URL`, по умолчанию `https://api.yookassa.ru/v3`) менять не нужно.
+
+## Тарифы и лимиты
+
+Все значения необязательны, значения по умолчанию совпадают с `.env.example`.
+
+| Переменная | Описание | По умолчанию | Где используется |
+|---|---|---|---|
+| `FREE_WEEKLY_SECONDS` | Недельный лимит обработки на бесплатном тарифе, секунды (2 часа) | `7200` | `backend/app/services/quota.py` |
+| `SUBSCRIPTION_WEEKLY_SECONDS` | Недельный лимит по подписке, секунды (10 часов) | `36000` | `backend/app/services/quota.py` |
+| `SUBSCRIPTION_PRICE_RUB` | Цена подписки, рубли | `299` | `backend/app/services/quota.py` |
+| `SUBSCRIPTION_DAYS` | Срок подписки, дни | `30` | `backend/app/services/quota.py`, `backend/app/services/yookassa.py` |
+| `HOUR_PACKAGES` | Пакеты часов в формате JSON: `{"часы": цена в рублях}` | `{"5": 199, "10": 349}` | `backend/app/services/quota.py` |
+| `FREE_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у бесплатных пользователей | `3` | `backend/app/services/quota.py`, `backend/app/pipeline/media.py` |
+| `SUBSCRIPTION_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у подписчиков | `30` | `backend/app/services/quota.py` |
+| `LOCAL_EMBEDDINGS_WEEKLY_SECONDS` | Недельный лимит секунд для результатов, посчитанных на устройстве пользователя (10 часов) | `36000` | `backend/app/api/local_results.py` |
+
+## Проверка
+
+После изменения `.env` примените настройки: `docker compose up -d`. Ошибки конфигурации (неизвестный провайдер, не хватает ключей) видны в логах: `docker compose logs api worker bot`.

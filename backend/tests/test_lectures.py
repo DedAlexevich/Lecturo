@@ -2,12 +2,14 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api import lectures as lectures_api
+from app.core.config import get_settings
 from app.core.db import SessionLocal, engine
 from app.models import (
     Chapter,
+    HourPackage,
     Lecture,
     LectureStatus,
     ProcessingStep,
@@ -16,9 +18,11 @@ from app.models import (
     StepStatus,
     Summary,
     TranscriptSegment,
+    UsageEntry,
     User,
 )
 from app.pipeline.download import LinkError, LinkInfo
+from app.services import quota
 
 
 async def test_lectures_require_auth(client):
@@ -222,3 +226,224 @@ async def test_add_link_publishes_failed_when_queue_is_down(
     assert published == [
         (lecture.id, user.id, LectureStatus.failed, "Очередь недоступна, попробуйте позже")
     ]
+
+
+async def test_add_link_over_quota_waits_without_queue(
+    client, user, auth_headers, link_info, monkeypatch
+):
+    published = []
+
+    async def fake_publish(lecture_id, user_id, status, error=None):
+        published.append((lecture_id, status))
+
+    monkeypatch.setattr(lectures_api, "publish_status", fake_publish)
+    monkeypatch.setattr(get_settings(), "free_weekly_seconds", 2999)
+
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "waiting_quota"
+    assert link_info["enqueued"] == []
+    assert published == [(uuid.UUID(response.json()["id"]), LectureStatus.waiting_quota)]
+
+
+@pytest.fixture
+def cancelled(monkeypatch):
+    calls = []
+
+    async def fake_cancel(lecture_id):
+        calls.append(lecture_id)
+        return True
+
+    monkeypatch.setattr(lectures_api, "cancel_lecture_job", fake_cancel)
+    return calls
+
+
+async def create_own_lecture(user, **values) -> Lecture:
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=user.id, title="Лекция", source_type=SourceType.upload, **values)
+        session.add(lecture)
+        await session.commit()
+        return lecture
+
+
+async def charge_with_package(user, lecture, seconds) -> uuid.UUID:
+    async with SessionLocal() as session:
+        package = HourPackage(user_id=user.id, seconds_total=3600, seconds_left=3600)
+        session.add(package)
+        await session.flush()
+        assert await quota.charge_lecture(session, user.id, lecture.id, seconds)
+        await session.commit()
+        return package.id
+
+
+async def usage_state(user, package_id) -> tuple[int, int]:
+    async with SessionLocal() as session:
+        used = await session.scalar(
+            select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
+                UsageEntry.user_id == user.id
+            )
+        )
+        package = await session.get(HourPackage, package_id)
+        return used, package.seconds_left
+
+
+async def test_rename_lecture(client, user, auth_headers):
+    lecture = await create_own_lecture(user)
+
+    response = await client.patch(
+        f"/api/v1/lectures/{lecture.id}", headers=auth_headers, json={"title": "Линейная алгебра"}
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "Линейная алгебра"
+
+    async with SessionLocal() as session:
+        assert (await session.get(Lecture, lecture.id)).title == "Линейная алгебра"
+
+
+async def test_rename_rejects_empty_title(client, user, auth_headers):
+    lecture = await create_own_lecture(user)
+    response = await client.patch(
+        f"/api/v1/lectures/{lecture.id}", headers=auth_headers, json={"title": ""}
+    )
+    assert response.status_code == 422
+
+
+@pytest.fixture
+async def stranger_lecture(stranger) -> Lecture:
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=stranger.id, title="Чужая", source_type=SourceType.upload)
+        session.add(lecture)
+        await session.commit()
+        return lecture
+
+
+async def test_foreign_lecture_cannot_be_changed(client, auth_headers, stranger_lecture, cancelled):
+    url = f"/api/v1/lectures/{stranger_lecture.id}"
+    assert (await client.patch(url, headers=auth_headers, json={"title": "Моя"})).status_code == 404
+    assert (await client.delete(url, headers=auth_headers)).status_code == 404
+    assert cancelled == []
+
+    async with SessionLocal() as session:
+        assert (await session.get(Lecture, stranger_lecture.id)).title == "Чужая"
+
+
+async def test_missing_lecture_returns_404(client, auth_headers, cancelled):
+    url = f"/api/v1/lectures/{uuid.uuid4()}"
+    assert (await client.patch(url, headers=auth_headers, json={"title": "Моя"})).status_code == 404
+    assert (await client.delete(url, headers=auth_headers)).status_code == 404
+
+
+async def test_delete_removes_files_and_records(
+    client, user, auth_headers, cancelled, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "storage_dir", tmp_path)
+    video = tmp_path / "video.mp4"
+    audio = tmp_path / "audio.ogg"
+    video.write_bytes(b"v")
+    audio.write_bytes(b"a")
+    lecture = await create_own_lecture(
+        user, status=LectureStatus.ready, video_path=str(video), audio_path=str(audio)
+    )
+    (tmp_path / "originals").mkdir()
+    original = tmp_path / "originals" / str(lecture.id)
+    original.write_bytes(b"o")
+    (tmp_path / "tmp").mkdir()
+    partial = tmp_path / "tmp" / f"{lecture.id}.part"
+    partial.write_bytes(b"p")
+    async with SessionLocal() as session:
+        session.add_all(
+            [
+                TranscriptSegment(lecture_id=lecture.id, idx=0, start=0.0, end=4.0, text="раз"),
+                Summary(lecture_id=lecture.id, content_md="# Конспект"),
+                ProcessingStep(
+                    lecture_id=lecture.id,
+                    step=StepName.transcribe,
+                    status=StepStatus.done,
+                    attempts=1,
+                    progress=1.0,
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+    assert response.status_code == 204
+    assert cancelled == [lecture.id]
+    assert not video.exists()
+    assert not audio.exists()
+    assert not original.exists()
+    assert not partial.exists()
+
+    async with SessionLocal() as session:
+        assert await session.get(Lecture, lecture.id) is None
+        for model in (TranscriptSegment, Summary, ProcessingStep):
+            count = await session.scalar(
+                select(func.count()).select_from(model).where(model.lecture_id == lecture.id)
+            )
+            assert count == 0
+
+
+async def test_delete_before_processing_refunds_quota(client, user, auth_headers, cancelled):
+    lecture = await create_own_lecture(user, status=LectureStatus.queued)
+    package_id = await charge_with_package(user, lecture, 2 * 3600 + 600)
+    assert await usage_state(user, package_id) == (2 * 3600 + 600, 3000)
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+    assert response.status_code == 204
+    assert await usage_state(user, package_id) == (0, 3600)
+
+
+async def test_delete_after_processing_started_keeps_usage(client, user, auth_headers, cancelled):
+    lecture = await create_own_lecture(user, status=LectureStatus.processing)
+    package_id = await charge_with_package(user, lecture, 600)
+    async with SessionLocal() as session:
+        session.add(
+            ProcessingStep(
+                lecture_id=lecture.id,
+                step=StepName.transcribe,
+                status=StepStatus.running,
+                attempts=1,
+            )
+        )
+        await session.commit()
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+    assert response.status_code == 204
+    assert await usage_state(user, package_id) == (600, 3600)
+
+
+async def test_delete_retried_lecture_keeps_usage(client, user, auth_headers, cancelled):
+    lecture = await create_own_lecture(user, status=LectureStatus.queued)
+    package_id = await charge_with_package(user, lecture, 600)
+    async with SessionLocal() as session:
+        session.add(
+            ProcessingStep(
+                lecture_id=lecture.id,
+                step=StepName.summarize,
+                status=StepStatus.pending,
+                attempts=1,
+            )
+        )
+        await session.commit()
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+    assert response.status_code == 204
+    assert await usage_state(user, package_id) == (600, 3600)
+
+
+async def test_delete_works_when_queue_is_down(client, user, auth_headers, monkeypatch):
+    async def queue_down(lecture_id):
+        raise ConnectionError("redis недоступен")
+
+    monkeypatch.setattr(lectures_api, "cancel_lecture_job", queue_down)
+    lecture = await create_own_lecture(user)
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+    assert response.status_code == 204
+    async with SessionLocal() as session:
+        assert await session.get(Lecture, lecture.id) is None

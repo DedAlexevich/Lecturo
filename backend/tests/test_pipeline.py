@@ -3,11 +3,17 @@ import json
 import math
 import shutil
 import subprocess
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from arq import create_pool
+from arq.connections import RedisSettings
+from arq.constants import abort_jobs_ss, default_queue_name, job_key_prefix
+from arq.worker import Worker
+from arq.worker import func as arq_func
 from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -512,17 +518,18 @@ async def test_transcribe_charges_lecture_duration(user, sample_video):
     assert await charged_seconds(lecture.id) == math.ceil(loaded.duration_sec)
 
 
-async def test_transcribe_fails_without_quota(user, sample_audio, monkeypatch):
+async def test_transcribe_waits_for_quota(user, sample_audio, monkeypatch):
     monkeypatch.setattr(get_settings(), "free_weekly_seconds", 1)
     lecture = await create_lecture(user, sample_audio)
 
-    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.waiting_quota
 
-    failed = await load(lecture.id)
-    step = steps_by_name(failed)[StepName.transcribe]
-    assert step.status == StepStatus.failed
+    waiting = await load(lecture.id)
+    step = steps_by_name(waiting)[StepName.transcribe]
+    assert waiting.status == LectureStatus.waiting_quota
+    assert step.status == StepStatus.pending
     assert step.error == "Не хватает лимита на обработку лекции"
-    assert StepName.summarize not in steps_by_name(failed)
+    assert StepName.summarize not in steps_by_name(waiting)
     assert await count(TranscriptSegment, lecture.id) == 0
     assert await charged_seconds(lecture.id) == 0
 
@@ -623,3 +630,34 @@ async def test_interrupted_ready_event_keeps_lecture_ready(user, sample_audio, m
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
     assert (await load(lecture.id)).status == LectureStatus.ready
+
+
+async def test_cancelled_job_is_not_started():
+    lecture_id = uuid.uuid4()
+    calls = []
+
+    async def fake_process(ctx, job_lecture_id):
+        calls.append(job_lecture_id)
+
+    job_id = tasks.lecture_job_id(lecture_id)
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    worker = Worker(
+        functions=[arq_func(fake_process, name="process_lecture")],
+        redis_pool=redis,
+        burst=True,
+        allow_abort_jobs=True,
+        keep_result=0,
+        poll_delay=0.1,
+    )
+    try:
+        assert not await tasks.cancel_lecture_job(lecture_id)
+        await tasks.enqueue_lecture(lecture_id)
+        assert await tasks.cancel_lecture_job(lecture_id)
+        await worker.main()
+    finally:
+        await redis.delete(job_key_prefix + job_id)
+        await redis.zrem(default_queue_name, job_id)
+        await redis.zrem(abort_jobs_ss, job_id)
+        await worker.close()
+    assert calls == []
+    assert not await tasks.cancel_lecture_job(lecture_id)

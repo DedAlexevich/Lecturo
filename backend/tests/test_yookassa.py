@@ -3,7 +3,7 @@ from collections.abc import Callable, Iterator
 
 import httpx
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings
@@ -246,6 +246,7 @@ async def test_list_payments_returns_only_own(client, user, auth_headers, fake):
     finally:
         async with SessionLocal() as session:
             await session.delete(await session.get(User, other.id))
+            await session.execute(delete(Payment).where(Payment.yookassa_id == "yk-other"))
             await session.commit()
 
     assert response.status_code == 200

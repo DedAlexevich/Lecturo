@@ -57,12 +57,11 @@
 }
 
 .figure {
-  font-family: var(--font-display);
   font-size: var(--text-3xl);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
   line-height: var(--leading-tight);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.03em;
 }
 
 .alert {
@@ -246,7 +245,7 @@
   color: var(--color-text-muted);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .panel {
     padding: var(--space-4);
   }
