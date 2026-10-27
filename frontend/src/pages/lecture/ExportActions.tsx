@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api/client";
-import { openExternalLink } from "../../telegram/sdk";
+import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
 
@@ -16,7 +16,7 @@ async function requestLink(lectureId: string, format: Format) {
   const { data, response } = await api.POST("/api/v1/lectures/{lecture_id}/exports/{export_format}/link", {
     params: { path: { lecture_id: lectureId, export_format: format } },
   });
-  return data === undefined ? response.status : data.url;
+  return data === undefined ? response.status : data;
 }
 
 function failureMessage(status: number) {
@@ -25,6 +25,8 @@ function failureMessage(status: number) {
   if (status === 401) return "Войдите снова, чтобы скачать файл.";
   return "Не удалось скачать файл. Попробуйте ещё раз.";
 }
+
+const PREPARED_LINK_MS = 90_000;
 
 type ExportActionsProps = {
   lectureId: string;
@@ -35,8 +37,15 @@ type ExportActionsProps = {
 export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsProps) {
   const toast = useToast();
   const [busy, setBusy] = useState<Format | null>(null);
+  const [prepared, setPrepared] = useState<{ format: Format; url: string; expiresAt: number } | null>(null);
 
   const run = async (format: Format) => {
+    if (prepared?.format === format && Date.now() < prepared.expiresAt) {
+      openExternalLink(prepared.url);
+      setPrepared(null);
+      return;
+    }
+    setPrepared(null);
     setBusy(format);
     try {
       const result = await requestLink(lectureId, format);
@@ -44,7 +53,11 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
         toast.show(failureMessage(result), "error");
         return;
       }
-      openExternalLink(result);
+      if (getWebApp()) {
+        setPrepared({ format, url: result.url, expiresAt: Date.now() + PREPARED_LINK_MS });
+      } else {
+        openExternalLink(result.url);
+      }
     } catch {
       toast.show("Не удалось скачать файл. Проверьте соединение.", "error");
     } finally {
@@ -67,7 +80,7 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
           disabled={busy !== null && busy !== format}
           onClick={() => void run(format)}
         >
-          {label}
+          {prepared?.format === format ? `Открыть ${label}` : label}
         </Button>
       ))}
     </div>

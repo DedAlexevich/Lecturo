@@ -291,7 +291,12 @@ try {
     const pdf = page.getByRole("button", { name: "PDF", exact: true });
     if (platform) {
       await pdf.click();
+      const open = page.getByRole("button", { name: "Открыть PDF", exact: true });
+      await open.waitFor();
+      assert.equal(await page.evaluate(() => window.mock.links.length), 0);
+      await open.click();
       await page.waitForFunction(() => window.mock.links.length === 1);
+      await pdf.waitFor();
       assert.deepEqual(await page.evaluate(() => window.mock.links), [`${base}${exportPath}?token=signed-export`]);
       assert.deepEqual(downloads, []);
     } else {
