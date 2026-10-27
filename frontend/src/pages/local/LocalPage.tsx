@@ -9,6 +9,7 @@ import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";
 import { ExportButtons } from "./ExportButtons";
 import { LocalLibrary } from "./LocalLibrary";
+import { SaveToAccount } from "./SaveToAccount";
 import "../lecture/lecture.css";
 import "./local.css";
 
@@ -135,7 +136,7 @@ export function LocalPage() {
     <div className="local-page">
       <header className="local-page__header">
         <h1>Обработка на устройстве</h1>
-        <p>Расшифруйте запись в браузере. Файл и текст не отправляются на сервер.</p>
+        <p>Расшифруйте запись в браузере. Файл остаётся на устройстве. Текст можно сохранить в аккаунт.</p>
       </header>
       <div className="local-page__layout">
         <section className="local-setup" aria-labelledby="local-setup-title">
@@ -176,6 +177,7 @@ export function LocalPage() {
             <Transcript segments={segments} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
+          {stage === "done" && saved && <SaveToAccount key={saved.id} lecture={saved} />}
           {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
           {stage === "done" && saveError && <p className="local-error" role="alert">Не удалось сохранить результат в браузере. Он доступен только до закрытия страницы.</p>}
         </section>
