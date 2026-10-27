@@ -797,6 +797,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/{token}/lectures/{lecture_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Course Lecture */
+        get: operations["get_public_course_lecture_api_v1_public__token__lectures__lecture_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/{token}/complaints": {
         parameters: {
             query?: never;
@@ -988,6 +1005,8 @@ export interface components {
         ComplaintIn: {
             /** Reason */
             reason: string;
+            /** Lecture Id */
+            lecture_id?: string | null;
         };
         /** CourseIn */
         CourseIn: {
@@ -1407,8 +1426,6 @@ export interface components {
             duration_sec: number | null;
             /** Processed Locally */
             processed_locally: boolean;
-            /** Share Token */
-            share_token: string | null;
         };
         /** PublicShareOut */
         PublicShareOut: {
@@ -3701,6 +3718,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicShareOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_course_lecture_api_v1_public__token__lectures__lecture_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLectureOut"];
                 };
             };
             /** @description Validation Error */

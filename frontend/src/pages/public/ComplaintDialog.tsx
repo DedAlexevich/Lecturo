@@ -21,14 +21,15 @@ function complaintError(error: Error) {
 
 type ComplaintDialogProps = {
   token: string;
+  lectureId: string;
   title: string;
   onClose: () => void;
 };
 
-export function ComplaintDialog({ token, title, onClose }: ComplaintDialogProps) {
+export function ComplaintDialog({ token, lectureId, title, onClose }: ComplaintDialogProps) {
   const formId = useId();
   const toast = useToast();
-  const complaint = useComplaint(token);
+  const complaint = useComplaint(token, lectureId);
   const [reason, setReason] = useState("");
   const [touched, setTouched] = useState(false);
   const empty = reason.trim() === "";

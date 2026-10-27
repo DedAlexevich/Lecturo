@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -54,12 +54,25 @@ async def get_active_share(session: AsyncSession, token: str) -> ShareLink:
     return share
 
 
+def shared_with(token: str) -> ColumnElement[bool]:
+    return (
+        select(ShareLink.id)
+        .outerjoin(course_lectures, course_lectures.c.course_id == ShareLink.course_id)
+        .where(
+            ShareLink.token == token,
+            ShareLink.revoked_at.is_(None),
+            or_(ShareLink.lecture_id == Lecture.id, course_lectures.c.lecture_id == Lecture.id),
+        )
+        .exists()
+    )
+
+
 async def public_lecture(
     session: AsyncSession, lecture_id: uuid.UUID, token: str
 ) -> PublicLectureOut:
     lecture = await session.scalar(
         select(Lecture)
-        .where(Lecture.id == lecture_id)
+        .where(Lecture.id == lecture_id, shared_with(token))
         .options(
             selectinload(Lecture.segments),
             selectinload(Lecture.chapters),
@@ -85,36 +98,20 @@ async def public_course(session: AsyncSession, course_id: uuid.UUID) -> PublicCo
     course = await session.get(Course, course_id)
     if course is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_NOT_FOUND)
-    rows = await session.execute(
-        select(Lecture, ShareLink.token)
+    lectures = await session.scalars(
+        select(Lecture)
         .join(course_lectures, course_lectures.c.lecture_id == Lecture.id)
-        .outerjoin(
-            ShareLink,
-            (ShareLink.lecture_id == Lecture.id)
-            & (ShareLink.owner_id == course.owner_id)
-            & ShareLink.revoked_at.is_(None),
-        )
         .where(
             course_lectures.c.course_id == course_id,
             Lecture.status == LectureStatus.ready,
         )
         .order_by(course_lectures.c.position, course_lectures.c.added_at)
     )
-    lectures: dict[uuid.UUID, PublicLectureSummary] = {}
-    for lecture, token in rows:
-        if lecture.id not in lectures:
-            lectures[lecture.id] = PublicLectureSummary(
-                id=lecture.id,
-                title=lecture.title,
-                duration_sec=lecture.duration_sec,
-                processed_locally=lecture.processed_locally,
-                share_token=token,
-            )
     return PublicCourseOut(
         id=course.id,
         title=course.title,
         description=course.description,
-        lectures=list(lectures.values()),
+        lectures=[PublicLectureSummary.model_validate(lecture) for lecture in lectures],
     )
 
 
@@ -190,6 +187,14 @@ async def get_public(token: str, session: SessionDep) -> PublicShareOut:
     return PublicShareOut(course=await public_course(session, share.course_id))
 
 
+@router.get("/public/{token}/lectures/{lecture_id}")
+async def get_public_course_lecture(
+    token: str, lecture_id: uuid.UUID, session: SessionDep
+) -> PublicLectureOut:
+    await get_active_share(session, token)
+    return await public_lecture(session, lecture_id, token)
+
+
 @router.post("/public/{token}/complaints", status_code=status.HTTP_204_NO_CONTENT)
 async def complain(token: str, body: ComplaintIn, request: Request, session: SessionDep) -> None:
     settings = get_settings()
@@ -201,11 +206,12 @@ async def complain(token: str, body: ComplaintIn, request: Request, session: Ses
         settings.complaints_rate_window_seconds,
     )
     share = await get_active_share(session, token)
-    if share.lecture_id is None:
+    target_id = share.lecture_id or body.lecture_id
+    if target_id is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Выберите лекцию для жалобы")
     lecture_id = await session.scalar(
         select(Lecture.id).where(
-            Lecture.id == share.lecture_id, Lecture.status == LectureStatus.ready
+            Lecture.id == target_id, Lecture.status == LectureStatus.ready, shared_with(token)
         )
     )
     if lecture_id is None:

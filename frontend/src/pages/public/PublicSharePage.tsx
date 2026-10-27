@@ -4,7 +4,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { PublicCourse } from "./PublicCourse";
 import { PublicLecture } from "./PublicLecture";
-import { fetchPublicShare, usePublicShare } from "./queries";
+import { fetchPublicCourseLecture, fetchPublicShare, usePublicCourseLecture, usePublicShare } from "./queries";
 import "../lecture/lecture.css";
 import "./public.css";
 
@@ -30,26 +30,28 @@ function Unavailable() {
   );
 }
 
-export function PublicSharePage() {
-  const { token = "" } = useParams();
+function ShareFailure({ error, retrying, onRetry }: { error: Error; retrying: boolean; onRetry: () => void }) {
+  if (error instanceof ApiError && (error.status === 404 || error.status === 422)) {
+    return <Unavailable />;
+  }
+  return (
+    <div className="public">
+      <div className="lecture__error public__error" role="alert">
+        <p>Не получилось открыть страницу. Проверьте соединение и попробуйте ещё раз.</p>
+        <Button variant="secondary" size="sm" onClick={onRetry} loading={retrying}>
+          Повторить
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SharedMaterial({ token }: { token: string }) {
   const share = usePublicShare(token);
 
   if (share.isPending) return <PublicSkeleton />;
-
   if (share.isError) {
-    if (share.error instanceof ApiError && (share.error.status === 404 || share.error.status === 422)) {
-      return <Unavailable />;
-    }
-    return (
-      <div className="public">
-        <div className="lecture__error public__error" role="alert">
-          <p>Не получилось открыть страницу. Проверьте соединение и попробуйте ещё раз.</p>
-          <Button variant="secondary" size="sm" onClick={() => void share.refetch()} loading={share.isFetching}>
-            Повторить
-          </Button>
-        </div>
-      </div>
-    );
+    return <ShareFailure error={share.error} retrying={share.isFetching} onRetry={() => void share.refetch()} />;
   }
 
   const { lecture, course } = share.data;
@@ -63,6 +65,30 @@ export function PublicSharePage() {
       />
     );
   }
-  if (course) return <PublicCourse course={course} />;
+  if (course) return <PublicCourse token={token} course={course} />;
   return <Unavailable />;
+}
+
+function CourseLecture({ token, lectureId }: { token: string; lectureId: string }) {
+  const lecture = usePublicCourseLecture(token, lectureId);
+
+  if (lecture.isPending) return <PublicSkeleton />;
+  if (lecture.isError) {
+    return <ShareFailure error={lecture.error} retrying={lecture.isFetching} onRetry={() => void lecture.refetch()} />;
+  }
+
+  return (
+    <PublicLecture
+      key={`${token}/${lectureId}`}
+      token={token}
+      lecture={lecture.data}
+      courseLink={`/s/${token}`}
+      refreshVideo={async () => (await fetchPublicCourseLecture(token, lectureId)).video_url}
+    />
+  );
+}
+
+export function PublicSharePage() {
+  const { token = "", lectureId } = useParams();
+  return lectureId ? <CourseLecture token={token} lectureId={lectureId} /> : <SharedMaterial token={token} />;
 }

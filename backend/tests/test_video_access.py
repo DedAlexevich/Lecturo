@@ -3,10 +3,10 @@ import uuid
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 
-from sqlalchemy import update
+from sqlalchemy import insert, update
 
 from app.core.db import SessionLocal
-from app.models import Lecture, LectureStatus, ShareLink, SourceType
+from app.models import Course, Lecture, LectureStatus, ShareLink, SourceType, course_lectures
 from app.pipeline import video_access
 from app.pipeline.video_access import signed_video_url, video_signature
 
@@ -137,3 +137,24 @@ async def test_malformed_expiry_forbidden(client, user):
         params={"expires": "abc", "signature": "x"},
     )
     assert response.status_code == 403
+
+
+async def test_course_share_opens_video(client, user):
+    lecture_id = await create_lecture(user.id)
+    other_id = await create_lecture(user.id)
+    async with SessionLocal() as session:
+        course = Course(owner_id=user.id, title="Матан")
+        session.add(course)
+        await session.flush()
+        await session.execute(
+            insert(course_lectures).values(course_id=course.id, lecture_id=lecture_id, position=0)
+        )
+        session.add(ShareLink(token="course-token", owner_id=user.id, course_id=course.id))
+        await session.commit()
+
+    assert (
+        await client.get(access_path(signed_video_url(lecture_id, "course-token")))
+    ).status_code == 200
+    assert (
+        await client.get(access_path(signed_video_url(other_id, "course-token")))
+    ).status_code == 403

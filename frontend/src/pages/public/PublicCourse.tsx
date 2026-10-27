@@ -6,7 +6,7 @@ import { LocalBadge } from "./LocalBadge";
 
 type Course = components["schemas"]["PublicCourseOut"];
 
-export function PublicCourse({ course }: { course: Course }) {
+export function PublicCourse({ token, course }: { token: string; course: Course }) {
   return (
     <article className="public-course">
       <header className="public-course__head">
@@ -24,16 +24,11 @@ export function PublicCourse({ course }: { course: Course }) {
           {course.lectures.map((lecture) => (
             <li key={lecture.id} className="public-course__item">
               <div className="public-course__name">
-                {lecture.share_token ? (
-                  <Link to={`/s/${lecture.share_token}`} className="public-course__link">
-                    {lecture.title}
-                  </Link>
-                ) : (
-                  <span>{lecture.title}</span>
-                )}
+                <Link to={`/s/${token}/${lecture.id}`} className="public-course__link">
+                  {lecture.title}
+                </Link>
                 <div className="public__meta">
                   {lecture.duration_sec !== null && <span>{formatDuration(lecture.duration_sec)}</span>}
-                  {!lecture.share_token && <span>Владелец не открыл эту лекцию</span>}
                   {lecture.processed_locally && <LocalBadge />}
                 </div>
               </div>
