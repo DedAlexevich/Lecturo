@@ -1685,6 +1685,9 @@
           "200": {
             "description": "Successful Response"
           },
+          "429": {
+            "description": "Слишком много выгрузок PDF"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
