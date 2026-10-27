@@ -3,6 +3,7 @@ import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { useMe } from "../../app/useMe";
+import { createId } from "../../lib/id";
 import { validateEmail } from "../auth/validation";
 import { ReceiptEmailField } from "../../features/consent/ReceiptEmailField";
 import { Button } from "../../ui/Button";
@@ -87,7 +88,7 @@ function PurchaseForm({
   const [showConsentError, setShowConsentError] = useState(false);
   const [receiptEmail, setReceiptEmail] = useState("");
   const [receiptEmailError, setReceiptEmailError] = useState<string>();
-  const idempotenceKey = useRef(crypto.randomUUID());
+  const idempotenceKey = useRef(createId());
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
   const queryClient = useQueryClient();
@@ -136,7 +137,7 @@ function PurchaseForm({
 
   const choose = (next: string) => {
     setCode(next);
-    idempotenceKey.current = crypto.randomUUID();
+    idempotenceKey.current = createId();
     createPayment.reset();
   };
 
@@ -158,7 +159,7 @@ function PurchaseForm({
       },
       {
         onSuccess: (payment) => {
-          idempotenceKey.current = crypto.randomUUID();
+          idempotenceKey.current = createId();
           if (payment.confirmation_url && !getWebApp()) openExternalLink(payment.confirmation_url);
         },
       },
@@ -208,7 +209,7 @@ function PurchaseForm({
             onChange={(value) => {
               setReceiptEmail(value);
               setReceiptEmailError(undefined);
-              idempotenceKey.current = crypto.randomUUID();
+              idempotenceKey.current = createId();
               createPayment.reset();
             }}
           />

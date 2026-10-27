@@ -93,6 +93,8 @@ class OpenAICompatibleLLM:
             "LLM",
         )
         self.model = settings.llm_model
+        self.max_tokens = settings.llm_max_tokens
+        options.setdefault("timeout", settings.llm_timeout)
         self.client = OpenAICompatibleClient(
             settings.llm_base_url, settings.llm_api_key, transport=transport, **options
         )
@@ -104,14 +106,21 @@ class OpenAICompatibleLLM:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
+            "max_tokens": self.max_tokens,
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         response = await self.client.post("/chat/completions", body)
         try:
-            content = response["choices"][0]["message"]["content"]
+            choice = response["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
             raise OpenAICompatibleError("/chat/completions: в ответе нет текста") from error
+        if choice.get("finish_reason") == "length":
+            raise OpenAICompatibleError(
+                f"/chat/completions: ответ обрезан на лимите {self.max_tokens} токенов, "
+                "увеличьте LLM_MAX_TOKENS или сократите запрос"
+            )
         if not content:
             raise OpenAICompatibleError("/chat/completions: модель вернула пустой ответ")
         return content

@@ -4,67 +4,93 @@
 	}
 }
 
-{$SITE_ADDRESS}
-
-encode gzip
-
-log
-
-@tusd_hooks path /api/v1/uploads/hooks /api/v1/uploads/hooks/*
-handle @tusd_hooks {
-	respond 404
+{$WWW_SITE_ADDRESS:http://www.localhost} {
+	redir https://{$SITE_ADDRESS}{uri} permanent
 }
 
-handle /api/* {
-	reverse_proxy api:8000
-}
+{$SITE_ADDRESS} {
+	encode zstd gzip
 
-handle /files/* {
-	request_body {
-		max_size 2GB
+	log
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), geolocation=()"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-/XtYw6O6wuEy6qd9lMqE3Ebg6vBYo367lJ+IZQQr0f0=' https://telegram.org https://www.youtube.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; worker-src 'self' blob:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://rutube.ru https://vk.com https://vk.ru https://vkvideo.ru https://oauth.telegram.org; frame-ancestors 'self' https://web.telegram.org; object-src 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+		-Via
+		defer
 	}
-	reverse_proxy tusd:8080
-}
 
-@media path_regexp media ^/media/([0-9a-f-]{36})\.mp4$
-handle @media {
-	forward_auth api:8000 {
-		uri /api/v1/lectures/{re.media.1}/video-access?{query}
+	@tusd_hooks path /api/v1/uploads/hooks /api/v1/uploads/hooks/*
+	handle @tusd_hooks {
+		respond 404
 	}
-	uri strip_prefix /media
-	root * /srv/storage/videos
-	file_server
-}
 
-handle /media/* {
-	respond 404
-}
-
-@zoomer_listing path /zoomer/
-handle @zoomer_listing {
-	header Cache-Control "no-cache"
-	root * /srv/zoomer
-	uri strip_prefix /zoomer
-	file_server browse {
-		hide .*
+	@api_docs {
+		path /api/docs* /api/redoc* /api/openapi.json
+		expression `{env.API_DOCS} == "off"`
 	}
-}
-
-@zoomer_clip path_regexp (?i)^/zoomer/[^/]+\.(mp4|webm)$
-handle @zoomer_clip {
-	header Cache-Control "public, max-age=86400"
-	root * /srv/zoomer
-	uri strip_prefix /zoomer
-	file_server {
-		hide .*
+	handle @api_docs {
+		respond 404
 	}
-}
 
-@zoomer_other path /zoomer /zoomer/*
-handle @zoomer_other {
-	respond 404
-}
+	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy api:8000
+	}
 
-handle {
-	reverse_proxy frontend:80
+	handle /files/* {
+		request_body {
+			max_size 2GB
+		}
+		reverse_proxy tusd:8080
+	}
+
+	@media path_regexp media ^/media/([0-9a-f-]{36})\.mp4$
+	handle @media {
+		forward_auth api:8000 {
+			uri /api/v1/lectures/{re.media.1}/video-access?{query}
+		}
+		uri strip_prefix /media
+		root * /srv/storage/videos
+		file_server
+	}
+
+	handle /media/* {
+		respond 404
+	}
+
+	@zoomer_listing path /zoomer/
+	handle @zoomer_listing {
+		header Cache-Control "no-cache"
+		root * /srv/zoomer
+		uri strip_prefix /zoomer
+		file_server browse {
+			hide .*
+		}
+	}
+
+	@zoomer_clip path_regexp (?i)^/zoomer/[^/]+\.(mp4|webm)$
+	handle @zoomer_clip {
+		header Cache-Control "public, max-age=86400"
+		root * /srv/zoomer
+		uri strip_prefix /zoomer
+		file_server {
+			hide .*
+		}
+	}
+
+	@zoomer_other path /zoomer /zoomer/*
+	handle @zoomer_other {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
 }
