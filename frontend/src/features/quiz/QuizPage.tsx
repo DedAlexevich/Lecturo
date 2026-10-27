@@ -154,6 +154,7 @@ export function QuizPage() {
   const title = lecture.data?.title;
   const subscriptionNeeded = needsSubscription(quiz.error) || needsSubscription(create.error);
   const createError = create.error && !subscriptionNeeded ? quizErrorOf(create.error) : null;
+  const rebuildError = step?.status === "failed" ? (step.error ?? "Новые вопросы не получилось составить.") : null;
 
   let body;
   if (lecture.isPending || (ready && quiz.isPending)) {
@@ -175,10 +176,13 @@ export function QuizPage() {
   } else if (quiz.data && quiz.data.questions.length > 0) {
     body = (
       <>
-        {createError && (
-          <p className="quiz-start__error" role="alert">
-            {createError}
-          </p>
+        {(createError ?? rebuildError) && (
+          <div className="quiz-error" role="alert">
+            <p>{createError ?? rebuildError}</p>
+            <Button variant="secondary" size="sm" onClick={start} loading={create.isPending}>
+              Попробовать ещё раз
+            </Button>
+          </div>
         )}
         <QuizRunner
           key={quiz.dataUpdatedAt}
@@ -191,7 +195,15 @@ export function QuizPage() {
       </>
     );
   } else {
-    body = <QuizStart step={step} empty={quiz.data !== null && quiz.data !== undefined} onStart={start} starting={create.isPending} error={createError} />;
+    body = (
+      <QuizStart
+        step={step}
+        empty={quiz.data !== null && quiz.data !== undefined}
+        onStart={start}
+        starting={create.isPending}
+        error={createError}
+      />
+    );
   }
 
   return (
