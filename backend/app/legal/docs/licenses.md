@@ -18,7 +18,7 @@
 
 1.1.6. **Локальный режим** — обработка Материалов на устройстве Пользователя в браузере без передачи Материалов на серверы Сервиса.
 
-1.1.7. **Компонент** — программа для ЭВМ, библиотека, шрифт или модель распознавания речи, исключительное право на которые принадлежит третьему лицу и которые передаются в браузер Пользователя при работе Сервиса.
+1.1.7. **Компонент** — программа для ЭВМ, библиотека, шрифт, модель распознавания речи или языковая модель, исключительное право на которые принадлежит третьему лицу и которые передаются в браузер Пользователя при работе Сервиса.
 
 1.1.8. **Открытая лицензия** — лицензионный договор, условия которого доступны неопределённому кругу лиц и по которому правообладатель предоставляет право использования Компонента (статья 1286.1 ГК РФ).
 
@@ -114,6 +114,12 @@
 - Правообладатель: `Copyright (c) Microsoft Corporation.`
 - Исходный код: [github.com/microsoft/onnxruntime, коммит 8d85527a010e294a26b274749f74294b2a32cec5](https://github.com/microsoft/onnxruntime/tree/8d85527a010e294a26b274749f74294b2a32cec5), [коммит 2a43ec07e67df9263c7c56c15da76cc7f74d7b32](https://github.com/microsoft/onnxruntime/tree/2a43ec07e67df9263c7c56c15da76cc7f74d7b32), [тег v1.30.0](https://github.com/microsoft/onnxruntime/tree/v1.30.0). Сведения о компонентах третьих лиц, включённых в ONNX Runtime, приведены в файле [ThirdPartyNotices.txt](https://github.com/microsoft/onnxruntime/blob/8d85527a010e294a26b274749f74294b2a32cec5/ThirdPartyNotices.txt).
 
+3.2.6. **WebLLM** версии 0.2.86 (пакет `@mlc-ai/web-llm`) — библиотека запуска языковой модели, которая в Локальном режиме составляет конспект и главы по расшифровке. В неё включены среда выполнения **Apache TVM** (пакет `@mlc-ai/web-runtime` версии 0.28.0-dev0), библиотека токенизации **tokenizers-cpp** (пакет `@mlc-ai/web-tokenizers` версии 0.1.6), библиотека ограничения формата ответа **XGrammar** (пакет `@mlc-ai/web-xgrammar` версии 0.1.27), библиотеки **loglevel** версии 1.9.2 и **tslib** версии 2.8.1.
+
+- Открытые лицензии: WebLLM, Apache TVM, tokenizers-cpp, XGrammar — Apache License 2.0 (Apache-2.0); loglevel — MIT; tslib — BSD Zero Clause License (0BSD).
+- Правообладатели: WebLLM, tokenizers-cpp, XGrammar — авторы и участники проекта MLC (mlc-ai); Apache TVM — The Apache Software Foundation; loglevel — `Copyright (c) 2013 Tim Perry`; tslib — `Copyright (c) Microsoft Corporation.`
+- Исходный код: [github.com/mlc-ai/web-llm, тег v0.2.86](https://github.com/mlc-ai/web-llm/tree/v0.2.86) (коммит c42c36670cfc426c75e53ee297443882f1ae8d84), [github.com/apache/tvm](https://github.com/apache/tvm), [пакет @mlc-ai/web-runtime 0.28.0-dev0](https://www.npmjs.com/package/@mlc-ai/web-runtime/v/0.28.0-dev0), [github.com/mlc-ai/tokenizers-cpp](https://github.com/mlc-ai/tokenizers-cpp), [пакет @mlc-ai/web-tokenizers 0.1.6](https://www.npmjs.com/package/@mlc-ai/web-tokenizers/v/0.1.6), [github.com/mlc-ai/xgrammar](https://github.com/mlc-ai/xgrammar), [пакет @mlc-ai/web-xgrammar 0.1.27](https://www.npmjs.com/package/@mlc-ai/web-xgrammar/v/0.1.27), [github.com/pimterry/loglevel, тег v1.9.2](https://github.com/pimterry/loglevel/tree/v1.9.2), [github.com/microsoft/tslib, тег v2.8.1](https://github.com/microsoft/tslib/tree/v2.8.1).
+
 3.3. Модели распознавания речи загружаются браузером Пользователя с сайта huggingface.co при первом запуске Локального режима и не передаются с серверов Сервиса:
 
 3.3.1. **Whisper tiny**, **Whisper base** и **Whisper small** в формате ONNX — репозитории [onnx-community/whisper-tiny](https://huggingface.co/onnx-community/whisper-tiny), [onnx-community/whisper-base](https://huggingface.co/onnx-community/whisper-base) и [onnx-community/whisper-small](https://huggingface.co/onnx-community/whisper-small), созданные на основе моделей [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny), [openai/whisper-base](https://huggingface.co/openai/whisper-base) и [openai/whisper-small](https://huggingface.co/openai/whisper-small).
@@ -121,6 +127,15 @@
 - Открытая лицензия: программный код и веса моделей Whisper опубликованы правообладателем на условиях лицензии [MIT](https://github.com/openai/whisper/blob/main/LICENSE); в карточках моделей openai/whisper-tiny, openai/whisper-base и openai/whisper-small на сайте huggingface.co указана лицензия Apache-2.0.
 - Правообладатель: `Copyright (c) 2022 OpenAI`.
 - Версия: файлы моделей загружаются из основной ветки указанных репозиториев. На дату редакции Документа основная ветка соответствует коммитам ff4177021cc41f7db950912b73ea4fdf7d01d8e7 (whisper-tiny), 1846881b6b3a3024392c1eea3ad983695bc23925 (whisper-base) и 36050c46d777d46dc4b5f43f6d90574fc38f8732 (whisper-small).
+
+3.4. Языковая модель загружается браузером Пользователя при первом составлении конспекта в Локальном режиме и не передаётся с серверов Сервиса. Веса модели загружаются с сайта huggingface.co, библиотека модели для WebGPU — с сайта raw.githubusercontent.com:
+
+3.4.1. **Qwen3-1.7B** в формате MLC с квантованием q4f16_1 или q4f32_1 (выбирается по возможностям видеокарты устройства) — репозитории [mlc-ai/Qwen3-1.7B-q4f16_1-MLC](https://huggingface.co/mlc-ai/Qwen3-1.7B-q4f16_1-MLC) и [mlc-ai/Qwen3-1.7B-q4f32_1-MLC](https://huggingface.co/mlc-ai/Qwen3-1.7B-q4f32_1-MLC), созданные на основе модели [Qwen/Qwen3-1.7B](https://huggingface.co/Qwen/Qwen3-1.7B).
+
+- Открытая лицензия: веса модели Qwen3-1.7B опубликованы правообладателем на условиях лицензии [Apache-2.0](https://huggingface.co/Qwen/Qwen3-1.7B/blob/main/LICENSE).
+- Правообладатель: команда Qwen, Alibaba Cloud.
+- Версия: файлы весов загружаются из основной ветки указанных репозиториев. На дату редакции Документа основная ветка соответствует коммитам 80b3abcec6c3b3f5355dc0cc99cc4fb578f192bc (q4f16_1), bddd4d584cabe19113f7e4ff46fd9e73b4d3dc89 (q4f32_1) и 70d244cc86ccca08cf5af4e1e306ecf908b1ad5e (Qwen/Qwen3-1.7B).
+- Библиотеки модели для WebGPU: файлы `Qwen3-1.7B-q4f16_1_cs1k-webgpu.wasm` и `Qwen3-1.7B-q4f32_1_cs1k-webgpu.wasm` из каталога `web-llm-models/v0_2_86/base` репозитория [github.com/mlc-ai/binary-mlc-llm-libs](https://github.com/mlc-ai/binary-mlc-llm-libs/tree/00fe7a40e57e5e8eb9fef87526a4bf28ad5846c0/web-llm-models/v0_2_86/base) (на дату редакции Документа — коммит 00fe7a40e57e5e8eb9fef87526a4bf28ad5846c0), собранные проектом MLC средствами [MLC LLM](https://github.com/mlc-ai/mlc-llm) (Apache-2.0). Отдельная лицензия в репозитории библиотек не указана.
 
 ## 4. Ядро ffmpeg.wasm
 
@@ -166,6 +181,7 @@
 
 - MIT: [opensource.org/license/mit](https://opensource.org/license/mit);
 - BSD-3-Clause: [opensource.org/license/bsd-3-clause](https://opensource.org/license/bsd-3-clause);
+- BSD Zero Clause License (0BSD): [opensource.org/license/0bsd](https://opensource.org/license/0bsd);
 - ISC: [opensource.org/license/isc-license-txt](https://opensource.org/license/isc-license-txt);
 - Zlib: [opensource.org/license/zlib](https://opensource.org/license/zlib);
 - Apache License 2.0: [apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0);
