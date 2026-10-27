@@ -184,6 +184,10 @@
   gap: var(--space-1);
 }
 
+.receiptEmail {
+  max-width: 26rem;
+}
+
 .notice {
   display: flex;
   align-items: center;
