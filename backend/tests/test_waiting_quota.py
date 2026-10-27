@@ -166,10 +166,11 @@ async def test_failure_before_transcribe_returns_quota(
     assert await charged(lecture) == 0
 
 
-async def test_cancel_before_transcribe_returns_quota(
+async def test_cancel_before_transcribe_keeps_quota_for_rerun(
     user, auth_headers, client, weekly_limit, handlers, enqueued, published, monkeypatch
 ):
     lecture = await planned_lecture(user, client, auth_headers)
+    audio = tasks.HANDLERS[StepName.audio]
 
     async def cancelled(session, lecture, report):
         raise asyncio.CancelledError
@@ -178,8 +179,12 @@ async def test_cancel_before_transcribe_returns_quota(
 
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
-    assert await status_of(lecture) == LectureStatus.failed
-    assert await charged(lecture) == 0
+    assert await status_of(lecture) == LectureStatus.queued
+    assert await charged(lecture) == HOUR
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    assert await charged(lecture) == HOUR
 
 
 async def test_failure_after_transcribe_keeps_single_charge_on_retry(
@@ -202,6 +207,7 @@ async def test_failure_after_transcribe_keeps_single_charge_on_retry(
 
 async def test_cancel_after_transcribe_keeps_charge(user, weekly_limit, handlers, monkeypatch):
     lecture = await new_lecture(user, HOUR)
+    summarize = tasks.HANDLERS[StepName.summarize]
 
     async def cancelled(session, lecture, report):
         raise asyncio.CancelledError
@@ -210,7 +216,11 @@ async def test_cancel_after_transcribe_keeps_charge(user, weekly_limit, handlers
 
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
-    assert await status_of(lecture) == LectureStatus.failed
+    assert await status_of(lecture) == LectureStatus.queued
+    assert await charged(lecture) == HOUR
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, summarize)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
     assert await charged(lecture) == HOUR
 
 
