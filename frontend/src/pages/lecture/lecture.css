@@ -572,3 +572,7 @@ button.transcript__chapter-time:focus-visible {
     transition: none;
   }
 }
+
+.summary :is(h2, h3, h4):focus {
+  outline: none;
+}

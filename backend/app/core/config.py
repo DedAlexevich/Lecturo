@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     yandex_storage_bucket: str = ""
     yandex_storage_access_key: str = ""
     yandex_storage_secret_key: str = ""
+    stt_retry_attempts: int = 5
+    stt_retry_base_seconds: float = 2.0
+    stt_retry_factor: float = 3.0
+    stt_retry_max_seconds: float = 60.0
 
     llm_provider: str = "stub"
     llm_base_url: str = "https://api.deepseek.com"

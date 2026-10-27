@@ -2,10 +2,11 @@ import asyncio
 import logging
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 
 from app.core.db import SessionLocal
-from app.models import Lecture, SearchChunk
+from app.models import Chapter, ChunkKind, Lecture, SearchChunk, Summary
+from app.pipeline.embed import load_section_chunks, to_search_chunk
 from app.pipeline.stages import ConsentMissing, require_ai_transfer
 from app.providers import get_embeddings
 from app.providers.openai_compat import OpenAICompatibleError
@@ -13,6 +14,33 @@ from app.providers.openai_compat import OpenAICompatibleError
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 32
+
+
+async def index_sections() -> int:
+    async with SessionLocal() as session:
+        lecture_ids = list(
+            await session.scalars(
+                select(Lecture.id)
+                .where(
+                    or_(
+                        exists().where(Chapter.lecture_id == Lecture.id),
+                        exists().where(Summary.lecture_id == Lecture.id, Summary.content_md != ""),
+                    ),
+                    ~exists().where(
+                        SearchChunk.lecture_id == Lecture.id,
+                        SearchChunk.kind != ChunkKind.transcript,
+                    ),
+                )
+                .order_by(Lecture.id)
+            )
+        )
+        total = 0
+        for lecture_id in lecture_ids:
+            chunks = await load_section_chunks(session, lecture_id)
+            session.add_all(to_search_chunk(lecture_id, chunk) for chunk in chunks)
+            await session.commit()
+            total += len(chunks)
+    return total
 
 
 async def reindex_embeddings() -> int:
@@ -59,5 +87,11 @@ async def reindex_lecture(embeddings, lecture_id: uuid.UUID) -> int:
         return len(chunks)
 
 
+async def reindex() -> tuple[int, int]:
+    return await index_sections(), await reindex_embeddings()
+
+
 if __name__ == "__main__":
-    print(f"Пересчитано фрагментов: {asyncio.run(reindex_embeddings())}")
+    added, embedded = asyncio.run(reindex())
+    print(f"Добавлено фрагментов глав и конспекта: {added}")
+    print(f"Пересчитано фрагментов: {embedded}")

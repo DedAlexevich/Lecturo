@@ -2,7 +2,16 @@ import pytest
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
-from app.models import EMBEDDING_DIM, Lecture, SearchChunk, SourceType, TranscriptSegment
+from app.models import (
+    EMBEDDING_DIM,
+    Chapter,
+    ChunkKind,
+    Lecture,
+    SearchChunk,
+    SourceType,
+    Summary,
+    TranscriptSegment,
+)
 from app.pipeline import embed
 from app.pipeline.embed import split_into_chunks
 from app.providers.stub import StubEmbeddings
@@ -103,7 +112,7 @@ async def load_chunks(lecture_id) -> list[SearchChunk]:
         rows = await session.scalars(
             select(SearchChunk)
             .where(SearchChunk.lecture_id == lecture_id)
-            .order_by(SearchChunk.start)
+            .order_by(SearchChunk.start, SearchChunk.id)
         )
         return list(rows)
 
@@ -161,3 +170,60 @@ async def test_embed_without_segments_clears_chunks(user, embeddings):
 
     assert await load_chunks(lecture.id) == []
     assert embeddings.batches == [[" ".join(f"слово {i}" for i in range(6))]]
+
+
+def test_summary_chunks_follow_headings():
+    content = "Вводная часть.\n\n## Пределы\n\n**Предел** функции.\n\n### Ряды\n- `ряд` Тейлора"
+
+    chunks = embed.summary_chunks(content)
+
+    assert [(c.section, c.text) for c in chunks] == [
+        (None, "Вводная часть."),
+        (0, "Пределы\nПредел функции."),
+        (1, "Ряды\n- ряд Тейлора"),
+    ]
+    assert all(c.kind == ChunkKind.summary and c.start is None for c in chunks)
+
+
+def test_long_summary_section_is_split(monkeypatch):
+    monkeypatch.setattr(embed, "MAX_SECTION_CHARS", 20)
+
+    chunks = embed.summary_chunks("## Тема\nпервая строка\nвторая строка")
+
+    assert [c.text for c in chunks] == ["Тема\nпервая строка", "вторая строка"]
+    assert {c.section for c in chunks} == {0}
+
+
+async def test_embed_indexes_chapters_and_summary(user, embeddings):
+    lecture = await create_lecture(user, even_bounds(120, 10))
+    async with SessionLocal() as session:
+        session.add_all(
+            [
+                Chapter(
+                    lecture_id=lecture.id,
+                    idx=0,
+                    start=0,
+                    end=60,
+                    title="Пределы",
+                    summary="Определение предела",
+                ),
+                Chapter(lecture_id=lecture.id, idx=1, start=60, end=120, title="Ряды"),
+                Summary(lecture_id=lecture.id, content_md="## Пределы\nТекст\n## Ряды\nЕщё"),
+            ]
+        )
+        await session.commit()
+
+    await run_embed(lecture.id)
+
+    chunks = await load_chunks(lecture.id)
+    by_kind = {kind: [c for c in chunks if c.kind == kind] for kind in ChunkKind}
+    assert len(by_kind[ChunkKind.transcript]) == 2
+    assert [(c.start, c.end, c.text) for c in by_kind[ChunkKind.chapter]] == [
+        (0, 60, "Пределы\nОпределение предела"),
+        (60, 120, "Ряды"),
+    ]
+    assert sorted((c.section, c.text) for c in by_kind[ChunkKind.summary]) == [
+        (0, "Пределы\nТекст"),
+        (1, "Ряды\nЕщё"),
+    ]
+    assert all(c.embedding is not None for c in chunks)

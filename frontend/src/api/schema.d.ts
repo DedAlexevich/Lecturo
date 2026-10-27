@@ -996,6 +996,11 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /**
+         * ChunkKind
+         * @enum {string}
+         */
+        ChunkKind: "transcript" | "chapter" | "summary";
         /** ComplaintIn */
         ComplaintIn: {
             /** Reason */
@@ -1509,10 +1514,13 @@ export interface components {
             lecture_id: string;
             /** Lecture Title */
             lecture_title: string;
+            kind: components["schemas"]["ChunkKind"];
             /** Start */
-            start: number;
+            start: number | null;
             /** End */
-            end: number;
+            end: number | null;
+            /** Section */
+            section: number | null;
             /** Text */
             text: string;
             /** Score */

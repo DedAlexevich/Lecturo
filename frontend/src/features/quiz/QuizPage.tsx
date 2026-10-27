@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
@@ -16,6 +16,7 @@ import {
   useQuizStep,
   useRefreshQuiz,
 } from "./queries";
+import { hasMomentPlayer, MomentDialog } from "./MomentDialog";
 import { QuizRunner } from "./QuizRunner";
 import "./quiz.css";
 
@@ -122,6 +123,7 @@ export function QuizPage() {
   const create = useCreateQuiz(id);
   const refreshQuiz = useRefreshQuiz(id);
   const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const [moment, setMoment] = useState<number | null>(null);
 
   const step = stepQuery.data ?? null;
   const building = isBuilding(step);
@@ -193,7 +195,9 @@ export function QuizPage() {
           duration={lecture.data?.duration_sec ?? null}
           onRegenerate={start}
           regenerating={create.isPending}
+          onMoment={lecture.data && hasMomentPlayer(lecture.data) ? setMoment : undefined}
         />
+        {lecture.data && <MomentDialog lecture={lecture.data} seconds={moment} onClose={() => setMoment(null)} />}
       </>
     );
   } else {
