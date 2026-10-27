@@ -1,11 +1,15 @@
 export const DB_NAME = "lecturo-local";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 export const LECTURES_STORE = "lectures";
+export const MEDIA_STORE = "media";
 
 function migrate(db: IDBDatabase, oldVersion: number) {
   if (oldVersion < 1) {
     const store = db.createObjectStore(LECTURES_STORE, { keyPath: "id" });
     store.createIndex("createdAt", "createdAt");
+  }
+  if (oldVersion < 2) {
+    db.createObjectStore(MEDIA_STORE, { keyPath: "id" });
   }
 }
 
