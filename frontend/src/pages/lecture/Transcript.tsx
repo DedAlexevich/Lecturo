@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { components } from "../../api/schema";
-import { findActiveSegment, formatTimecode } from "./time";
+import { formatTimecode } from "../../lib/timecode";
+import { findActiveSegment } from "./time";
 
 export type TranscriptSegment = components["schemas"]["SegmentOut"];
 

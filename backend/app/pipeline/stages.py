@@ -6,13 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Lecture, TranscriptSegment, User
 from app.pipeline.runner import Report
 from app.providers import get_speech_to_text
-from app.services.consents import ai_transfer_given
+from app.services.consents import AI_TRANSFER_REQUIRED, ai_transfer_given
 from app.services.quota import QuotaExceeded, charge_lecture
-
-AI_TRANSFER_REQUIRED = (
-    "Нет действующего согласия на передачу данных провайдерам ИИ: "
-    "оно отозвано или обновилась редакция. Дайте согласие заново и повторите обработку"
-)
 
 
 class ConsentMissing(Exception):

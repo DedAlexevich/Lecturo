@@ -204,7 +204,7 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
             "Не удалось пережать видео",
         )
         lecture.video_path = str(target)
-        owner = await session.get(User, lecture.owner_id)
+        owner = await session.get(User, lecture.owner_id, with_for_update=True)
         now = datetime.now(UTC)
         days = await quota.video_retention_days(session, owner, now=now, settings=settings)
         lecture.video_expires_at = now + timedelta(days=days)

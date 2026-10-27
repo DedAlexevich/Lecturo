@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from redis.exceptions import RedisError
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.models import (
     Lecture,
     LectureStatus,
     ProcessingStep,
+    ShareLink,
     SourceType,
     StepStatus,
     course_lectures,
@@ -21,6 +22,7 @@ from app.models import (
 from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
 from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture
+from app.pipeline.video_access import is_valid_signature, signed_video_url
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -31,10 +33,12 @@ from app.schemas.lecture import (
 )
 from app.services import quota
 from app.services.account import lecture_files, remove_files
+from app.services.consents import require_ai_transfer_consent
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
+VIDEO_FORBIDDEN = "Нет доступа к видео"
 
 
 async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
@@ -74,12 +78,35 @@ async def get_lecture(
     )
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    video_url = f"/media/{lecture.id}.mp4" if lecture.video_path else None
+    video_url = signed_video_url(lecture.id) if lecture.video_path else None
     return LectureDetail.model_validate(lecture).model_copy(update={"video_url": video_url})
+
+
+@router.get("/{lecture_id}/video-access")
+async def video_access(
+    lecture_id: uuid.UUID,
+    session: SessionDep,
+    expires: str = "",
+    signature: str = "",
+    share: str | None = None,
+) -> Response:
+    if not expires.isdecimal() or not is_valid_signature(
+        lecture_id, int(expires), signature, share
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    query = select(Lecture.id).where(Lecture.id == lecture_id, Lecture.video_path.is_not(None))
+    if share is not None:
+        query = query.join(ShareLink, ShareLink.lecture_id == Lecture.id).where(
+            ShareLink.token == share, ShareLink.revoked_at.is_(None)
+        )
+    if await session.scalar(query) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    return Response(status_code=status.HTTP_200_OK)
 
 
 @router.post("/link", status_code=status.HTTP_201_CREATED)
 async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> LectureOut:
+    require_ai_transfer_consent(user)
     await session.commit()
     url = str(body.url)
     try:

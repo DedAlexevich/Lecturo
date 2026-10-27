@@ -18,6 +18,8 @@ dependencies = [
     "redis>=5.2",
     "httpx>=0.28",
     "yt-dlp>=2024.11.18",
+    "weasyprint>=66",
+    "markdown-it-py>=3.0",
 ]
 
 [project.optional-dependencies]

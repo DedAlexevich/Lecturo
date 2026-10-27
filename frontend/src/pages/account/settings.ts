@@ -7,6 +7,7 @@ import { meQueryKey } from "../../app/useMe";
 export type Me = components["schemas"]["UserOut"];
 export type Provider = components["schemas"]["IdentityOut"]["provider"];
 export type TelegramUser = components["schemas"]["TelegramLoginIn"];
+export type TelegramLink = components["schemas"]["TelegramLinkIn"];
 
 type Result<T> = { data?: T; error?: unknown; response: Response };
 
@@ -63,7 +64,7 @@ export function useChangePassword() {
 }
 
 export function useLinkTelegram() {
-  return useMeMutation(async (body: TelegramUser) =>
+  return useMeMutation(async (body: TelegramLink) =>
     unwrap(await api.POST("/api/v1/me/identities/telegram", { body })),
   );
 }

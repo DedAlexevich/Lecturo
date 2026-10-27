@@ -18,6 +18,7 @@ from app.models import (
 )
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import LectureOut, LocalResultIn
+from app.services.consents import require_ai_transfer_consent
 from app.services.local_validation import LocalResultInvalid, validate_local_result
 from app.services.rate_limit import enforce_rate_limit
 
@@ -30,6 +31,7 @@ QUOTA_WINDOW = timedelta(days=7)
 async def submit_local_result(
     body: LocalResultIn, user: CurrentUser, session: SessionDep
 ) -> LectureOut:
+    require_ai_transfer_consent(user)
     settings = get_settings()
 
     await enforce_rate_limit(

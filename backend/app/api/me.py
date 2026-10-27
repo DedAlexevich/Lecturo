@@ -8,6 +8,7 @@ from app.schemas.user import (
     EmailIdentityIn,
     PasswordChangeIn,
     ProfileUpdateIn,
+    TelegramLinkIn,
     TelegramLoginIn,
     UserOut,
     VkCallbackIn,
@@ -23,7 +24,7 @@ from app.services.account import (
     update_display_name,
 )
 from app.services.rate_limit import enforce_rate_limit
-from app.services.telegram_auth import verify_login_widget
+from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
 from app.services.vk_auth import VkClientDep, complete_flow, start_flow
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -68,10 +69,19 @@ async def delete_me(body: AccountDeleteIn, user: CurrentUser, session: SessionDe
 
 
 @router.post("/identities/telegram")
-async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: SessionDep) -> UserOut:
-    verify_login_widget(body)
-    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
-    await identities.link_telegram(session, user, body.id, profile)
+async def link_telegram(body: TelegramLinkIn, user: CurrentUser, session: SessionDep) -> UserOut:
+    if body.telegram_init_data is not None:
+        telegram_user = verify_webapp_init_data(body.telegram_init_data)
+        telegram_id = telegram_user["id"]
+        profile = {
+            key: value for key, value in telegram_user.items() if key != "id" and value is not None
+        }
+    else:
+        widget = TelegramLoginIn.model_validate(body.model_dump(exclude={"telegram_init_data"}))
+        verify_login_widget(widget)
+        telegram_id = widget.id
+        profile = widget.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
+    await identities.link_telegram(session, user, telegram_id, profile)
     return await identities.user_out(session, user)
 
 

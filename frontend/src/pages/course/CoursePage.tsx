@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError } from "../../app/queryClient";
+import { SearchPanel } from "../../features/search/SearchPanel";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { EmptyState } from "../../ui/EmptyState";
@@ -120,6 +121,7 @@ export function CoursePage() {
         <CourseHeaderSkeleton />
       )}
 
+      {items && items.length > 0 && <SearchPanel scope={{ courseId: id }} />}
       <section className="course__lectures" aria-label="Лекции курса">
         {lectures.isPending && <CourseLectureListSkeleton />}
         {lectures.isError && !items && !isMissing(lectures.error) && (
