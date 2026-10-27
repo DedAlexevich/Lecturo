@@ -1932,6 +1932,54 @@
         }
       }
     },
+    "/api/v1/lectures/{lecture_id}/regenerate-summary": {
+      "post": {
+        "tags": [
+          "lectures"
+        ],
+        "summary": "Regenerate Summary",
+        "operationId": "regenerate_summary_api_v1_lectures__lecture_id__regenerate_summary_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lecture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lecture Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectureStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lectures/{lecture_id}/quiz": {
       "post": {
         "tags": [
