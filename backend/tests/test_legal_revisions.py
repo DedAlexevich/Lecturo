@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.api import legal as legal_api
 from app.core.db import SessionLocal
@@ -68,7 +68,7 @@ def mails(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, str]]:
     async def record(to: str, subject: str, body: str) -> None:
         sent.append((to, subject, body))
 
-    monkeypatch.setattr(legal_notices, "send_mail", record)
+    monkeypatch.setattr(legal_notices, "deliver_mail", record)
     return sent
 
 
@@ -175,3 +175,51 @@ async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
     ]
     monkeypatch.setattr(legal_api, "today", lambda: date(2026, 11, 11))
     assert (await client.get("/api/v1/legal/updates")).json() == []
+
+
+async def test_failed_email_is_retried_later_and_limited(people, monkeypatch):
+    attempts: list[str] = []
+
+    async def broken(to: str, subject: str, body: str) -> None:
+        attempts.append(to)
+        raise OSError("smtp down")
+
+    monkeypatch.setattr(legal_notices, "deliver_mail", broken)
+    async with SessionLocal() as session:
+        await legal_notices.announce_revisions(session, BEFORE)
+        assert await legal_notices.send_email_notices(session) == 0
+        assert await legal_notices.send_email_notices(session) == 0
+    ours = [to for to in attempts if to == people["previous"].email]
+    assert ours == [people["previous"].email]
+    email = next(row for row in await notices(people) if row.channel == NoticeChannel.email)
+    assert email.sent_at is None
+    assert email.attempts == 1
+
+    for _ in range(legal_notices.MAX_ATTEMPTS):
+        async with SessionLocal() as session:
+            await session.execute(
+                update(LegalNotice)
+                .where(LegalNotice.id == email.id)
+                .values(attempted_at=datetime(2000, 1, 1, tzinfo=UTC))
+            )
+            await session.commit()
+            await legal_notices.send_email_notices(session)
+    ours = [to for to in attempts if to == people["previous"].email]
+    assert len(ours) == legal_notices.MAX_ATTEMPTS
+    email = next(row for row in await notices(people) if row.channel == NoticeChannel.email)
+    assert email.sent_at is None
+    assert email.attempts == legal_notices.MAX_ATTEMPTS
+
+
+async def test_email_is_not_sent_after_verification_is_lost(people, mails):
+    async with SessionLocal() as session:
+        await legal_notices.announce_revisions(session, BEFORE)
+        await session.execute(
+            update(User).where(User.id == people["previous"].id).values(email_verified_at=None)
+        )
+        await session.commit()
+        await legal_notices.send_email_notices(session)
+    assert [mail for mail in mails if mail[0] == people["previous"].email] == []
+    email = next(row for row in await notices(people) if row.channel == NoticeChannel.email)
+    assert email.sent_at is None
+    assert email.attempts == legal_notices.MAX_ATTEMPTS

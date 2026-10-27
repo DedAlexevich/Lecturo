@@ -34,6 +34,8 @@ def upgrade() -> None:
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("link", sa.String(length=512), nullable=False),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("attempts", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("attempted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.UUID(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column(
             "created_at",

@@ -1,6 +1,7 @@
-from datetime import date
+import logging
+from datetime import date, timedelta
 
-from sqlalchemy import ColumnElement, func, literal, select, true, update
+from sqlalchemy import ColumnElement, func, literal, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +11,13 @@ from app.models import LegalNotice, LegalRevision, NoticeChannel, User
 from app.schemas.legal import LegalDocOut
 from app.services.consents import ACCEPTANCES, apply_effective_revisions
 from app.services.legal import announced_documents, today
-from app.services.mail import send_mail
+from app.services.mail import deliver_mail
 
-EMAIL_BATCH = 100
+logger = logging.getLogger(__name__)
+
+EMAIL_BATCH = 20
+MAX_ATTEMPTS = 5
+RETRY_AFTER = timedelta(minutes=30)
 CHANNELS: dict[NoticeChannel, ColumnElement[bool]] = {
     NoticeChannel.email: User.email.is_not(None) & User.email_verified_at.is_not(None),
     NoticeChannel.telegram: User.telegram_chat_id.is_not(None),
@@ -89,38 +94,47 @@ async def announce_revisions(session: AsyncSession, day: date) -> int:
     return announced
 
 
+def due(channel: NoticeChannel) -> ColumnElement[bool]:
+    return (
+        (LegalNotice.channel == channel)
+        & LegalNotice.sent_at.is_(None)
+        & (LegalNotice.attempts < MAX_ATTEMPTS)
+        & (
+            LegalNotice.attempted_at.is_(None)
+            | (LegalNotice.attempted_at < func.now() - RETRY_AFTER)
+        )
+    )
+
+
 async def send_email_notices(session: AsyncSession) -> int:
     sent = 0
     while True:
-        pending = (
-            select(LegalNotice.id)
-            .where(LegalNotice.channel == NoticeChannel.email, LegalNotice.sent_at.is_(None))
-            .order_by(LegalNotice.created_at)
-            .limit(EMAIL_BATCH)
-            .with_for_update(skip_locked=True)
-        )
-        claimed = (
+        rows = (
             await session.execute(
-                update(LegalNotice)
-                .where(LegalNotice.id.in_(pending.scalar_subquery()))
-                .values(sent_at=func.now())
-                .returning(LegalNotice.user_id, LegalNotice.subject, LegalNotice.text)
+                select(LegalNotice, User.email, User.email_verified_at)
+                .join(User, User.id == LegalNotice.user_id)
+                .where(due(NoticeChannel.email))
+                .order_by(LegalNotice.attempts, LegalNotice.created_at, LegalNotice.id)
+                .limit(EMAIL_BATCH)
+                .with_for_update(of=LegalNotice, skip_locked=True)
             )
         ).all()
-        await session.commit()
-        if not claimed:
+        if not rows:
             return sent
-        emails = dict(
-            (
-                await session.execute(
-                    select(User.id, User.email).where(User.id.in_([row.user_id for row in claimed]))
-                )
-            ).all()
-        )
-        for row in claimed:
-            if emails.get(row.user_id):
-                await send_mail(emails[row.user_id], row.subject, row.text)
-                sent += 1
+        for notice, email, verified_at in rows:
+            notice.attempted_at = func.now()
+            if email is None or verified_at is None:
+                notice.attempts = MAX_ATTEMPTS
+                continue
+            try:
+                await deliver_mail(email, notice.subject, notice.text)
+            except Exception:
+                logger.exception("Не удалось отправить уведомление о новой редакции для %s", email)
+                notice.attempts += 1
+                continue
+            notice.sent_at = func.now()
+            sent += 1
+        await session.commit()
 
 
 async def process_legal_revisions(ctx: dict) -> int:

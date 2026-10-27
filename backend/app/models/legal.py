@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, CreatedAt, UUIDPk
@@ -36,3 +46,5 @@ class LegalNotice(UUIDPk, CreatedAt, Base):
     text: Mapped[str] = mapped_column(Text)
     link: Mapped[str] = mapped_column(String(512))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, server_default="0")
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
