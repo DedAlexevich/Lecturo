@@ -76,18 +76,35 @@ def test_parse_questions_accepts_valid_answer():
         "не вопрос",
     ],
 )
-def test_parse_questions_rejects_broken_question(broken):
+def test_parse_questions_drops_broken_question(broken):
     questions = [make_question(n) for n in range(8)]
     questions[3] = broken
 
-    with pytest.raises(InvalidQuiz):
+    parsed = parse_questions(answer(questions), SEGMENTS, lecture_end=100)
+
+    assert [q["question"] for q in parsed] == [f"Вопрос {n}" for n in range(8) if n != 3]
+
+
+def test_parse_questions_rejects_too_few_valid_questions():
+    questions = [make_question(n) for n in range(8)]
+    questions[0:3] = [make_question(correct_index=9)] * 3
+
+    with pytest.raises(InvalidQuiz, match="5 корректных вопросов"):
         parse_questions(answer(questions), SEGMENTS, lecture_end=100)
 
 
-@pytest.mark.parametrize("size", [7, 13])
-def test_parse_questions_checks_question_count(size):
+@pytest.mark.parametrize(("size", "expected"), [(6, 6), (12, 12), (14, 12)])
+def test_parse_questions_limits_question_count(size, expected):
+    parsed = parse_questions(
+        answer([make_question(n) for n in range(size)]), SEGMENTS, lecture_end=1000
+    )
+
+    assert len(parsed) == expected
+
+
+def test_parse_questions_rejects_five_questions():
     with pytest.raises(InvalidQuiz):
-        parse_questions(answer([make_question(n) for n in range(size)]), SEGMENTS, lecture_end=1000)
+        parse_questions(answer([make_question(n) for n in range(5)]), SEGMENTS, lecture_end=1000)
 
 
 def test_parse_questions_rejects_non_json():
@@ -105,6 +122,8 @@ def test_long_transcript_is_cut_evenly():
     assert len(excerpt) <= 8000 + 100
     assert "[0] " in excerpt
     assert "[13500] " in excerpt
+    assert "[840] " in excerpt
+    assert "[14340] " in excerpt
 
 
 LECTURE = [
@@ -333,7 +352,7 @@ async def test_quiz_fails_after_three_invalid_answers(user, monkeypatch):
     assert len(llm.requests) == 3
     step = await quiz_step(lecture.id)
     assert step.status == StepStatus.failed
-    assert "от 8 до 12 вопросов" in step.error
+    assert "в ответе нет списка вопросов" in step.error
     assert await saved_quiz(lecture.id) is None
     async with SessionLocal() as session:
         assert (await session.get(Lecture, lecture.id)).status == LectureStatus.ready
