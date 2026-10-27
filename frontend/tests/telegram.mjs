@@ -94,7 +94,7 @@ try {
       window.mock.events.themeChanged.forEach((fn) => fn());
     });
     assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue("--color-surface")), "#fafafa");
-    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click();
+    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click({ timeout: 5000 }).catch(async (e) => { console.log(platform, page.url(), await page.locator("dialog[open]").evaluateAll((d) => d.map((x) => x.outerHTML))); throw e; });
     await page.waitForURL(base + "/account");
     await page.waitForFunction(() => window.mock.visible);
     await page.locator("label.checkbox").filter({ hasText: "Принимаю условия" }).locator(".checkbox__box").click();
