@@ -677,6 +677,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat About Lecture */
+        post: operations["chat_about_lecture_api_v1_lectures__lecture_id__chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{lecture_id}/exports/{export_format}/link": {
         parameters: {
             query?: never;
@@ -739,23 +756,6 @@ export interface paths {
         get: operations["export_pdf_api_v1_lectures__lecture_id__export_pdf_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/lectures/{lecture_id}/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Chat About Lecture */
-        post: operations["chat_about_lecture_api_v1_lectures__lecture_id__chat_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3640,6 +3640,41 @@ export interface operations {
             };
         };
     };
+    chat_about_lecture_api_v1_lectures__lecture_id__chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LectureChatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectureChatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_link_api_v1_lectures__lecture_id__exports__export_format__link_post: {
         parameters: {
             query?: never;
@@ -3753,41 +3788,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    chat_about_lecture_api_v1_lectures__lecture_id__chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                lecture_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LectureChatIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LectureChatOut"];
-                };
             };
             /** @description Validation Error */
             422: {
