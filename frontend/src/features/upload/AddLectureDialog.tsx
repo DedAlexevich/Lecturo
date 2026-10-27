@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMe } from "../../app/useMe";
+import { afterStartNote } from "../telegram-notice/TelegramNotice";
 import { rememberPickedFile } from "../../local/pickedFiles";
 import { Dialog } from "../../ui/Dialog";
 import { Tabs } from "../../ui/Tabs";
@@ -26,6 +27,7 @@ export function AddLectureDialog() {
   const [pickedFile, setPickedFile] = useState<File | null>(null);
   const uploadedOriginal = useRef<File | null>(null);
   const { data: me } = useMe();
+  const telegramState = me?.telegram_notifications;
   const courses = useCourseOptions(open);
   const upload = useTusUpload(me?.id);
   const addLink = useAddLink();
@@ -92,10 +94,10 @@ export function AddLectureDialog() {
         }
         return;
       }
-      toast.show(`Запись «${name}» загружена, начинаем обработку`, "success");
+      toast.show(`Запись «${name}» загружена, начинаем обработку.${afterStartNote(telegramState)}`, "success");
       if (open && tab === "file") close();
     });
-  }, [phase, file, lectureId, open, tab, close, refreshLists, reset, resetLink, setQuotaDialogOpen, toast, waitsForQuota]);
+  }, [phase, file, lectureId, open, tab, close, refreshLists, reset, resetLink, setQuotaDialogOpen, toast, waitsForQuota, telegramState]);
 
   const startUpload = (picked: File, audioOnly: boolean) => {
     const course = selectedCourse || null;
@@ -126,7 +128,7 @@ export function AddLectureDialog() {
               setQuotaDialogOpen(true);
               return;
             }
-            toast.show(`Лекция «${lecture.title}» добавлена, начинаем обработку`, "success");
+            toast.show(`Лекция «${lecture.title}» добавлена, начинаем обработку.${afterStartNote(telegramState)}`, "success");
             close();
           },
         },
