@@ -3,8 +3,9 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
+from app.api.courses import get_own_course
 from app.core.deps import CurrentUser, SessionDep
-from app.models import Course, Lecture, SearchChunk, course_lectures
+from app.models import Lecture, SearchChunk, course_lectures
 from app.schemas.search import SearchHit
 from app.services.search import hybrid_search
 
@@ -32,11 +33,7 @@ async def search(
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
         scope = SearchChunk.lecture_id == lecture_id
     else:
-        found = await session.scalar(
-            select(Course.id).where(Course.id == course_id, Course.owner_id == user.id)
-        )
-        if found is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Курс не найден")
+        await get_own_course(session, course_id, user)
         scope = SearchChunk.lecture_id.in_(
             select(course_lectures.c.lecture_id)
             .join(Lecture, Lecture.id == course_lectures.c.lecture_id)
