@@ -17,10 +17,23 @@ export function Chapters({ chapters, currentTime, onSelect }: ChaptersProps) {
     <ol className="chapters">
       {chapters.map((chapter, index) => {
         const current = index === active;
-        const range = `${formatTimecode(chapter.start)} – ${formatTimecode(chapter.end)}`;
         return (
           <li key={`${chapter.start}-${index}`} className={current ? "chapter chapter--current" : "chapter"}>
-            <span className="chapter__time">{range}</span>
+            <div className="chapter__time">
+              {onSelect ? (
+                <button
+                  type="button"
+                  className="chapter__start"
+                  aria-label={`Перейти к ${formatTimecode(chapter.start)}`}
+                  onClick={() => onSelect(chapter.start)}
+                >
+                  {formatTimecode(chapter.start)}
+                </button>
+              ) : (
+                <span className="chapter__start">{formatTimecode(chapter.start)}</span>
+              )}
+              <span>– {formatTimecode(chapter.end)}</span>
+            </div>
             <h3 className="chapter__title">
               {onSelect ? (
                 <button
