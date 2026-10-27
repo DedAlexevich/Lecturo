@@ -151,6 +151,15 @@ async def test_requires_exactly_one_scope(client, auth_headers, both):
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("q", ["   ", " я "])
+async def test_rejects_blank_query(client, user, auth_headers, q):
+    lecture_id = await create_lecture(user.id, "Лекция", "Интегралы")
+
+    response = await search(client, auth_headers, q=q, lecture_id=str(lecture_id))
+
+    assert response.status_code == 422
+
+
 async def test_requires_login(client):
     response = await client.get(
         "/api/v1/search", params={"q": "интеграл", "lecture_id": str(uuid.uuid4())}

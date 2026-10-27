@@ -19,6 +19,9 @@ async def search(
     lecture_id: uuid.UUID | None = None,
     course_id: uuid.UUID | None = None,
 ) -> list[SearchHit]:
+    q = q.strip()
+    if len(q) < 2:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Запрос слишком короткий")
     if (lecture_id is None) == (course_id is None):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Укажите либо лекцию, либо курс")
     if lecture_id is not None:
@@ -39,4 +42,4 @@ async def search(
             .join(Lecture, Lecture.id == course_lectures.c.lecture_id)
             .where(course_lectures.c.course_id == course_id, Lecture.owner_id == user.id)
         )
-    return await hybrid_search(session, scope, q.strip())
+    return await hybrid_search(session, scope, q)
