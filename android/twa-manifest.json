@@ -1,0 +1,52 @@
+{
+  "packageId": "ru.lecturo.app",
+  "host": "lecturo.ru",
+  "name": "Lecturo",
+  "launcherName": "Lecturo",
+  "display": "standalone",
+  "orientation": "default",
+  "themeColor": "#f4f5f7",
+  "themeColorDark": "#f4f5f7",
+  "navigationColor": "#f4f5f7",
+  "navigationColorDark": "#f4f5f7",
+  "navigationDividerColor": "#f4f5f7",
+  "navigationDividerColorDark": "#f4f5f7",
+  "backgroundColor": "#f4f5f7",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://lecturo.ru/pwa-512x512.png",
+  "maskableIconUrl": "https://lecturo.ru/maskable-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./lecturo-release.keystore",
+    "alias": "lecturo"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://lecturo.ru/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://lecturo.ru/",
+  "minSdkVersion": 24,
+  "fingerprints": [
+    {
+      "name": "release",
+      "value": "0C:E8:86:66:4B:27:EF:1A:FE:F6:B5:36:D1:C2:A7:6B:6B:2F:83:75:BE:A1:3B:2A:BF:F6:AD:00:C6:7F:89:61"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}

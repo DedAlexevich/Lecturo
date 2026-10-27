@@ -6,7 +6,15 @@ from sqlalchemy import select
 from app.core.db import SessionLocal
 from app.models import Chapter, Lecture, SourceType, Summary, TranscriptSegment
 from app.pipeline import summarize
-from app.pipeline.summarize import PartDigest, Topic, build_chapters, split_into_parts
+from app.pipeline.summarize import (
+    ChapterDraft,
+    PartDigest,
+    Topic,
+    build_chapters,
+    plan_chapters,
+    split_into_parts,
+    split_oversized,
+)
 
 
 def make_segments(bounds: list[tuple[float, float]]) -> list[TranscriptSegment]:
@@ -81,7 +89,7 @@ class ScriptedLLM:
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
         assert json_mode
         self.requests.append(user)
-        if system == summarize.load_prompt("map"):
+        if "фрагмент расшифровки" in system:
             start = int(user.split("]", 1)[0].lstrip("["))
             return json.dumps(
                 {
@@ -159,13 +167,15 @@ async def test_summarize_on_stub_llm_replaces_previous_result(user):
     await run_summarize(lecture.id)
 
     chapters, summary = await saved(lecture.id)
-    assert [(c.start, c.end) for c in chapters] == [(0, 1199)]
+    assert [c.idx for c in chapters] == list(range(len(chapters)))
+    assert chapters[0].start == 0
+    assert chapters[-1].end == 1199
     assert summary.content_md
 
 
 class FailingReduceLLM(ScriptedLLM):
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
-        if system == summarize.load_prompt("reduce"):
+        if "Главы" in system:
             raise RuntimeError("LLM недоступна")
         return await super().complete(system, user, json_mode=json_mode)
 
@@ -199,7 +209,7 @@ class BrokenMapLLM(ScriptedLLM):
         self.map_calls = 0
 
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
-        if system == summarize.load_prompt("map") and user.startswith("[900]"):
+        if "фрагмент расшифровки" in system and user.startswith("[900]"):
             self.map_calls += 1
             if self.map_calls <= self.broken_answers:
                 return "не JSON"
@@ -223,7 +233,7 @@ async def test_broken_map_answer_is_retried_once(broken_answers, calls, summary)
 async def test_broken_reduce_answer_fails_step(user, monkeypatch):
     class BrokenReduceLLM(ScriptedLLM):
         async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
-            if system == summarize.load_prompt("reduce"):
+            if "Главы" in system:
                 return "не JSON"
             return await super().complete(system, user, json_mode=json_mode)
 
@@ -250,3 +260,120 @@ def test_parse_json_finds_object_in_answer(content):
 def test_parse_json_rejects_answer_without_object(content):
     with pytest.raises(ValueError):
         summarize.parse_json(content)
+
+
+class RecordingLLM(ScriptedLLM):
+    def __init__(self, reduce_answer: dict | None = None) -> None:
+        super().__init__()
+        self.systems: list[str] = []
+        self.reduce_answer = reduce_answer
+
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        self.systems.append(system)
+        if self.reduce_answer is not None and "Главы" in system:
+            return json.dumps(self.reduce_answer)
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "min_count", "max_count", "max_seconds"),
+    [
+        (120, 1, 2, None),
+        (180, 1, 3, None),
+        (360, 3, 4, 300),
+        (900, 3, 8, 300),
+        (1200, 4, 10, 300),
+        (3600, 4, 12, None),
+        (7200, 8, 24, None),
+    ],
+)
+def test_plan_chapters_depends_on_duration(seconds, min_count, max_count, max_seconds):
+    plan = plan_chapters(seconds)
+
+    assert (plan.min_count, plan.max_count, plan.max_seconds) == (
+        min_count,
+        max_count,
+        max_seconds,
+    )
+
+
+def test_oversized_chapter_is_split_on_segment_boundaries():
+    segments = make_segments([(m * 30.0, m * 30.0 + 29.0) for m in range(12)])
+    chapters = [
+        ChapterDraft("Всё подряд", 0, 359, "Кратко."),
+    ]
+    digests = [PartDigest(0, 359, "", [Topic("Начало", 0), Topic("Середина", 180)])]
+
+    result = split_oversized(chapters, segments, digests, plan_chapters(360))
+
+    assert len(result) >= 3
+    assert result[0].start == 0
+    assert result[-1].end == 359
+    assert all(a.end == b.start for a, b in zip(result, result[1:], strict=False))
+    assert all(c.end - c.start <= 300 for c in result)
+    assert {c.start for c in result[1:]} <= {s.start for s in segments}
+    assert len({c.title for c in result}) == len(result)
+
+
+def test_split_keeps_good_chapters_untouched():
+    segments = minute_segments(6)
+    chapters = [
+        ChapterDraft("Раз", 0, 120, "а"),
+        ChapterDraft("Два", 120, 240, "б"),
+        ChapterDraft("Три", 240, 359, "в"),
+    ]
+
+    assert split_oversized(chapters, segments, [], plan_chapters(359)) == chapters
+
+
+def test_split_stops_when_no_boundaries_left():
+    segments = make_segments([(0.0, 400.0)])
+    chapters = [ChapterDraft("Одна", 0, 400, "")]
+
+    assert split_oversized(chapters, segments, [], plan_chapters(400)) == chapters
+
+
+async def test_short_lecture_gets_dense_chapters_and_parameterized_prompts(user, monkeypatch):
+    llm = RecordingLLM(
+        {
+            "chapters": [{"title": "Всё", "start": 0, "summary": "Всё сразу."}],
+            "summary_md": "## Итог",
+        }
+    )
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 6)
+
+    await run_summarize(lecture.id)
+
+    chapters, _ = await saved(lecture.id)
+    assert len(chapters) >= 3
+    assert all(c.end - c.start <= 300 for c in chapters)
+    map_systems = [s for s in llm.systems if "фрагмент расшифровки" in s]
+    assert len(map_systems) == 2
+    assert all("{{" not in s for s in llm.systems)
+    reduce_system = next(s for s in llm.systems if "Главы" in s)
+    assert "5 мин 59 с" in reduce_system
+    assert "от 3 до 4 глав" in reduce_system
+
+
+async def test_long_lecture_keeps_part_size_and_hourly_range(user, monkeypatch):
+    llm = RecordingLLM()
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    await run_summarize(lecture.id)
+
+    assert len([s for s in llm.systems if "фрагмент расшифровки" in s]) == 4
+    assert "от 4 до 12 глав" in next(s for s in llm.systems if "Главы" in s)
+
+
+def test_repeated_split_keeps_titles_unique_and_fills_summary():
+    segments = make_segments([(m * 30.0, m * 30.0 + 29.0) for m in range(24)])
+    digests = [PartDigest(0, 719, "Описание части.", [])]
+    chapters = [ChapterDraft("Тема", 0, 719, "Своё.")]
+
+    result = split_oversized(chapters, segments, digests, plan_chapters(719))
+
+    assert len(result) >= 3
+    assert len({c.title for c in result}) == len(result)
+    assert all(c.summary for c in result)

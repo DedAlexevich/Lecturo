@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, MetaData, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-EMBEDDING_DIM = 1024
+EMBEDDING_DIM = 256
 
 naming_convention = {
     "ix": "ix_%(column_0_label)s",

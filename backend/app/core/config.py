@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     embeddings_base_url: str = ""
     embeddings_api_key: str = ""
     embeddings_model: str = ""
+    yandex_embeddings_base_url: str = "https://ai.api.cloud.yandex.net"
+    yandex_embeddings_api_key: str = ""
+    yandex_embeddings_folder_id: str = ""
 
     smtp_host: str = ""
     smtp_port: int = 587

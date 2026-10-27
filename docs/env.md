@@ -87,7 +87,7 @@ cp .env.example .env
 
 ## LLM и эмбеддинги
 
-Оба провайдера работают с любым сервисом, совместимым с OpenAI API. Бэкенд отправляет запросы на `<BASE_URL>/chat/completions` и `<BASE_URL>/embeddings` с заголовком `Authorization: Bearer <KEY>`. Допустимые значения провайдера: `stub` и `openai`.
+Провайдер `openai` работает с любым сервисом, совместимым с OpenAI API. Бэкенд отправляет запросы на `<BASE_URL>/chat/completions` и `<BASE_URL>/embeddings` с заголовком `Authorization: Bearer <KEY>`. Допустимые значения провайдера LLM: `stub` и `openai`, провайдера эмбеддингов: `stub`, `openai` и `yandex` (отдельный API Yandex Foundation Models, см. ниже).
 
 | Переменная | Описание | Обязательна | По умолчанию | Где используется |
 |---|---|---|---|---|
@@ -95,10 +95,13 @@ cp .env.example .env
 | `LLM_BASE_URL` | Базовый адрес API | при `openai` | `https://api.deepseek.com` | `backend/app/providers/openai_compat.py` |
 | `LLM_API_KEY` | Ключ API | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
 | `LLM_MODEL` | Название модели | при `openai` | `deepseek-chat` | `backend/app/providers/openai_compat.py` |
-| `EMBEDDINGS_PROVIDER` | `stub` или `openai` | нет | `stub` | `backend/app/providers/__init__.py` |
+| `EMBEDDINGS_PROVIDER` | `stub`, `openai` или `yandex` | нет | `stub` | `backend/app/providers/__init__.py` |
 | `EMBEDDINGS_BASE_URL` | Базовый адрес API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
 | `EMBEDDINGS_API_KEY` | Ключ API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
 | `EMBEDDINGS_MODEL` | Название модели эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
+| `YANDEX_EMBEDDINGS_API_KEY` | API-ключ сервисного аккаунта для эмбеддингов Yandex. Если пуст, берётся `YANDEX_SPEECHKIT_API_KEY` | при `yandex`, если нет `YANDEX_SPEECHKIT_API_KEY` | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_EMBEDDINGS_FOLDER_ID` | Идентификатор каталога для эмбеддингов Yandex. Если пуст, берётся `YANDEX_FOLDER_ID` | при `yandex`, если нет `YANDEX_FOLDER_ID` | пусто | `backend/app/providers/yandex.py` |
+| `YANDEX_EMBEDDINGS_BASE_URL` | Адрес API Yandex Foundation Models | нет | `https://ai.api.cloud.yandex.net` | `backend/app/providers/yandex.py` |
 
 ### LLM: DeepSeek или другой OpenAI-совместимый сервис
 
@@ -112,10 +115,32 @@ DeepSeek:
 
 ### Эмбеддинги
 
+Размерность вектора в базе фиксирована: 256 (`EMBEDDING_DIM` в `backend/app/models/base.py`), столько отдают модели Yandex. Для `openai` модель должна отдавать векторы такой длины или позволять её задать (например, параметр `dimensions`), иначе запуск воркера и индексация завершатся ошибкой о размерности.
+
+#### Yandex Foundation Models (`EMBEDDINGS_PROVIDER=yandex`)
+
+Бэкенд отправляет по одному тексту в запросе `POST <YANDEX_EMBEDDINGS_BASE_URL>/foundationModels/v1/textEmbedding` с заголовками `Authorization: Api-Key <ключ>` и `x-folder-id: <каталог>`. Фрагменты лекций при индексации считаются моделью `text-search-doc`, поисковые запросы моделью `text-search-query`. Одновременно идёт не больше 4 запросов, при ответах 429 и 5xx запрос повторяется с растущей задержкой.
+
+1. В [консоли Yandex Cloud](https://console.yandex.cloud) выберите каталог. Его идентификатор это `YANDEX_FOLDER_ID` (или `YANDEX_EMBEDDINGS_FOLDER_ID`).
+2. Сервисному аккаунту выдайте в этом каталоге роль `ai.languageModels.user` (или выше). Без неё запросы получат ответ 403.
+3. Создайте API-ключ сервисного аккаунта. Если консоль предлагает область действия, выберите ту, что разрешает обращение к моделям Foundation Models. Ключ от SpeechKit можно использовать, если у него есть и эта роль, и подходящая область. Иначе создайте отдельный ключ и впишите его в `YANDEX_EMBEDDINGS_API_KEY`.
+4. Задайте `EMBEDDINGS_PROVIDER=yandex` и примените настройки: `docker compose up -d`. При запуске воркер делает один тестовый запрос: при неверном ключе или отсутствии роли в логе будет ответ API (401 или 403), и воркер не стартует.
+
+#### Другой сервис (`EMBEDDINGS_PROVIDER=openai`)
+
 1. Выберите сервис с OpenAI-совместимым методом эмбеддингов (`<EMBEDDINGS_BASE_URL>/embeddings`). Подойдёт OpenAI или свой сервер. Доступность метода у конкретного сервиса проверьте в его документации.
 2. Получите у сервиса ключ и впишите его в `EMBEDDINGS_API_KEY`, адрес в `EMBEDDINGS_BASE_URL`, модель в `EMBEDDINGS_MODEL`.
-3. Размерность вектора в базе фиксирована: 1024 (`EMBEDDING_DIM` в `backend/app/models/base.py`). Модель должна отдавать векторы такой длины или позволять её задать. Проверьте это в документации модели.
-4. Задайте `EMBEDDINGS_PROVIDER=openai` и примените настройки: `docker compose up -d`.
+3. Задайте `EMBEDDINGS_PROVIDER=openai` и примените настройки: `docker compose up -d`.
+
+#### Смена размерности и переиндексация
+
+Миграция `0006` меняет колонку `search_chunks.embedding` с `vector(1024)` на `vector(256)`, пересоздаёт векторный индекс и обнуляет существующие векторы. Пока вектора пусты, поиск идёт только по тексту. Чтобы пересчитать их после миграции и смены провайдера:
+
+```
+docker compose exec worker python -m app.pipeline.reindex
+```
+
+Команда берёт фрагменты без вектора, считает их текущим провайдером и выводит число обработанных. Её можно запускать повторно: уже посчитанные фрагменты она не трогает. Лекции, которые обрабатываются заново, получают вектора на шаге `embed`.
 
 ## Почта (SMTP)
 
