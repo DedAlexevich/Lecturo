@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 import uuid
@@ -150,6 +151,10 @@ def payment_out(payment: Payment) -> PaymentOut:
     )
 
 
+def yookassa_idempotence_key(user_id: uuid.UUID, idempotence_key: str) -> str:
+    return hashlib.sha256(f"{user_id}:{idempotence_key}".encode()).hexdigest()[:64]
+
+
 async def find_by_key(
     session: AsyncSession, user_id: uuid.UUID, idempotence_key: str
 ) -> Payment | None:
@@ -199,7 +204,9 @@ async def create_payment(
 
     body = payment_request(payment, product, email, return_url, settings)
     try:
-        response = await client.create_payment(idempotence_key, body)
+        response = await client.create_payment(
+            yookassa_idempotence_key(user_id, idempotence_key), body
+        )
     except YooKassaError as error:
         if error.rejected:
             await session.delete(payment)

@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings
+from app.core.security import create_access_token
 from app.core.db import SessionLocal
 from app.main import app
 from app.models import Payment, PaymentKind, PaymentStatus, User
@@ -95,7 +96,9 @@ async def test_create_payment_returns_confirmation_url(client, user, auth_header
 
     [request] = fake.requests
     assert str(request.url) == "https://yookassa.test/v3/payments"
-    assert request.headers["Idempotence-Key"] == "key-create"
+    assert request.headers["Idempotence-Key"] == yookassa.yookassa_idempotence_key(
+        user.id, "key-create"
+    )
     assert request.headers["Authorization"].startswith("Basic ")
     body = json.loads(request.content)
     assert body["amount"] == {"value": "199.00", "currency": "RUB"}
@@ -129,6 +132,38 @@ async def test_same_key_does_not_create_second_payment(client, user, auth_header
     assert first.json()["id"] == second.json()["id"]
     assert len(fake.requests) == 1
     assert await count_payments(user) == 1
+
+
+async def test_same_key_of_two_users_creates_two_payments(client, user, auth_headers, fake):
+    request = {"product_code": "hours_5", "accept_offer": True}
+    async with SessionLocal() as session:
+        other = User(display_name="Другой", email=f"other-{user.id}@lecturo.test")
+        session.add(other)
+        await session.commit()
+    other_headers = {"Authorization": f"Bearer {create_access_token(other.id)}"}
+
+    try:
+        first = await client.post(
+            "/api/v1/billing/payments",
+            json=request,
+            headers={**auth_headers, "Idempotence-Key": "key-shared"},
+        )
+        second = await client.post(
+            "/api/v1/billing/payments",
+            json=request,
+            headers={**other_headers, "Idempotence-Key": "key-shared"},
+        )
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Payment).where(Payment.user_id == other.id))
+            await session.delete(await session.get(User, other.id))
+            await session.commit()
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["id"] != second.json()["id"]
+    sent_keys = {request.headers["Idempotence-Key"] for request in fake.requests}
+    assert len(sent_keys) == 2
+    assert "key-shared" not in sent_keys
 
 
 async def test_same_key_for_other_product_is_conflict(client, user, auth_headers, fake):
