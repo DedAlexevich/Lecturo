@@ -66,6 +66,25 @@ export function toLocalResultPayload(lecture: LocalLecture): LocalResultPayload 
   };
 }
 
+export async function saveLocalOutline(
+  id: string,
+  outline: Pick<LocalLecture, "chapters" | "summaryMd">,
+): Promise<LocalLecture | null> {
+  const db = await openDb();
+  const transaction = db.transaction(LECTURES_STORE, "readwrite");
+  const store = transaction.objectStore(LECTURES_STORE);
+  const request = store.get(id);
+  let updated: LocalLecture | null = null;
+  request.onsuccess = () => {
+    const lecture = request.result as LocalLecture | undefined;
+    if (!lecture) return;
+    updated = { ...lecture, chapters: outline.chapters, summaryMd: outline.summaryMd };
+    store.put(updated);
+  };
+  await transactionDone(transaction);
+  return updated;
+}
+
 export async function markLocalLectureSynced(id: string, userId: string, lectureId: string): Promise<void> {
   const db = await openDb();
   const transaction = db.transaction(LECTURES_STORE, "readwrite");
