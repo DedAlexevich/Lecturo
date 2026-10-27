@@ -39,7 +39,7 @@ export function stepLabel(step: Step) {
 
 export function isIndeterminate(step: Step) {
   if (step.step !== "transcribe" || step.status !== "running") return false;
-  if (step.stage === "upload" || step.stage === "fetch") return true;
+  if (!step.stage || step.stage === "upload" || step.stage === "fetch") return true;
   if (step.stage === "recognize") return step.expected_sec == null || step.progress >= RECOGNITION_LIMIT;
   return false;
 }

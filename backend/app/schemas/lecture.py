@@ -113,7 +113,6 @@ class LectureStatusOut(Schema):
     id: uuid.UUID
     status: LectureStatus
     queue_position: int | None
-    duration_sec: float | None = None
     eta_sec: int | None = None
     steps: list[StepOut]
 

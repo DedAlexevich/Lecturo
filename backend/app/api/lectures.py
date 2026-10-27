@@ -163,13 +163,12 @@ async def status_of(session: AsyncSession, lecture: Lecture) -> LectureStatusOut
         position = await session.scalar(
             select(func.count())
             .select_from(Lecture)
-            .where(Lecture.status == LectureStatus.queued, Lecture.created_at < lecture.created_at)
+            .where(Lecture.status == LectureStatus.queued, Lecture.updated_at < lecture.updated_at)
         )
     return LectureStatusOut(
         id=lecture.id,
         status=lecture.status,
         queue_position=position,
-        duration_sec=lecture.duration_sec,
         eta_sec=eta_sec,
         steps=steps,
     )
@@ -359,7 +358,7 @@ async def get_status(
                 Lecture.status,
                 Lecture.source_type,
                 Lecture.duration_sec,
-                Lecture.created_at,
+                Lecture.updated_at,
             ),
             selectinload(Lecture.steps),
         )

@@ -13,7 +13,8 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import Settings
-from app.models import EMBEDDING_DIM
+from app.models import EMBEDDING_DIM, StepName
+from app.pipeline.estimate import expected_seconds
 from app.providers.base import RecognitionProgress, Segment
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
@@ -104,8 +105,7 @@ class YandexSpeechToText:
         self.access_key = settings.yandex_storage_access_key
         self.secret_key = settings.yandex_storage_secret_key
         self.poll_interval = settings.stt_poll_seconds if poll_interval is None else poll_interval
-        self.expected_ratio = settings.stt_expected_ratio
-        self.expected_min_seconds = settings.stt_expected_min_seconds
+        self.settings = settings
         self.timeout = timeout
         self.transport = transport
         self.retry = RetryPolicy.from_settings(settings)
@@ -145,9 +145,7 @@ class YandexSpeechToText:
             await on_progress(stage, fraction)
 
     def expected_seconds(self, duration: float | None) -> float | None:
-        if not duration or duration <= 0:
-            return None
-        return max(duration * self.expected_ratio, self.expected_min_seconds)
+        return expected_seconds(StepName.transcribe, duration, self.settings)
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, key: str) -> None:
         content = await asyncio.to_thread(audio_path.read_bytes)

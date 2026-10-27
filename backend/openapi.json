@@ -3724,17 +3724,6 @@
             ],
             "title": "Queue Position"
           },
-          "duration_sec": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration Sec"
-          },
           "eta_sec": {
             "anyOf": [
               {

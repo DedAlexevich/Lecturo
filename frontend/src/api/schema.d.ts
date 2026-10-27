@@ -1238,8 +1238,6 @@ export interface components {
             status: components["schemas"]["LectureStatus"];
             /** Queue Position */
             queue_position: number | null;
-            /** Duration Sec */
-            duration_sec?: number | null;
             /** Eta Sec */
             eta_sec?: number | null;
             /** Steps */

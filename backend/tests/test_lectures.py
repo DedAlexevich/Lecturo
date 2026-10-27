@@ -129,8 +129,8 @@ async def test_status_shows_plan_estimate_and_queue_position(client, user, auth_
 
     response = await client.get(f"/api/v1/lectures/{later.id}/status", headers=auth_headers)
     body = response.json()
-    assert body["queue_position"] >= 1
-    assert body["duration_sec"] == 1500.0
+    first = await client.get(f"/api/v1/lectures/{earlier.id}/status", headers=auth_headers)
+    assert body["queue_position"] == first.json()["queue_position"] + 1
     assert [step["status"] for step in body["steps"]] == ["pending"] * 4
     transcribe = next(step for step in body["steps"] if step["step"] == "transcribe")
     assert transcribe["expected_sec"] == 450

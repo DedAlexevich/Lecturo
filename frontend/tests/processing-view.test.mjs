@@ -32,6 +32,7 @@ test("recognition is indeterminate at the limit, without estimate and while uplo
   assert.match(stepHint(running({ progress: 0.95 })), /^Ещё немного/);
   assert.equal(isIndeterminate(running({ expected_sec: null })), true);
   assert.equal(isIndeterminate(running({ stage: "upload", progress: 0 })), true);
+  assert.equal(isIndeterminate(running({ stage: null, progress: 0 })), true);
 });
 
 test("other steps keep plain progress", () => {
