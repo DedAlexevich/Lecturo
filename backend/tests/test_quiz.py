@@ -10,6 +10,8 @@ from app.core.db import SessionLocal
 from app.models import (
     Lecture,
     LectureStatus,
+    NotificationKind,
+    NotificationOutcome,
     ProcessingStep,
     Quiz,
     SourceType,
@@ -21,6 +23,7 @@ from app.models import (
 )
 from app.pipeline import quiz, tasks
 from app.pipeline.quiz import InvalidQuiz, parse_questions, transcript_excerpt
+from tests.test_pipeline import notifications
 
 
 def make_question(number: int = 0, **changes) -> dict:
@@ -317,6 +320,7 @@ async def test_invalid_answers_are_regenerated_twice(user, monkeypatch):
     assert "[90] фраза 9" in request["transcript"]
     assert len((await saved_quiz(lecture.id)).questions) == 8
     assert (await quiz_step(lecture.id)).status == StepStatus.done
+    assert await notifications(lecture.id) == [(NotificationKind.quiz, NotificationOutcome.ready)]
 
 
 async def test_quiz_fails_after_three_invalid_answers(user, monkeypatch):
@@ -333,6 +337,7 @@ async def test_quiz_fails_after_three_invalid_answers(user, monkeypatch):
     assert await saved_quiz(lecture.id) is None
     async with SessionLocal() as session:
         assert (await session.get(Lecture, lecture.id)).status == LectureStatus.ready
+    assert await notifications(lecture.id) == [(NotificationKind.quiz, NotificationOutcome.failed)]
 
 
 async def test_quiz_on_stub_llm_replaces_previous(user):

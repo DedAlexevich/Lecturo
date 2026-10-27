@@ -8,6 +8,8 @@ from app.models import (
     Chapter,
     Lecture,
     LectureStatus,
+    NotificationKind,
+    NotificationOutcome,
     ProcessingStep,
     SearchChunk,
     SourceType,
@@ -18,6 +20,7 @@ from app.models import (
     User,
 )
 from app.pipeline import summarize, tasks
+from tests.test_pipeline import notifications
 from tests.test_summarize import FailingReduceLLM, ScriptedLLM
 
 
@@ -129,6 +132,9 @@ async def test_regenerate_replaces_chapters_and_keeps_transcript(
     assert steps[StepName.summarize].status == StepStatus.done
     assert steps[StepName.embed].status == StepStatus.done
     assert steps[StepName.transcribe].attempts == 1
+    assert await notifications(lecture.id) == [
+        (NotificationKind.regenerate, NotificationOutcome.ready)
+    ]
     async with SessionLocal() as session:
         chunks = await session.scalar(
             select(func.count()).where(SearchChunk.lecture_id == lecture.id)
@@ -154,6 +160,9 @@ async def test_failed_generation_keeps_previous_content(
     assert steps[StepName.summarize].status == StepStatus.failed
     assert "LLM недоступна" in steps[StepName.summarize].error
     assert steps[StepName.embed].status == StepStatus.done
+    assert await notifications(lecture.id) == [
+        (NotificationKind.regenerate, NotificationOutcome.failed)
+    ]
 
 
 async def test_other_user_gets_404(client, user, auth_headers, queue):
@@ -246,6 +255,7 @@ async def test_queue_down_restores_ready_state(client, user, auth_headers, monke
 
     assert response.status_code == 503
     assert await lecture_status(lecture.id) == LectureStatus.ready
+    assert await notifications(lecture.id) == []
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.done
 
@@ -279,3 +289,6 @@ async def test_unexpected_error_restores_ready_state(
     assert content == "Старый конспект"
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.done
+    assert await notifications(lecture.id) == [
+        (NotificationKind.regenerate, NotificationOutcome.failed)
+    ]
