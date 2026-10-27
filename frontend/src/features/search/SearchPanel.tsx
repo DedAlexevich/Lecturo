@@ -8,13 +8,13 @@ import { buildMatcher, highlight } from "./highlight";
 import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
 
-export function fragmentsCount(count: number) {
+export function momentsCount(count: number) {
   const tens = count % 100;
   const ones = count % 10;
-  if (tens >= 11 && tens <= 14) return `${count} фрагментов`;
-  if (ones === 1) return `${count} фрагмент`;
-  if (ones >= 2 && ones <= 4) return `${count} фрагмента`;
-  return `${count} фрагментов`;
+  if (tens >= 11 && tens <= 14) return `${count} моментов`;
+  if (ones === 1) return `${count} момент`;
+  if (ones >= 2 && ones <= 4) return `${count} момента`;
+  return `${count} моментов`;
 }
 
 type SearchPanelProps = {
@@ -77,7 +77,7 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
         )}
         {hits && hits.length > 0 && (
           <>
-            <p className="search__count">Найдено {fragmentsCount(hits.length)}</p>
+            <p className="search__count">Найдено {momentsCount(hits.length)}</p>
             <ol className={search.isPlaceholderData ? "search__hits search__hits--stale" : "search__hits"}>
               {hits.map((hit) => (
                 <li key={`${hit.lecture_id}-${hit.start}`}>
