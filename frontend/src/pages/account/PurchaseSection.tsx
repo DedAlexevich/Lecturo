@@ -3,6 +3,7 @@ import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { useMe } from "../../app/useMe";
+import { validateEmail } from "../auth/validation";
 import { ReceiptEmailField } from "../../features/consent/ReceiptEmailField";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
@@ -16,7 +17,6 @@ import {
   useProducts,
   type Product,
 } from "./billing";
-import { validateEmail } from "../auth/validation";
 import { formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 import { pollInterval, pollLimit } from "./usePaymentReturn";
