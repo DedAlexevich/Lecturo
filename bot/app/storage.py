@@ -12,3 +12,14 @@ WHERE id IN (
 async def save_chat_id(pool: asyncpg.Pool, telegram_id: int, chat_id: int) -> bool:
     status = await pool.execute(SAVE_CHAT_ID, chat_id, str(telegram_id))
     return status != "UPDATE 0"
+
+
+CONFIRM_START = """
+UPDATE auth_identities SET bot_started_at = now(), bot_blocked_at = NULL
+WHERE provider = 'telegram' AND provider_user_id = $1
+"""
+
+
+async def confirm_start(pool: asyncpg.Pool, telegram_id: int) -> bool:
+    status = await pool.execute(CONFIRM_START, str(telegram_id))
+    return status != "UPDATE 0"

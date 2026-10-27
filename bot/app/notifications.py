@@ -1,24 +1,22 @@
 import asyncio
-import json
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import asyncpg
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramRetryAfter,
+)
+from aiogram.types import InlineKeyboardMarkup
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from app.handlers import open_app_markup
 
 logger = logging.getLogger(__name__)
-
-LECTURE_CHAT = """
-SELECT u.telegram_chat_id, l.updated_at FROM users u
-JOIN lectures l ON l.owner_id = u.id
-WHERE u.id = $1 AND l.id = $2 AND u.telegram_chat_id IS NOT NULL
-"""
 
 QUOTAS = """
 SELECT u.id, u.telegram_chat_id, u.created_at,
@@ -54,7 +52,58 @@ DROP_LEGAL_NOTICE = "UPDATE legal_notices SET attempts = $2, attempted_at = now(
 
 LEGAL_NOTICE_PAUSE_SECONDS = 0.05
 
+LECTURE_NOTICE_PAUSE_SECONDS = 0.05
+
 LEGAL_NOTICE_INTERVAL_SECONDS = 60
+
+LECTURE_NOTICE_BATCH = 50
+
+LECTURE_NOTICE_INTERVAL_SECONDS = 5
+
+LECTURE_NOTICE_MAX_DELAY_SECONDS = 3600
+
+EXPIRE_LECTURE_NOTICES = """
+UPDATE notification_events SET expired_at = now()
+WHERE sent_at IS NULL AND expired_at IS NULL AND created_at < now() - interval '7 days'
+"""
+
+PENDING_LECTURE_NOTICES = """
+SELECT e.id, e.lecture_id, e.kind, e.outcome, e.attempts, l.title, u.telegram_chat_id,
+       i.id AS identity_id,
+       i.bot_started_at IS NOT NULL
+           AND (i.bot_blocked_at IS NULL OR i.bot_blocked_at <= i.bot_started_at) AS started
+FROM notification_events e
+JOIN lectures l ON l.id = e.lecture_id
+JOIN users u ON u.id = e.user_id
+LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'telegram'
+WHERE e.sent_at IS NULL AND e.expired_at IS NULL AND e.next_attempt_at <= now()
+ORDER BY e.next_attempt_at, e.created_at
+LIMIT $1
+FOR UPDATE OF e SKIP LOCKED
+"""
+
+MARK_LECTURE_NOTICE_SENT = "UPDATE notification_events SET sent_at = now() WHERE id = $1"
+
+POSTPONE_LECTURE_NOTICE = """
+UPDATE notification_events
+SET attempts = attempts + 1, next_attempt_at = now() + make_interval(secs => $2)
+WHERE id = $1
+"""
+
+CLOSE_LECTURE_NOTICE = "UPDATE notification_events SET expired_at = now() WHERE id = $1"
+
+MARK_BOT_BLOCKED = "UPDATE auth_identities SET bot_blocked_at = now() WHERE id = $1"
+
+LECTURE_NOTICE_TEXTS = {
+    ("lecture", "ready"): "Лекция «{title}» готова.",
+    ("lecture", "failed"): "Не удалось обработать лекцию «{title}». Откройте её, чтобы повторить.",
+    ("regenerate", "ready"): "Главы и конспект лекции «{title}» пересозданы.",
+    ("regenerate", "failed"): (
+        "Не удалось пересоздать главы и конспект лекции «{title}». Прежний конспект сохранён."
+    ),
+    ("quiz", "ready"): "Квиз по лекции «{title}» готов.",
+    ("quiz", "failed"): "Не удалось создать квиз по лекции «{title}».",
+}
 
 WEEKLY_USAGE = """
 SELECT coalesce(sum(seconds), 0) FROM usage_entries
@@ -85,73 +134,61 @@ async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, m
         )
 
 
-async def handle_event(data, pool: asyncpg.Pool, redis: Redis, bot: Bot, public_url: str):
-    try:
-        event = json.loads(data)
-        status = event["status"]
-        lecture_id = UUID(event["lecture_id"])
-        user_id = UUID(event["user_id"])
-    except (ValueError, TypeError, KeyError):
-        return
-    if status not in ("ready", "failed"):
-        return
-    row = await pool.fetchrow(LECTURE_CHAT, user_id, lecture_id)
-    if row is None:
-        return
-    key = f"lecture:{lecture_id}:{status}:{row['updated_at'].isoformat()}"
-    pending = json.dumps(
-        {"chat_id": row["telegram_chat_id"], "status": status, "lecture_id": str(lecture_id)}
-    )
-    await redis.hset("bot:pending-lectures", key, pending)
+def lecture_notice(row, public_url: str) -> tuple[str, InlineKeyboardMarkup | None]:
+    text = LECTURE_NOTICE_TEXTS[(row["kind"], row["outcome"])].format(title=row["title"])
+    link = f"{public_url}/lectures/{row['lecture_id']}"
+    if row["kind"] == "quiz" and row["outcome"] == "ready":
+        link += "/quiz"
+    markup = open_app_markup(link)
+    if markup is None:
+        text = f"{text}\n{link}"
+    return text, markup
 
 
-async def listen_events(
-    pool: asyncpg.Pool, events_redis: Redis, redis: Redis, bot: Bot, public_url: str
-):
+def retry_delay(attempts: int) -> int:
+    return min(60 * 2**attempts, LECTURE_NOTICE_MAX_DELAY_SECONDS)
+
+
+async def deliver_lecture_notices(pool: asyncpg.Pool, bot: Bot, public_url: str) -> int:
+    async with pool.acquire() as connection, connection.transaction():
+        await connection.execute(EXPIRE_LECTURE_NOTICES)
+        for row in await connection.fetch(PENDING_LECTURE_NOTICES, LECTURE_NOTICE_BATCH):
+            if not row["started"] or row["telegram_chat_id"] is None:
+                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
+                continue
+            text, markup = lecture_notice(row, public_url)
+            try:
+                await bot.send_message(row["telegram_chat_id"], text, reply_markup=markup)
+            except TelegramRetryAfter as error:
+                await connection.execute(POSTPONE_LECTURE_NOTICE, row["id"], error.retry_after)
+                return error.retry_after
+            except TelegramForbiddenError:
+                await connection.execute(MARK_BOT_BLOCKED, row["identity_id"])
+                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
+                continue
+            except TelegramBadRequest:
+                logger.warning("Telegram отклонил уведомление %s", row["id"])
+                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
+                continue
+            except Exception:
+                logger.exception("Не удалось отправить уведомление %s", row["id"])
+                await connection.execute(
+                    POSTPONE_LECTURE_NOTICE, row["id"], retry_delay(row["attempts"])
+                )
+                continue
+            await connection.execute(MARK_LECTURE_NOTICE_SENT, row["id"])
+            await asyncio.sleep(LECTURE_NOTICE_PAUSE_SECONDS)
+    return 0
+
+
+async def lecture_notices_loop(pool: asyncpg.Pool, bot: Bot, public_url: str):
     while True:
+        pause = 0
         try:
-            async with events_redis.pubsub() as pubsub:
-                await pubsub.subscribe("lecture-events")
-                async for message in pubsub.listen():
-                    if message["type"] == "message":
-                        try:
-                            await handle_event(message["data"], pool, redis, bot, public_url)
-                        except Exception:
-                            logger.exception("Не удалось отправить уведомление о лекции")
-        except (RedisError, OSError):
-            logger.exception("Не удалось получать события лекций")
-            await asyncio.sleep(5)
-
-
-async def deliver_pending(redis: Redis, bot: Bot, public_url: str):
-    for key, data in (await redis.hgetall("bot:pending-lectures")).items():
-        try:
-            event = json.loads(data)
-            key = key.decode() if isinstance(key, bytes) else key
-            text = (
-                "Лекция готова." if event["status"] == "ready" else "Не удалось обработать лекцию."
-            )
-            delivered = await send_once(
-                redis,
-                bot,
-                key,
-                event["chat_id"],
-                text,
-                open_app_markup(f"{public_url}/lectures/{event['lecture_id']}"),
-            )
-            if delivered:
-                await redis.hdel("bot:pending-lectures", key)
-        except Exception:
-            logger.exception("Не удалось отправить уведомление о лекции")
-
-
-async def delivery_loop(redis: Redis, bot: Bot, public_url: str):
-    while True:
-        try:
-            await deliver_pending(redis, bot, public_url)
-        except (RedisError, OSError):
-            logger.exception("Не удалось получить ожидающие уведомления")
-        await asyncio.sleep(5)
+            pause = await deliver_lecture_notices(pool, bot, public_url)
+        except (asyncpg.PostgresError, OSError):
+            logger.exception("Не удалось получить уведомления о лекциях")
+        await asyncio.sleep(max(pause, LECTURE_NOTICE_INTERVAL_SECONDS))
 
 
 async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> int:

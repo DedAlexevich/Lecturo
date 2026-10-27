@@ -129,7 +129,6 @@ services:
         required: false
     environment:
       DATABASE_URL: postgresql://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
-      REDIS_URL: redis://redis:6379/0
       BOT_REDIS_URL: redis://bot-redis:6379/0
       LOG_DIR: /var/log/lecturo
       LOG_SERVICE: bot

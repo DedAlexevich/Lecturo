@@ -9,7 +9,7 @@ from redis.asyncio import Redis
 from app.config import load_settings
 from app.handlers import build_router
 from app.logs import configure_logging
-from app.notifications import delivery_loop, legal_notices_loop, listen_events, quota_loop
+from app.notifications import lecture_notices_loop, legal_notices_loop, quota_loop
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,11 @@ async def run() -> None:
     bot = Bot(settings.token)
     dispatcher = Dispatcher()
     dispatcher.include_router(build_router(settings.public_url, pool))
-    events_redis = Redis.from_url(settings.redis_url)
     redis = Redis.from_url(settings.bot_redis_url)
     tasks = []
     if pool is not None:
         tasks = [
-            asyncio.create_task(listen_events(pool, events_redis, redis, bot, settings.public_url)),
-            asyncio.create_task(delivery_loop(redis, bot, settings.public_url)),
+            asyncio.create_task(lecture_notices_loop(pool, bot, settings.public_url)),
             asyncio.create_task(
                 quota_loop(
                     pool,
@@ -54,7 +52,6 @@ async def run() -> None:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await events_redis.aclose()
         await redis.aclose()
         await bot.session.close()
         if pool is not None:
