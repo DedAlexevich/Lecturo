@@ -2,6 +2,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +13,11 @@ from app.services.quota import QuotaExceeded
 
 logger = logging.getLogger(__name__)
 
-Report = Callable[[float], Awaitable[None]]
+
+class Report(Protocol):
+    async def __call__(self, progress: float, stage: str | None = None) -> None: ...
+
+
 StepHandler = Callable[[AsyncSession, Lecture, Report], Awaitable[None]]
 
 
@@ -47,14 +52,16 @@ async def run_step(
 
     step.status = StepStatus.running
     step.progress = 0.0
+    step.stage = None
     step.error = None
     step.attempts += 1
     step.started_at = datetime.now(UTC)
     step.finished_at = None
     await session.commit()
 
-    async def report(progress: float) -> None:
+    async def report(progress: float, stage: str | None = None) -> None:
         step.progress = min(max(progress, 0.0), 1.0)
+        step.stage = stage
         await session.commit()
 
     try:
@@ -67,6 +74,7 @@ async def run_step(
             step.status = StepStatus.pending
             step.error = str(error)
             step.progress = 0.0
+            step.stage = None
             step.attempts -= 1
             step.started_at = None
             lecture.status = LectureStatus.waiting_quota
@@ -86,5 +94,6 @@ async def run_step(
 
     step.status = StepStatus.done
     step.progress = 1.0
+    step.stage = None
     step.finished_at = datetime.now(UTC)
     await session.commit()

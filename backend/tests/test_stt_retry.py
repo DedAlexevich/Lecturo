@@ -184,3 +184,21 @@ async def test_yandex_poll_retry_does_not_start_second_operation(
     assert len(segments) == 3
     assert starts == 1
     assert len(retry_pauses) == 1
+
+
+async def test_yandex_reports_stages_and_recognition_progress(tmp_path: Path):
+    stages: list[tuple[str, float]] = []
+
+    async def on_progress(stage: str, fraction: float) -> None:
+        stages.append((stage, fraction))
+
+    provider = yandex_provider([httpx.Response(200, json={"id": "op"})], {})
+    await provider.transcribe(make_audio(tmp_path), duration=600.0, on_progress=on_progress)
+
+    names = [stage for stage, _ in stages]
+    assert names[0] == "upload"
+    assert names[-1] == "fetch"
+    assert "recognize" in names
+    fractions = [fraction for _, fraction in stages]
+    assert fractions == sorted(fractions)
+    assert all(fraction <= 0.95 for fraction in fractions)

@@ -24,9 +24,11 @@ from app.models import (
     course_lectures,
 )
 from app.pipeline.download import LinkError, inspect_link, link_key
+from app.pipeline.estimate import expected_seconds, remaining_seconds
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
 from app.pipeline.tasks import (
+    PLANS,
     REGENERATION_STEPS,
     cancel_lecture_job,
     cancel_quiz_job,
@@ -45,6 +47,7 @@ from app.schemas.lecture import (
     LinkIn,
     LinkLectureOut,
     QuizOut,
+    StepOut,
 )
 from app.services import quota
 from app.services.account import lecture_files, remove_files
@@ -98,8 +101,76 @@ async def get_lecture(
     video_url = signed_video_url(lecture.id) if lecture.video_path else None
     audio_only = is_audio_only(lecture)
     audio_url = signed_audio_url(lecture.id) if audio_only and lecture.audio_path else None
+    steps, eta_sec = progress_of(lecture)
     return LectureDetail.model_validate(lecture).model_copy(
-        update={"video_url": video_url, "audio_only": audio_only, "audio_url": audio_url}
+        update={
+            "video_url": video_url,
+            "audio_only": audio_only,
+            "audio_url": audio_url,
+            "steps": steps,
+            "eta_sec": eta_sec,
+        }
+    )
+
+
+def progress_of(lecture: Lecture) -> tuple[list[StepOut], int | None]:
+    settings = get_settings()
+    plan = PLANS[lecture.source_type]
+    steps = [
+        StepOut(
+            step=step.step,
+            status=step.status,
+            progress=step.progress,
+            error=step.error,
+            stage=step.stage,
+            expected_sec=rounded(expected_seconds(step.step, lecture.duration_sec, settings)),
+        )
+        for step in lecture.steps
+    ]
+    if lecture.status == LectureStatus.ready:
+        return steps, None
+    known = {step.step for step in steps}
+    steps += [
+        StepOut(
+            step=name,
+            status=StepStatus.pending,
+            progress=0.0,
+            error=None,
+            expected_sec=rounded(expected_seconds(name, lecture.duration_sec, settings)),
+        )
+        for name in plan
+        if name not in known
+    ]
+    if lecture.status == LectureStatus.failed:
+        return steps, None
+    eta = remaining_seconds(
+        plan,
+        [(step.step, step.status, step.progress) for step in steps],
+        lecture.duration_sec,
+        settings,
+    )
+    return steps, eta
+
+
+def rounded(value: float | None) -> int | None:
+    return None if value is None else round(value)
+
+
+async def status_of(session: AsyncSession, lecture: Lecture) -> LectureStatusOut:
+    steps, eta_sec = progress_of(lecture)
+    position = None
+    if lecture.status == LectureStatus.queued:
+        position = await session.scalar(
+            select(func.count())
+            .select_from(Lecture)
+            .where(Lecture.status == LectureStatus.queued, Lecture.updated_at < lecture.updated_at)
+        )
+    return LectureStatusOut(
+        id=lecture.id,
+        status=lecture.status,
+        queue_position=position,
+        eta_sec=eta_sec,
+        steps=steps,
     )
 
 
@@ -282,13 +353,19 @@ async def get_status(
         select(Lecture)
         .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
         .options(
-            load_only(Lecture.id, Lecture.status, Lecture.queue_position),
+            load_only(
+                Lecture.id,
+                Lecture.status,
+                Lecture.source_type,
+                Lecture.duration_sec,
+                Lecture.updated_at,
+            ),
             selectinload(Lecture.steps),
         )
     )
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    return LectureStatusOut.model_validate(lecture)
+    return await status_of(session, lecture)
 
 
 @router.post("/{lecture_id}/retry")
@@ -315,7 +392,7 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
     await session.execute(
         update(ProcessingStep)
         .where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.status == StepStatus.failed)
-        .values(status=StepStatus.pending, progress=0.0, error=None)
+        .values(status=StepStatus.pending, progress=0.0, stage=None, error=None)
     )
     await session.commit()
 
@@ -335,7 +412,7 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         .options(selectinload(Lecture.steps))
         .execution_options(populate_existing=True)
     )
-    return LectureStatusOut.model_validate(lecture)
+    return await status_of(session, lecture)
 
 
 @router.post("/{lecture_id}/regenerate-summary", status_code=status.HTTP_202_ACCEPTED)
@@ -380,6 +457,7 @@ async def regenerate_summary(
         step = await get_step(session, lecture.id, name)
         step.status = StepStatus.pending
         step.progress = 0.0
+        step.stage = None
         step.error = None
     lecture.status = LectureStatus.processing
     await session.commit()
@@ -408,7 +486,7 @@ async def regenerate_summary(
         .options(selectinload(Lecture.steps))
         .execution_options(populate_existing=True)
     )
-    return LectureStatusOut.model_validate(refreshed)
+    return await status_of(session, refreshed)
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)

@@ -3,21 +3,12 @@ import { detailOf } from "../../features/upload/errors";
 import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";
+import { etaText, headline, stepHint, stepLabel, stepProgress } from "./processingView";
 
 type LectureStatus = components["schemas"]["LectureStatus"];
 type Step = components["schemas"]["StepOut"];
 
 const stepOrder: Step["step"][] = ["download", "audio", "transcribe", "summarize", "embed", "video"];
-
-const stepLabels: Record<Step["step"], string> = {
-  download: "Скачивание",
-  audio: "Извлечение звука",
-  video: "Сжатие видео",
-  transcribe: "Распознавание речи",
-  summarize: "Главы и конспект",
-  embed: "Подготовка к поиску",
-  quiz: "Квиз",
-};
 
 const stepStates: Record<Step["status"], string> = {
   pending: "ждёт",
@@ -29,21 +20,13 @@ const stepStates: Record<Step["status"], string> = {
 type ProcessingProps = {
   status: LectureStatus;
   queuePosition: number | null;
+  etaSec: number | null;
   steps: Step[];
   onRetry: () => void;
   retrying: boolean;
   retryError: Error | null;
   stalled: boolean;
 };
-
-function headline(status: LectureStatus, queuePosition: number | null) {
-  if (status === "failed") return "Обработка остановилась";
-  if (status === "waiting_quota") return "Ждём свободный лимит обработки";
-  if (status === "queued") {
-    return queuePosition && queuePosition > 0 ? `В очереди, перед вами ${queuePosition}` : "В очереди";
-  }
-  return "Лекция обрабатывается";
-}
 
 function retryMessage(error: Error) {
   if (error instanceof ApiError) {
@@ -53,11 +36,12 @@ function retryMessage(error: Error) {
   return "Не удалось перезапустить обработку. Попробуйте ещё раз.";
 }
 
-export function Processing({ status, queuePosition, steps, onRetry, retrying, retryError, stalled }: ProcessingProps) {
+export function Processing({ status, queuePosition, etaSec, steps, onRetry, retrying, retryError, stalled }: ProcessingProps) {
   const visible = steps
     .filter((step) => step.step !== "quiz")
     .sort((a, b) => stepOrder.indexOf(a.step) - stepOrder.indexOf(b.step));
   const failed = status === "failed";
+  const eta = failed ? null : etaText(etaSec);
 
   return (
     <section
@@ -79,6 +63,11 @@ export function Processing({ status, queuePosition, steps, onRetry, retrying, re
           Страница обновится сама. Конспект и главы появятся здесь, как только будут готовы.
         </p>
       )}
+      {eta && (
+        <p className="processing__eta" role="status">
+          {eta}
+        </p>
+      )}
       {stalled && (
         <p className="processing__error" role="status">
           Не получается узнать статус обработки. Пробуем снова, данные могут быть устаревшими.
@@ -94,10 +83,13 @@ export function Processing({ status, queuePosition, steps, onRetry, retrying, re
           {visible.map((step) => (
             <li key={step.step} className={`processing__step processing__step--${step.status}`}>
               {step.status === "running" ? (
-                <Progress label={stepLabels[step.step]} value={step.progress * 100} />
+                <>
+                  <Progress label={stepLabel(step)} value={stepProgress(step)} />
+                  {stepHint(step) && <p className="processing__hint">{stepHint(step)}</p>}
+                </>
               ) : (
                 <div className="processing__row">
-                  <span className="processing__name">{stepLabels[step.step]}</span>
+                  <span className="processing__name">{stepLabel(step)}</span>
                   <span className="processing__state">{stepStates[step.status]}</span>
                 </div>
               )}

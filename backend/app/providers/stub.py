@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from app.models import EMBEDDING_DIM
-from app.providers.base import Segment
+from app.providers.base import RecognitionProgress, Segment
 
 STUB_PHRASES = [
     "Сегодня разберём основные понятия курса.",
@@ -18,7 +18,14 @@ STUB_PHRASES = [
 
 
 class StubSpeechToText:
-    async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]:
+    async def transcribe(
+        self,
+        audio_path: Path,
+        language: str = "ru",
+        *,
+        duration: float | None = None,
+        on_progress: RecognitionProgress | None = None,
+    ) -> list[Segment]:
         return [
             Segment(start=i * 10.0, end=i * 10.0 + 9.5, text=phrase)
             for i, phrase in enumerate(STUB_PHRASES)

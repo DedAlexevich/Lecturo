@@ -27,7 +27,7 @@ function problemOf(file: File) {
 const statusText: Partial<Record<UploadState["phase"], string>> = {
   paused: "На паузе. Можно продолжить с того же места",
   offline: "Нет сети. Загрузка продолжится, когда связь вернётся",
-  finishing: "Файл загружен, проверяем запись",
+  finishing: "Файл принят, проверяем и готовим к обработке",
 };
 
 function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<FilePanelProps, "ready" | "courseField" | "onStart" | "file" | "onPick">) {
@@ -40,7 +40,7 @@ function UploadProgress({ state, onPause, onResume, onCancel, onClose }: Omit<Fi
     <div className="add-lecture__upload">
       <p className="add-lecture__file-name">{state.file?.name}</p>
       <Progress
-        label={extracting ? "Извлекаем звук" : finishing ? "Проверяем файл" : `${formatBytes(state.sent)} из ${formatBytes(state.total)}`}
+        label={extracting ? "Извлекаем звук" : finishing ? "Файл принят, проверяем и готовим" : `${formatBytes(state.sent)} из ${formatBytes(state.total)}`}
         value={finishing ? undefined : percent}
       />
       {message && (
