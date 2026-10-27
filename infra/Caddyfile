@@ -50,7 +50,7 @@ handle @zoomer_listing {
 	}
 }
 
-@zoomer_clip path_regexp ^/zoomer/[^/]+\.(mp4|webm|MP4|WEBM)$
+@zoomer_clip path_regexp (?i)^/zoomer/[^/]+\.(mp4|webm)$
 handle @zoomer_clip {
 	header Cache-Control "public, max-age=86400"
 	root * /srv/zoomer
