@@ -4,7 +4,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright")
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_EXECUTABLE, headless: true });
 const base = process.env.TEST_BASE_URL ?? "http://127.0.0.1:5186";
 
-async function setup(platform, status = 200, savedToken = false, waiting = false) {
+async function setup(platform, status = 200, savedToken = false, waiting = false, rejectSaved = false) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   const requests = [];
@@ -39,6 +39,9 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
       body = { id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null };
     } else if (path.endsWith("/billing/payments")) {
       body = [{ id: "payment-1", kind: "package", product_code: "hours", amount_kopecks: 10000, status: "pending", confirmation_url: "https://yoomoney.ru/checkout/test", created_at: "2026-10-27T00:00:00Z", paid_at: null }];
+    } else if (rejectSaved && route.request().headers().authorization === "Bearer saved-token") {
+      responseStatus = 401;
+      body = { detail: "Недействительный токен" };
     } else if (path === "/api/v1/me") {
       body = { id: "1", display_name: "Тест", email: null, plan: "free", identities: [], balance_seconds: 0 };
     }
@@ -203,6 +206,40 @@ try {
     assert.equal(await page.evaluate(() => window.mock.back.size), 1);
     assert.deepEqual(errors, []);
     await context.close();
+  }
+  {
+    const { context, page, requests, errors } = await setup("android", 200, true, false, true);
+    await page.goto(base + "/");
+    await page.getByRole("button", { name: "Выйти", exact: true }).waitFor();
+    assert.equal(requests.length, 1);
+    assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), "test-token");
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const { context, page, requests, errors } = await setup("ios", 401, true, false, true);
+    await page.goto(base + "/");
+    await page.getByRole("alert").filter({ hasText: "Вход через Telegram" }).waitFor();
+    await page.waitForTimeout(500);
+    assert.equal(requests.length, 1);
+    assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  for (const path of ["/login", "/register"]) {
+    const miniApp = await setup("android", 401);
+    await miniApp.page.goto(base + path);
+    await miniApp.page.getByRole("alert").filter({ hasText: "Вход через Telegram" }).waitFor();
+    assert.equal(await miniApp.page.locator(".auth-telegram").count(), 0);
+    assert.equal(await miniApp.page.getByRole("button", { name: "Повторить вход" }).count(), 1);
+    assert.equal(await miniApp.page.getByRole("textbox", { name: "Почта" }).count(), 1);
+    assert.deepEqual(miniApp.errors, []);
+    await miniApp.context.close();
+    const browserPage = await setup(undefined);
+    await browserPage.page.goto(base + path);
+    await browserPage.page.locator(".auth-telegram").waitFor({ state: "attached" });
+    assert.equal(browserPage.requests.length, 0);
+    await browserPage.context.close();
   }
   console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors");
 } finally {
