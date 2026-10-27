@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from app.providers.openai_compat import (
     OpenAICompatibleError,
     require_settings,
 )
+from app.providers.retry import RetryPolicy, request_with_retry
 
 RECOGNIZE_URL = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize"
 OPERATION_URL = "https://operation.api.cloud.yandex.net/operations/{operation_id}"
@@ -44,6 +46,10 @@ LANGUAGE_CODES = {
 
 
 class YandexSpeechKitError(RuntimeError):
+    pass
+
+
+class YandexNetworkError(YandexSpeechKitError):
     pass
 
 
@@ -98,6 +104,7 @@ class YandexSpeechToText:
         self.poll_interval = poll_interval
         self.timeout = timeout
         self.transport = transport
+        self.retry = RetryPolicy.from_settings(settings)
 
     async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]:
         suffix = audio_path.suffix.lower()
@@ -120,10 +127,13 @@ class YandexSpeechToText:
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, key: str) -> None:
         content = await asyncio.to_thread(audio_path.read_bytes)
         payload_hash = hashlib.sha256(content).hexdigest()
-        response = await client.put(
-            self._object_url(key),
-            content=content,
-            headers=self._storage_headers("PUT", key, payload_hash),
+        response = await self._send(
+            "загрузка аудио в Object Storage",
+            lambda: client.put(
+                self._object_url(key),
+                content=content,
+                headers=self._storage_headers("PUT", key, payload_hash),
+            ),
         )
         self._raise_for_status(response, "загрузка аудио в Object Storage")
 
@@ -150,7 +160,10 @@ class YandexSpeechToText:
         }
         if self.folder_id:
             body["config"]["folderId"] = self.folder_id
-        response = await client.post(RECOGNIZE_URL, json=body, headers=self._api_headers())
+        response = await self._send(
+            "запуск распознавания",
+            lambda: client.post(RECOGNIZE_URL, json=body, headers=self._api_headers()),
+        )
         self._raise_for_status(response, "запуск распознавания")
         return response.json()["id"]
 
@@ -172,13 +185,27 @@ class YandexSpeechToText:
 
     async def _fetch_operation(self, client: httpx.AsyncClient, url: str) -> dict[str, Any]:
         try:
-            response = await client.get(url, headers=self._api_headers())
-        except httpx.TransportError:
+            response = await self._send(
+                "проверка операции распознавания",
+                lambda: client.get(url, headers=self._api_headers()),
+            )
+        except YandexNetworkError:
             return {}
         if response.status_code == 429 or response.is_server_error:
             return {}
         self._raise_for_status(response, "проверка операции распознавания")
         return response.json()
+
+    async def _send(
+        self, action: str, send: Callable[[], Awaitable[httpx.Response]]
+    ) -> httpx.Response:
+        return await request_with_retry(
+            send,
+            policy=self.retry,
+            provider="Yandex SpeechKit",
+            action=action,
+            error_cls=YandexNetworkError,
+        )
 
     def _api_headers(self) -> dict[str, str]:
         return {"Authorization": f"Api-Key {self.api_key}"}

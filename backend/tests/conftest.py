@@ -40,3 +40,14 @@ async def user() -> AsyncIterator[User]:
 @pytest.fixture
 def auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+
+@pytest.fixture(autouse=True)
+def retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    pauses: list[float] = []
+
+    async def record(seconds: float) -> None:
+        pauses.append(seconds)
+
+    monkeypatch.setattr("app.providers.retry.sleep", record)
+    return pauses

@@ -59,6 +59,10 @@ cp .env.example .env
 | `YANDEX_STORAGE_BUCKET` | Имя бакета Object Storage, куда на время распознавания загружается аудио | при `yandex` | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_STORAGE_ACCESS_KEY` | Идентификатор статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_STORAGE_SECRET_KEY` | Секретная часть статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
+| `STT_RETRY_ATTEMPTS` | Сколько раз всего пробовать запрос к SpeechKit при временной ошибке (429, 500, 502, 503, 504, код 13, таймаут или обрыв соединения). `1` отключает повторы | нет | `5` | `backend/app/providers/retry.py` |
+| `STT_RETRY_BASE_SECONDS` | Пауза перед первым повтором, секунды | нет | `2` | `backend/app/providers/retry.py` |
+| `STT_RETRY_FACTOR` | Во сколько раз растёт пауза после каждой неудачи. При значениях по умолчанию паузы около 2, 6, 18 и 54 секунд, к каждой добавляется случайный разброс до 20% | нет | `3` | `backend/app/providers/retry.py` |
+| `STT_RETRY_MAX_SECONDS` | Верхняя граница одной паузы, секунды | нет | `60` | `backend/app/providers/retry.py` |
 
 ### Yandex Cloud: SpeechKit и Object Storage
 
