@@ -19,15 +19,37 @@ from app.handlers import open_app_markup
 logger = logging.getLogger(__name__)
 
 QUOTAS = """
-SELECT u.id, u.telegram_chat_id, u.created_at,
-       u.quota_week_start + floor(greatest(extract(epoch FROM ($1 - u.quota_week_start)), 0)
-                                  / 604800) * interval '7 days' AS week_start,
+WITH recipients AS (
+    SELECT u.id, u.telegram_chat_id, u.created_at,
+           u.quota_week_start
+               + floor(greatest(extract(epoch FROM ($1 - u.quota_week_start)), 0) / 604800)
+               * interval '7 days' AS week_start
+    FROM users u WHERE u.telegram_chat_id IS NOT NULL
+),
+usage AS (
+    SELECT r.id,
+           coalesce(sum(e.seconds) FILTER (
+               WHERE e.source = 'weekly' AND e.created_at >= r.week_start
+           ), 0) AS used,
+           bool_or(e.created_at < r.week_start) AS active_last_week
+    FROM recipients r
+    JOIN usage_entries e
+        ON e.user_id = r.id AND e.created_at >= r.week_start - interval '7 days'
+    GROUP BY r.id
+)
+SELECT r.id, r.telegram_chat_id, r.created_at, r.week_start,
+       coalesce(us.used, 0) AS used,
+       coalesce(us.active_last_week, false) AS active_last_week,
        (SELECT max(s.ends_at) FROM subscriptions s
-        WHERE s.user_id = u.id AND s.starts_at <= $1 AND s.ends_at > $1) AS subscription_until,
+        WHERE s.user_id = r.id AND s.starts_at <= $1 AND s.ends_at > $1) AS subscription_until,
        (SELECT coalesce(sum(p.seconds_left), 0) FROM hour_packages p
-        WHERE p.user_id = u.id) AS package_left
-FROM users u WHERE u.telegram_chat_id IS NOT NULL
+        WHERE p.user_id = r.id) AS package_left
+FROM recipients r LEFT JOIN usage us ON us.id = r.id
 """
+
+QUOTA_INTERVAL_SECONDS = 3600
+
+UNREACHABLE_CHAT_TTL = timedelta(days=7)
 
 LEGAL_NOTICE_ATTEMPTS = 5
 
@@ -120,11 +142,6 @@ LECTURE_NOTICE_TEXTS = {
     ("quiz", "ready"): "Квиз по лекции «{title}» готов.",
     ("quiz", "failed"): "Не удалось создать квиз по лекции «{title}».",
 }
-
-WEEKLY_USAGE = """
-SELECT coalesce(sum(seconds), 0) FROM usage_entries
-WHERE user_id = $1 AND source = 'weekly' AND created_at >= $2
-"""
 
 
 async def send_once(
@@ -263,16 +280,18 @@ async def check_quotas(
     free_limit: int,
     subscription_limit: int,
     now: datetime | None = None,
-):
+) -> int:
     now = now or datetime.now(UTC)
     for row in await pool.fetch(QUOTAS, now):
+        user_id = row["id"]
+        unreachable = f"bot:notification:unreachable:{user_id}"
         try:
-            user_id = row["id"]
+            if await redis.get(unreachable):
+                continue
             week_start = row["week_start"]
             until = row["subscription_until"]
-            used = await pool.fetchval(WEEKLY_USAGE, user_id, week_start)
             limit = subscription_limit if until else free_limit
-            remaining = max(limit - used, 0) + row["package_left"]
+            remaining = max(limit - row["used"], 0) + row["package_left"]
             if remaining < 15 * 60:
                 await send_once(
                     redis,
@@ -282,7 +301,7 @@ async def check_quotas(
                     "Осталось меньше 15 минут обработки.",
                     QUOTA_NOTICE_TTL,
                 )
-            if week_start > row["created_at"]:
+            if week_start > row["created_at"] and row["active_last_week"]:
                 await send_once(
                     redis,
                     bot,
@@ -300,16 +319,22 @@ async def check_quotas(
                     "Подписка закончится в течение трёх дней.",
                     until + timedelta(days=7) - now,
                 )
+        except TelegramRetryAfter as error:
+            return error.retry_after
+        except (TelegramForbiddenError, TelegramBadRequest):
+            await redis.set(unreachable, "1", ex=UNREACHABLE_CHAT_TTL)
         except Exception:
-            logger.exception("Не удалось проверить уведомления пользователя %s", row["id"])
+            logger.exception("Не удалось проверить уведомления пользователя %s", user_id)
+    return 0
 
 
 async def quota_loop(
     pool: asyncpg.Pool, redis: Redis, bot: Bot, free_limit: int, subscription_limit: int
 ):
     while True:
+        pause = 0
         try:
-            await check_quotas(pool, redis, bot, free_limit, subscription_limit)
+            pause = await check_quotas(pool, redis, bot, free_limit, subscription_limit)
         except (asyncpg.PostgresError, OSError, RedisError):
             logger.exception("Не удалось проверить лимиты")
-        await asyncio.sleep(3600)
+        await asyncio.sleep(pause or QUOTA_INTERVAL_SECONDS)

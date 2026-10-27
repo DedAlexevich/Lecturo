@@ -81,6 +81,8 @@ async def test_periodic_notifications_respect_users_cycles_and_packages():
             "week_start": now - timedelta(minutes=30),
             "subscription_until": now + timedelta(days=3),
             "package_left": 0,
+            "used": 36000,
+            "active_last_week": True,
         },
         {
             "id": second,
@@ -89,11 +91,12 @@ async def test_periodic_notifications_respect_users_cycles_and_packages():
             "week_start": now - timedelta(days=1),
             "subscription_until": None,
             "package_left": 900,
+            "used": 7200,
+            "active_last_week": True,
         },
     ]
     pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
     pool.fetch.return_value = rows
-    pool.fetchval.side_effect = lambda query, user, week: 36000 if user == first else 7200
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     messages = [call.args for call in bot.send_message.await_args_list]
@@ -104,6 +107,9 @@ async def test_periodic_notifications_respect_users_cycles_and_packages():
         "Недельный лимит обработки обновлён.",
         "Подписка закончится в течение трёх дней.",
     }
+    assert redis.ttl[
+        f"bot:notification:subscription:{first}:{rows[0]['subscription_until'].isoformat()}"
+    ] == timedelta(days=10)
     rows[0]["week_start"] += timedelta(days=7)
     await check_quotas(pool, redis, bot, 7200, 36000, now + timedelta(days=7))
     assert bot.send_message.await_count == 5
@@ -120,13 +126,71 @@ async def test_reset_is_sent_after_long_downtime():
             "week_start": now - timedelta(days=3),
             "subscription_until": None,
             "package_left": 0,
+            "used": 0,
+            "active_last_week": True,
         }
     ]
-    pool.fetchval.return_value = 0
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     await check_quotas(pool, redis, bot, 7200, 36000, now)
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.args[1] == "Недельный лимит обработки обновлён."
+
+
+def quota_row(chat, now, active_last_week=True):
+    return {
+        "id": uuid4(),
+        "telegram_chat_id": chat,
+        "created_at": now - timedelta(days=30),
+        "week_start": now - timedelta(hours=1),
+        "subscription_until": None,
+        "package_left": 0,
+        "used": 0,
+        "active_last_week": active_last_week,
+    }
+
+
+async def test_reset_is_sent_only_to_users_active_last_week():
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    pool.fetch.return_value = [quota_row(11, now), quota_row(22, now, active_last_week=False)]
+    assert await check_quotas(pool, redis, bot, 7200, 36000, now) == 0
+    assert [call.args for call in bot.send_message.await_args_list] == [
+        (11, "Недельный лимит обработки обновлён.")
+    ]
+    assert pool.fetch.await_count == 1
+    pool.fetchval.assert_not_awaited()
+
+
+async def test_unreachable_chat_is_skipped_until_key_expires():
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    rows = [quota_row(11, now), quota_row(22, now)]
+    pool.fetch.return_value = rows
+
+    async def send(chat_id, text, reply_markup=None):
+        method = SendMessage(chat_id=chat_id, text=text)
+        if chat_id == 11:
+            raise TelegramForbiddenError(method, "blocked")
+        raise TelegramBadRequest(method, "chat not found")
+
+    bot.send_message.side_effect = send
+    await check_quotas(pool, redis, bot, 7200, 36000, now)
+    await check_quotas(pool, redis, bot, 7200, 36000, now)
+    assert bot.send_message.await_count == 2
+    for row in rows:
+        assert redis.ttl[f"bot:notification:unreachable:{row['id']}"] == timedelta(days=7)
+
+
+async def test_quota_check_stops_on_retry_after():
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    pool, redis, bot = AsyncMock(), FakeRedis(), AsyncMock()
+    pool.fetch.return_value = [quota_row(11, now), quota_row(22, now)]
+    bot.send_message.side_effect = TelegramRetryAfter(
+        SendMessage(chat_id=11, text="Недельный лимит обработки обновлён."), "flood", 40
+    )
+    assert await check_quotas(pool, redis, bot, 7200, 36000, now) == 40
+    assert bot.send_message.await_count == 1
+    assert not any(key.startswith("bot:notification:unreachable") for key in redis.keys)
 
 
 def legal_rows(*chats):
