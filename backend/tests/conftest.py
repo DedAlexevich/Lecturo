@@ -3,8 +3,10 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
@@ -41,6 +43,16 @@ async def user() -> AsyncIterator[User]:
         await session.delete(user)
         await session.execute(delete(Payment).where(Payment.id.in_(payment_ids)))
         await session.commit()
+
+
+@pytest.fixture(autouse=True)
+async def reset_auth_rate_limits() -> AsyncIterator[None]:
+    keys = ("rate:login:ip:127.0.0.1", "rate:register:127.0.0.1")
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete(*keys)
+    yield
+    await redis.delete(*keys)
+    await redis.aclose()
 
 
 @pytest.fixture

@@ -396,3 +396,14 @@ async def test_start_is_rate_limited(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "vk_start_rate_limit", 2)
     statuses = [(await client.post("/api/v1/auth/vk/start", json={})).status_code for _ in range(3)]
     assert statuses == [200, 200, 429]
+
+
+async def test_link_start_is_rate_limited(client, cleanup, monkeypatch):
+    monkeypatch.setattr(get_settings(), "vk_start_rate_limit", 1)
+    user = await create_user(cleanup, [(AuthProvider.email, "vk-rate@example.test")])
+    first = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
+    second = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
+    assert [first.status_code, second.status_code] == [200, 429]
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete(f"rate:vk-link-start:{user.id}")
+    await redis.aclose()
