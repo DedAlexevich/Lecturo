@@ -3124,7 +3124,7 @@ export interface operations {
     video_access_api_v1_lectures__lecture_id__video_access_get: {
         parameters: {
             query?: {
-                expires?: number;
+                expires?: string;
                 signature?: string;
                 share?: string | null;
             };

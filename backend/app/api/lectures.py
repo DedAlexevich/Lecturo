@@ -86,11 +86,13 @@ async def get_lecture(
 async def video_access(
     lecture_id: uuid.UUID,
     session: SessionDep,
-    expires: int = 0,
+    expires: str = "",
     signature: str = "",
     share: str | None = None,
 ) -> Response:
-    if not is_valid_signature(lecture_id, expires, signature, share):
+    if not expires.isdecimal() or not is_valid_signature(
+        lecture_id, int(expires), signature, share
+    ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
     query = select(Lecture.id).where(Lecture.id == lecture_id, Lecture.video_path.is_not(None))
     if share is not None:

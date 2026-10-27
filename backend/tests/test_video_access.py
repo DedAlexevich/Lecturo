@@ -128,3 +128,12 @@ async def test_share_token_cannot_be_swapped(client, user):
     owner_url = signed_video_url(lecture_id)
     response = await client.get(f"{access_path(owner_url)}&share=real-token")
     assert response.status_code == 403
+
+
+async def test_malformed_expiry_forbidden(client, user):
+    lecture_id = await create_lecture(user.id)
+    response = await client.get(
+        f"/api/v1/lectures/{lecture_id}/video-access",
+        params={"expires": "abc", "signature": "x"},
+    )
+    assert response.status_code == 403
