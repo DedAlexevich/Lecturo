@@ -20,6 +20,8 @@ services:
     restart: always
 
   bot:
+    extra_hosts:
+      - "api.telegram.org:${TELEGRAM_API_IP:-149.154.167.220}"
     restart: always
 
   frontend:
