@@ -4,6 +4,8 @@ set -euo pipefail
 main() {
   local target="${1:-origin/main}"
   cd "$(dirname "$0")/.."
+  exec 9>/tmp/lecturo-deploy.lock
+  flock 9
 
   git fetch --quiet origin main
   if ! git merge-base --is-ancestor HEAD "$target"; then
