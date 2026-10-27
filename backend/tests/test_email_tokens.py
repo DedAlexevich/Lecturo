@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -11,6 +12,7 @@ from sqlalchemy import delete, select, update
 from app.api.auth import issue_and_send_password_reset
 from app.core.config import get_settings
 from app.core.db import SessionLocal
+from app.core.logging import configure_logging
 from app.main import app
 from app.models import AuthToken, User
 from app.services.mail import send_verification_mail
@@ -313,3 +315,28 @@ async def test_address_total_limit_caps_requests_from_many_ips(email, mails, mon
     finally:
         get_settings.cache_clear()
     assert statuses == [204, 204, 204, 204, 429, 429]
+
+
+async def test_mail_without_smtp_logged_at_info(caplog, monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "")
+    get_settings.cache_clear()
+    with caplog.at_level("INFO", logger="app"):
+        await send_verification_mail("a@example.org", "abc")
+    get_settings.cache_clear()
+    records = [r for r in caplog.records if r.name == "app.services.mail"]
+    assert [r.levelname for r in records] == ["INFO"]
+    assert "verify-email?token=abc" in records[0].getMessage()
+
+
+def test_app_logger_writes_info_to_stdout(capsys):
+    logger = logging.getLogger("app")
+    saved_handlers, saved_level = logger.handlers[:], logger.level
+    logger.handlers.clear()
+    try:
+        configure_logging()
+        configure_logging()
+        logging.getLogger("app.services.mail").info("письмо в лог")
+    finally:
+        logger.handlers[:] = saved_handlers
+        logger.setLevel(saved_level)
+    assert capsys.readouterr().out.count("письмо в лог") == 1
