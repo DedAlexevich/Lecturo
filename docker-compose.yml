@@ -22,6 +22,25 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  db-backup:
+    image: pgvector/pgvector:pg16
+    entrypoint: ["/bin/sh", "/schedule.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: lecturo
+      PGDATABASE: lecturo
+      PGPASSWORD: ${POSTGRES_PASSWORD:-lecturo}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - ./infra/backup/schedule.sh:/schedule.sh:ro
+      - ${BACKUP_DIR:-${DATA_DIR:-./data}/backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *default-logging
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     ports:
