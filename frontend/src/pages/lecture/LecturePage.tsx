@@ -6,6 +6,7 @@ import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { cameFromQuiz } from "../../features/quiz/moment";
 import { ChatPanel } from "./ChatPanel";
 import { QuizButton } from "../../features/quiz/QuizButton";
+import { TelegramNotice } from "../../features/telegram-notice/TelegramNotice";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { ShareButton } from "../../features/share/ShareButton";
 import { useZoomerMode } from "../../features/zoomer/useZoomerMode";
@@ -246,6 +247,7 @@ export function LecturePage() {
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
+  const shownStatus = progress?.status ?? data.status;
   const failedSummarize = data.steps.find((step) => step.step === "summarize" && step.status === "failed");
   const regenerationError = data.status === "ready" && !errorDismissed ? (failedSummarize?.error ?? null) : null;
   const tabs = (
@@ -347,7 +349,7 @@ export function LecturePage() {
       )}
       {showProcessing && (
         <Processing
-          status={progress?.status ?? data.status}
+          status={shownStatus}
           queuePosition={progress?.queue_position ?? null}
           etaSec={progress ? (progress.eta_sec ?? null) : (data.eta_sec ?? null)}
           steps={progress?.steps ?? data.steps}
@@ -355,6 +357,11 @@ export function LecturePage() {
           retrying={retry.isPending}
           retryError={retry.error}
           stalled={status.stalled}
+          notice={
+            (shownStatus === "queued" || shownStatus === "processing") && (
+              <TelegramNotice lectureId={data.id} subject={summary ? "regenerate" : "lecture"} />
+            )
+          }
         />
       )}
       <div className="lecture__body">

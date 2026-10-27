@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { components } from "../../api/schema";
 import { detailOf } from "../../features/upload/errors";
 import { ApiError } from "../../app/queryClient";
@@ -26,6 +27,7 @@ type ProcessingProps = {
   retrying: boolean;
   retryError: Error | null;
   stalled: boolean;
+  notice?: ReactNode;
 };
 
 function retryMessage(error: Error) {
@@ -36,7 +38,17 @@ function retryMessage(error: Error) {
   return "Не удалось перезапустить обработку. Попробуйте ещё раз.";
 }
 
-export function Processing({ status, queuePosition, etaSec, steps, onRetry, retrying, retryError, stalled }: ProcessingProps) {
+export function Processing({
+  status,
+  queuePosition,
+  etaSec,
+  steps,
+  onRetry,
+  retrying,
+  retryError,
+  stalled,
+  notice,
+}: ProcessingProps) {
   const visible = steps
     .filter((step) => step.step !== "quiz")
     .sort((a, b) => stepOrder.indexOf(a.step) - stepOrder.indexOf(b.step));
@@ -68,6 +80,7 @@ export function Processing({ status, queuePosition, etaSec, steps, onRetry, retr
           {eta}
         </p>
       )}
+      {!failed && notice}
       {stalled && (
         <p className="processing__error" role="status">
           Не получается узнать статус обработки. Пробуем снова, данные могут быть устаревшими.

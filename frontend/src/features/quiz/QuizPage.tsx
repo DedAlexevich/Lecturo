@@ -7,6 +7,7 @@ import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Progress } from "../../ui/Progress";
 import { useAiTransferConsent } from "../consent/useAiTransferConsent";
+import { TelegramNotice } from "../telegram-notice/TelegramNotice";
 import {
   isBuilding,
   needsSubscription,
@@ -88,7 +89,7 @@ function QuizStart({ step, empty, onStart, starting, error }: StartProps) {
   );
 }
 
-function QuizBuilding({ step }: { step: Step }) {
+function QuizBuilding({ step, lectureId }: { step: Step; lectureId: string }) {
   return (
     <section className="quiz-start" aria-labelledby="quiz-building-title">
       <h2 id="quiz-building-title" className="quiz-start__title" aria-live="polite">
@@ -99,6 +100,7 @@ function QuizBuilding({ step }: { step: Step }) {
         label={step.status === "pending" ? "В очереди" : "Читаем расшифровку"}
         value={step.status === "running" ? step.progress * 100 : undefined}
       />
+      <TelegramNotice lectureId={lectureId} subject="quiz" />
     </section>
   );
 }
@@ -176,7 +178,7 @@ export function QuizPage() {
   } else if (stepQuery.isError && !quiz.data) {
     body = <QuizFailure onRetry={() => void stepQuery.refetch()} retrying={stepQuery.isFetching} />;
   } else if (building && step) {
-    body = <QuizBuilding step={step} />;
+    body = <QuizBuilding step={step} lectureId={id} />;
   } else if (quiz.data && quiz.data.questions.length > 0) {
     body = (
       <>

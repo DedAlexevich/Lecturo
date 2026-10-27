@@ -5,7 +5,7 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
-from app.storage import save_chat_id
+from app.storage import confirm_start, save_chat_id
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ def build_router(public_url: str, pool: asyncpg.Pool | None) -> Router:
         if pool is not None and message.from_user is not None:
             try:
                 await save_chat_id(pool, message.from_user.id, message.chat.id)
+                await confirm_start(pool, message.from_user.id)
             except (asyncpg.PostgresError, OSError):
                 logger.exception("не удалось сохранить chat_id")
         await message.answer(GREETING, reply_markup=open_app_markup(public_url))
