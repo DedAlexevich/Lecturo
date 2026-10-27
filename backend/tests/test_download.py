@@ -434,6 +434,7 @@ async def test_download_saves_audio_path(public_host, probed_duration, monkeypat
     assert calls == ["https://vkvideo.ru/video-1_2"]
     assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
+    assert lecture.duration_sec == 1800.0
     assert reported[-1] == 1.0
 
 
@@ -463,6 +464,33 @@ def fetch_file(url, target, progress):
     path = target.with_suffix(".opus")
     path.write_bytes(b"opus")
     return path
+
+
+async def test_download_takes_duration_from_downloaded_audio(
+    public_host, probed_duration, monkeypatch, storage
+):
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    probed_duration[0] = 5400.0
+    lecture = link_lecture(duration=600.0)
+
+    await download.download(None, lecture, no_report)
+
+    assert lecture.duration_sec == 5400.0
+
+
+async def test_download_rejects_audio_longer_than_four_hours(
+    public_host, probed_duration, monkeypatch, storage
+):
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    probed_duration[0] = 4 * 3600 + 1
+    lecture = link_lecture(duration=600.0)
+
+    with pytest.raises(LinkError, match="4 часов"):
+        await download.download(None, lecture, no_report)
+
+    assert lecture.audio_path is None
+    assert lecture.duration_sec == 600.0
+    assert not list((storage / "audio").iterdir())
 
 
 async def test_download_removes_partial_files_on_error(public_host, monkeypatch, storage):
@@ -680,6 +708,7 @@ async def test_download_fetches_public_file(media_hosts, storage):
     await download.download(None, lecture, no_report)
 
     assert lecture.audio_path == str(storage / "audio" / f"{lecture.id}.opus")
+    assert lecture.duration_sec == pytest.approx(2.0, abs=0.1)
 
 
 def test_real_download_stops_on_size_limit(media_hosts, monkeypatch, tmp_path):

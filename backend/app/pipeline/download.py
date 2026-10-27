@@ -19,6 +19,7 @@ from yt_dlp.utils import YoutubeDLError
 
 from app.core.config import get_settings
 from app.models import Lecture
+from app.pipeline import media
 from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
 from app.pipeline.runner import Report
 
@@ -400,4 +401,9 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
         if isinstance(error, BlockedAddress):
             raise LinkError(INTERNAL_NETWORK) from error
         raise
+    duration = await media.probe_duration(audio_path)
+    if duration > MAX_DURATION_SEC:
+        await asyncio.to_thread(audio_path.unlink, missing_ok=True)
+        raise LinkError("Видео длиннее 4 часов")
     lecture.audio_path = str(audio_path)
+    lecture.duration_sec = duration
