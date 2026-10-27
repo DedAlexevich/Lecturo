@@ -1,4 +1,4 @@
-.dialog {
+dialog.dialog {
   width: min(32rem, calc(100% - var(--space-5)));
 }
 
