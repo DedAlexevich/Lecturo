@@ -112,7 +112,7 @@ async def check_quotas(
                     row["telegram_chat_id"],
                     "Осталось меньше 15 минут обработки.",
                 )
-            if week_start > row["created_at"] and now - week_start < timedelta(hours=2):
+            if week_start > row["created_at"]:
                 await send_once(
                     redis,
                     bot,
