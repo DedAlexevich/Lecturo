@@ -226,6 +226,7 @@ async def test_upload_requires_consent(client, user, auth_headers):
     assert body["RejectUpload"] is True
     assert body["HTTPResponse"]["StatusCode"] == 403
     assert "ChangeFileInfo" not in body
+    assert await lecture_count(user) == 0
 
 
 async def post_local_result(client, auth_headers):
