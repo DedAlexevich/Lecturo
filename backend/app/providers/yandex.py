@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,7 @@ EMBEDDINGS_CONCURRENCY = 4
 STORAGE_HOST = "storage.yandexcloud.net"
 STORAGE_REGION = "ru-central1"
 UPLOAD_SHARE = 0.05
+UPLOAD_CHUNK_BYTES = 1024 * 1024
 RECOGNIZE_LIMIT = 0.95
 
 AUDIO_ENCODINGS = {".opus": "OGG_OPUS", ".ogg": "OGG_OPUS", ".oga": "OGG_OPUS", ".mp3": "MP3"}
@@ -54,6 +55,20 @@ class YandexSpeechKitError(RuntimeError):
 
 class YandexNetworkError(YandexSpeechKitError):
     pass
+
+
+def file_sha256(path: Path) -> str:
+    with path.open("rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
+
+
+async def file_chunks(path: Path) -> AsyncIterator[bytes]:
+    file = await asyncio.to_thread(path.open, "rb")
+    try:
+        while chunk := await asyncio.to_thread(file.read, UPLOAD_CHUNK_BYTES):
+            yield chunk
+    finally:
+        await asyncio.to_thread(file.close)
 
 
 def parse_seconds(value: str) -> float:
@@ -148,14 +163,17 @@ class YandexSpeechToText:
         return expected_seconds(StepName.transcribe, duration, self.settings)
 
     async def _upload(self, client: httpx.AsyncClient, audio_path: Path, key: str) -> None:
-        content = await asyncio.to_thread(audio_path.read_bytes)
-        payload_hash = hashlib.sha256(content).hexdigest()
+        payload_hash = await asyncio.to_thread(file_sha256, audio_path)
+        size = (await asyncio.to_thread(audio_path.stat)).st_size
         response = await self._send(
             "загрузка аудио в Object Storage",
             lambda: client.put(
                 self._object_url(key),
-                content=content,
-                headers=self._storage_headers("PUT", key, payload_hash),
+                content=file_chunks(audio_path),
+                headers={
+                    **self._storage_headers("PUT", key, payload_hash),
+                    "content-length": str(size),
+                },
             ),
         )
         self._raise_for_status(response, "загрузка аудио в Object Storage")
