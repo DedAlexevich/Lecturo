@@ -119,6 +119,12 @@ async def test_create_payment_returns_confirmation_url(client, user, auth_header
         assert payment.status == PaymentStatus.pending
         assert payment.yookassa_id == "yk-1"
         assert payment.idempotence_key == "key-create"
+        assert payment.raw == {
+            "id": "yk-1",
+            "status": "pending",
+            "amount": {"value": "199.00", "currency": "RUB"},
+            "confirmation": {"confirmation_url": CONFIRMATION_URL},
+        }
 
 
 async def test_same_key_does_not_create_second_payment(client, user, auth_headers, fake):
@@ -396,7 +402,8 @@ async def test_payment_uses_receipt_email_without_account_email(client, user, au
     assert json.loads(request.content)["metadata"]["receipt_email"] == "buyer@example.org"
     async with SessionLocal() as session:
         payment = await session.get(Payment, response.json()["id"])
-        assert payment.raw["metadata"]["receipt_email"] == "buyer@example.org"
+        assert "metadata" not in payment.raw
+        assert "buyer@example.org" not in json.dumps(payment.raw)
         assert (await session.get(User, user.id)).email is None
 
 

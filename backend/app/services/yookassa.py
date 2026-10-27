@@ -134,6 +134,14 @@ def payment_request(
     return body
 
 
+def stored_raw(remote: dict[str, Any]) -> dict[str, Any]:
+    raw = {key: remote[key] for key in ("id", "status", "amount", "captured_at") if key in remote}
+    url = (remote.get("confirmation") or {}).get("confirmation_url")
+    if url:
+        raw["confirmation"] = {"confirmation_url": url}
+    return raw
+
+
 def confirmation_url(payment: Payment) -> str | None:
     return ((payment.raw or {}).get("confirmation") or {}).get("confirmation_url")
 
@@ -213,7 +221,7 @@ async def create_payment(
             await session.commit()
         raise
     payment.yookassa_id = response["id"]
-    payment.raw = response
+    payment.raw = stored_raw(response)
     await session.commit()
     return payment
 
@@ -305,7 +313,7 @@ async def apply_succeeded(
     if parse_amount(remote.get("amount")) != payment.amount_kopecks:
         logger.error("Сумма платежа %s не совпадает с ЮKassa, начисление отменено", payment.id)
         payment.status = PaymentStatus.canceled
-        payment.raw = remote
+        payment.raw = stored_raw(remote)
         return
     if payment.kind == PaymentKind.subscription:
         await grant_subscription(session, payment, now, settings)
@@ -313,7 +321,7 @@ async def apply_succeeded(
         grant_package(session, payment, settings)
     payment.status = PaymentStatus.succeeded
     payment.paid_at = parse_time(remote.get("captured_at")) or now
-    payment.raw = remote
+    payment.raw = stored_raw(remote)
 
 
 async def has_pending_payment(session: AsyncSession, yookassa_id: str) -> bool:
@@ -361,6 +369,6 @@ async def process_notification(
         await apply_succeeded(session, payment, remote, now or datetime.now(UTC), settings)
     elif status == PaymentStatus.canceled:
         payment.status = PaymentStatus.canceled
-        payment.raw = remote
+        payment.raw = stored_raw(remote)
     await session.commit()
     return payment

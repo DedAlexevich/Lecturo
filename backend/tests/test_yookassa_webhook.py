@@ -126,7 +126,13 @@ async def subscriptions_of(user: User) -> list[Subscription]:
 
 async def test_succeeded_package_increases_quota(client, user, auth_headers, fake):
     payment = await make_payment(user, "hours_5")
-    fake.set_remote(payment, "succeeded", captured_at="2026-10-26T10:00:00.000Z")
+    fake.set_remote(
+        payment,
+        "succeeded",
+        captured_at="2026-10-26T10:00:00.000Z",
+        payment_method={"type": "bank_card", "card": {"first6": "555555", "last4": "4444"}},
+    )
+    fake.payments[payment.yookassa_id]["metadata"]["receipt_email"] = "buyer@example.org"
 
     response = await client.post(WEBHOOK, json=notification(payment))
 
@@ -138,7 +144,12 @@ async def test_succeeded_package_increases_quota(client, user, auth_headers, fak
     stored = await load_payment(payment)
     assert stored.status == PaymentStatus.succeeded
     assert stored.paid_at == datetime(2026, 10, 26, 10, tzinfo=UTC)
-    assert stored.raw["status"] == "succeeded"
+    assert stored.raw == {
+        "id": payment.yookassa_id,
+        "status": "succeeded",
+        "amount": {"value": "199.00", "currency": "RUB"},
+        "captured_at": "2026-10-26T10:00:00.000Z",
+    }
     [package] = await packages_of(user)
     assert package.payment_id == payment.id
     assert package.seconds_total == package.seconds_left == 5 * 3600
