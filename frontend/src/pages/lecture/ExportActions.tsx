@@ -2,32 +2,13 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
-
-type Format = "pdf" | "srt" | "vtt";
+import { exportFileName, type ExportFormat as Format } from "./exportFileName";
 
 const formats: { format: Format; label: string; needs: "ready" | "segments" }[] = [
   { format: "pdf", label: "PDF", needs: "ready" },
   { format: "srt", label: "SRT", needs: "segments" },
   { format: "vtt", label: "VTT", needs: "segments" },
 ];
-
-function fileName(title: string, format: Format, disposition: string | null) {
-  const match = disposition && /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-  if (match?.[2]) return match[2];
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return defaultName(title, format);
-    }
-  }
-  return defaultName(title, format);
-}
-
-function defaultName(title: string, format: Format) {
-  const base = title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "lecture";
-  return `${base}.${format}`;
-}
 
 async function download(lectureId: string, format: Format) {
   const params = { path: { lecture_id: lectureId } };
@@ -74,7 +55,7 @@ export function ExportActions({ lectureId, title, ready, hasSegments }: ExportAc
         );
         return;
       }
-      saveBlob(result.blob, fileName(title, format, result.disposition));
+      saveBlob(result.blob, exportFileName(title, format, result.disposition));
     } catch {
       toast.show("Не удалось скачать файл. Проверьте соединение.", "error");
     } finally {
