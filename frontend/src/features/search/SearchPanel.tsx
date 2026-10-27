@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { formatTimecode } from "../../pages/lecture/time";
+import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";

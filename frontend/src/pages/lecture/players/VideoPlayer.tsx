@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Spinner } from "../../../ui/Spinner";
-import { formatTimecode } from "../time";
+import { formatTimecode } from "../../../lib/timecode";
 import type { PlayerProps } from "./player";
 import "./VideoPlayer.css";
 
