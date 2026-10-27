@@ -13,6 +13,7 @@ import { AccountPage } from "../pages/account/AccountPage";
 import { LocalPage } from "../pages/local/LocalPage";
 import { CoursePage } from "../pages/course/CoursePage";
 import { PublicSharePage } from "../pages/public/PublicSharePage";
+import { QuizPage } from "../features/quiz/QuizPage";
 import { ExamSheetPage } from "../features/exam-sheet/ExamSheetPage";
 
 export const guestRoutes: RouteObject[] = [
@@ -34,6 +35,7 @@ export const publicRoutes: RouteObject[] = [
 export const privateRoutes: RouteObject[] = [
   { path: "/", element: <HomePage /> },
   { path: "/lectures/:id", element: <LecturePage /> },
+  { path: "/lectures/:id/quiz", element: <QuizPage /> },
   { path: "/courses/:id", element: <CoursePage /> },
   { path: "/courses/:id/exam-sheet", element: <ExamSheetPage /> },
   { path: "/account", element: <AccountPage /> },
