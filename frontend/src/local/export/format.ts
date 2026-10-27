@@ -115,8 +115,9 @@ export function toMarkdown(lecture: Pick<LocalLecture, "title" | "durationSec" |
 }
 
 export function exportFileName(title: string, format: ExportFormat): string {
-  const base = title
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+  const base = Array.from(title, (char) => (char.charCodeAt(0) < 32 ? " " : char))
+    .join("")
+    .replace(/[\\/:*?"<>|]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\.+|\.+$/g, "")
