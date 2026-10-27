@@ -427,16 +427,19 @@ async def test_downloaded_stereo_audio_becomes_mono(stereo_audio):
     assert await media.probe_duration(stereo) == pytest.approx(2.0, abs=0.1)
 
 
-async def test_mono_audio_is_left_as_is(storage, sample_audio):
-    calls = []
+async def test_mono_audio_is_left_as_is(storage, sample_audio, monkeypatch):
+    encoded = []
+
+    async def fake_encode(*args):
+        encoded.append(args)
 
     async def report(progress):
-        calls.append(progress)
+        pass
 
+    monkeypatch.setattr(media, "encode", fake_encode)
     await media.make_mono(sample_audio, 2.0, report)
 
-    assert await media.audio_channels(sample_audio) == 1
-    assert calls == []
+    assert encoded == []
 
 
 async def test_ffmpeg_progress_is_reported(sample_video, tmp_path, monkeypatch):

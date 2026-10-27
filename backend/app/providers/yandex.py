@@ -59,10 +59,10 @@ def parse_seconds(value: str) -> float:
 
 def parse_recognition(response: dict[str, Any]) -> list[Segment]:
     chunks = response.get("chunks", [])
-    channel = min((chunk.get("channelTag", "1") for chunk in chunks), default="1")
+    channel = min((int(chunk.get("channelTag", 1)) for chunk in chunks), default=1)
     segments = []
     for chunk in chunks:
-        if chunk.get("channelTag", "1") != channel:
+        if int(chunk.get("channelTag", 1)) != channel:
             continue
         alternatives = chunk.get("alternatives") or []
         if not alternatives:
