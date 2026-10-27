@@ -84,7 +84,7 @@ cp .env.example .env
 
 ## LLM и эмбеддинги
 
-Оба провайдера работают с любым сервисом, совместимым с OpenAI API. Бэкенд отправляет запросы на `<BASE_URL>/chat/completions` и `<BASE_URL>/embeddings` с заголовком `Authorization: Bearer <KEY>`. Допустимые значения провайдера LLM: `stub` и `openai`, провайдера эмбеддингов: `stub`, `openai` и `yandex` (отдельный API Yandex Foundation Models, см. ниже).
+Провайдер `openai` работает с любым сервисом, совместимым с OpenAI API. Бэкенд отправляет запросы на `<BASE_URL>/chat/completions` и `<BASE_URL>/embeddings` с заголовком `Authorization: Bearer <KEY>`. Допустимые значения провайдера LLM: `stub` и `openai`, провайдера эмбеддингов: `stub`, `openai` и `yandex` (отдельный API Yandex Foundation Models, см. ниже).
 
 | Переменная | Описание | Обязательна | По умолчанию | Где используется |
 |---|---|---|---|---|
