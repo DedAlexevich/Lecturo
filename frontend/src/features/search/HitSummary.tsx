@@ -7,6 +7,9 @@ type HitSummaryProps = {
 };
 
 export function HitSummary({ hit, matcher }: HitSummaryProps) {
+  if (hit.kind === "chapter") {
+    return <span className="search__text">{highlight(hit.text, matcher)}</span>;
+  }
   if (hit.description) {
     return (
       <>
