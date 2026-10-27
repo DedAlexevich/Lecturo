@@ -1,6 +1,8 @@
 import pytest
 from sqlalchemy import func, select, update
 
+from app.api import lectures as lectures_api
+from app.api import local_results as local_results_api
 from app.core.db import SessionLocal
 from app.models import (
     Lecture,
@@ -13,6 +15,7 @@ from app.models import (
     User,
 )
 from app.pipeline import stages, summarize, tasks
+from app.services import consent
 
 
 async def revoke_consent(user: User) -> None:
@@ -84,3 +87,69 @@ async def test_pipeline_without_consent_fails_before_server_processing(user, mon
             .where(TranscriptSegment.lecture_id == lecture.id)
         )
         assert segments == 0
+
+
+async def lecture_count(user: User) -> int:
+    async with SessionLocal() as session:
+        return await session.scalar(
+            select(func.count()).select_from(Lecture).where(Lecture.owner_id == user.id)
+        )
+
+
+@pytest.fixture
+def no_server_work(monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("обработка без согласия")
+
+    monkeypatch.setattr(lectures_api, "inspect_link", forbidden)
+    monkeypatch.setattr(lectures_api, "enqueue_lecture", forbidden)
+    monkeypatch.setattr(local_results_api, "enqueue_lecture", forbidden)
+    monkeypatch.setattr(local_results_api, "enforce_rate_limit", forbidden)
+
+
+async def test_add_link_requires_consent(client, user, auth_headers, no_server_work):
+    await revoke_consent(user)
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == consent.AI_TRANSFER_REQUIRED
+    assert await lecture_count(user) == 0
+
+
+async def test_upload_requires_consent(client, user, auth_headers):
+    await revoke_consent(user)
+    request = {
+        "Type": "pre-create",
+        "Event": {
+            "Upload": {"Size": 1000, "MetaData": {"filename": "a.mp4"}},
+            "HTTPRequest": {"Header": {name: [value] for name, value in auth_headers.items()}},
+        },
+    }
+    response = await client.post("/api/v1/uploads/hooks", json=request)
+
+    body = response.json()
+    assert body["RejectUpload"] is True
+    assert body["HTTPResponse"]["StatusCode"] == 403
+    assert "ChangeFileInfo" not in body
+
+
+async def test_local_result_requires_consent(client, user, auth_headers, no_server_work):
+    await revoke_consent(user)
+    response = await client.post(
+        "/api/v1/local-results",
+        json={
+            "title": "Матанализ",
+            "duration_sec": 60.0,
+            "model": "whisper-small",
+            "segments": [{"start": 0.0, "end": 60.0, "text": "слово " * 40}],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == consent.AI_TRANSFER_REQUIRED
+    assert await lecture_count(user) == 0
