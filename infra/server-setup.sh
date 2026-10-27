@@ -17,7 +17,7 @@ repo_url=https://github.com/DedAlexevich/Lecturo.git
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get -y upgrade
+apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
 apt-get install -y ca-certificates curl git ufw fail2ban unattended-upgrades
 
 if ! command -v docker >/dev/null; then
@@ -45,7 +45,7 @@ actions_key=$(mktemp -d)/actions
 ssh-keygen -q -t ed25519 -N "" -C github-actions-deploy -f "$actions_key"
 touch /home/deploy/.ssh/authorized_keys
 sed -i '/github-actions-deploy$/d' /home/deploy/.ssh/authorized_keys
-cat "$actions_key.pub" >> /home/deploy/.ssh/authorized_keys
+echo "command=\"$app_dir/infra/deploy.sh \$SSH_ORIGINAL_COMMAND\",restrict $(cat "$actions_key.pub")" >> /home/deploy/.ssh/authorized_keys
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 
