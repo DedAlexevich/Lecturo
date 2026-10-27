@@ -4,6 +4,11 @@ set -euo pipefail
 main() {
   local target="${1:-origin/main}"
   cd "$(dirname "$0")/.."
+  exec 9<.git
+  if ! flock -n 9; then
+    echo "waiting for another deploy"
+    flock 9
+  fi
 
   git fetch --quiet origin main
   if ! git merge-base --is-ancestor HEAD "$target"; then

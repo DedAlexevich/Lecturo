@@ -32,7 +32,7 @@ jobs:
         env:
           SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
           SHA: ${{ github.event.workflow_run.head_sha }}
-        run: ssh "$SSH_TARGET" "$SHA"
+        run: ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$SSH_TARGET" "$SHA"
       - name: Health check
         env:
           DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
