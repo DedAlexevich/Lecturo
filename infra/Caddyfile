@@ -18,9 +18,18 @@ handle /files/* {
 	reverse_proxy tusd:8080
 }
 
-handle_path /media/* {
+@media path_regexp media ^/media/([0-9a-f-]{36})\.mp4$
+handle @media {
+	forward_auth api:8000 {
+		uri /api/v1/lectures/{re.media.1}/video-access?{query}
+	}
+	uri strip_prefix /media
 	root * /srv/storage/videos
 	file_server
+}
+
+handle /media/* {
+	respond 404
 }
 
 handle {

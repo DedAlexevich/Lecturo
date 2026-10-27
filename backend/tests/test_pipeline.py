@@ -171,7 +171,7 @@ async def test_upload_gets_compressed_audio_and_video(
     assert content.index(b"moov") < content.index(b"mdat")
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
-    assert response.json()["video_url"] == f"/media/{lecture.id}.mp4"
+    assert response.json()["video_url"].startswith(f"/media/{lecture.id}.mp4?expires=")
 
 
 async def test_subscriber_video_kept_longer(user, sample_video):
