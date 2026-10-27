@@ -12,6 +12,11 @@ export function parseStartTime(value: string | null) {
   return Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
 }
 
+export function parseSection(value: string | null) {
+  if (value === null || !/^\d+$/.test(value)) return null;
+  return Number(value);
+}
+
 export function findActiveSegment(segments: { start: number }[], time: number) {
   let low = 0;
   let high = segments.length - 1;
