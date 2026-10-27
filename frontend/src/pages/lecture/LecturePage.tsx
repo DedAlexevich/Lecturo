@@ -4,6 +4,7 @@ import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { cameFromQuiz } from "../../features/quiz/moment";
+import { ChatPanel } from "./ChatPanel";
 import { QuizButton } from "../../features/quiz/QuizButton";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { ShareButton } from "../../features/share/ShareButton";
@@ -85,9 +86,10 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   );
 }
 
-type PanelKind = "summary" | "chapters" | "transcript";
+type PanelKind = "summary" | "chapters" | "transcript" | "chat";
+type ContentPanelKind = Exclude<PanelKind, "chat">;
 
-const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: string; local: string }> = {
+const panelNotes: Record<ContentPanelKind, { pending: string; failed: string; empty: string; local: string }> = {
   summary: {
     pending: "Конспект появится здесь, когда обработка закончится.",
     failed: "Обработка не удалась, поэтому конспекта нет.",
@@ -108,7 +110,7 @@ const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: st
   },
 };
 
-function PanelEmpty({ kind, lecture }: { kind: PanelKind; lecture: Lecture }) {
+function PanelEmpty({ kind, lecture }: { kind: ContentPanelKind; lecture: Lecture }) {
   const notes = panelNotes[kind];
   const { status } = lecture;
   const note = isPending(status)
@@ -291,6 +293,11 @@ export function LecturePage() {
               <PanelEmpty kind="transcript" lecture={data} />
             ),
         },
+        {
+          id: "chat",
+          label: "Чат",
+          panel: <ChatPanel lectureId={data.id} onSelectTime={hasPlayer ? playFrom : undefined} />,
+        },
       ]}
     />
   );
@@ -298,6 +305,7 @@ export function LecturePage() {
     summary: summary !== "",
     chapters: chapters.length > 0,
     transcript: segments.length > 0,
+    chat: true,
   };
 
   return (

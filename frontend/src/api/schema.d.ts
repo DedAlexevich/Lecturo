@@ -745,6 +745,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat About Lecture */
+        post: operations["chat_about_lecture_api_v1_lectures__lecture_id__chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -1030,6 +1047,16 @@ export interface components {
             /** Summary */
             summary: string;
         };
+        /** ChatMessage */
+        ChatMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Content */
+            content: string;
+        };
         /**
          * ChunkKind
          * @enum {string}
@@ -1150,6 +1177,41 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** LectureChatIn */
+        LectureChatIn: {
+            /** Question */
+            question: string;
+            /** History */
+            history?: components["schemas"]["ChatMessage"][];
+        };
+        /** LectureChatOut */
+        LectureChatOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "answered" | "not_found" | "off_topic";
+            /** Answer */
+            answer: string;
+            /** Extra */
+            extra: string | null;
+            /** Sources */
+            sources: components["schemas"]["LectureChatSource"][];
+        };
+        /** LectureChatSource */
+        LectureChatSource: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "transcript" | "chapter";
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Text */
+            text: string;
         };
         /** LectureDetail */
         LectureDetail: {
@@ -3691,6 +3753,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_about_lecture_api_v1_lectures__lecture_id__chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LectureChatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LectureChatOut"];
+                };
             };
             /** @description Validation Error */
             422: {
