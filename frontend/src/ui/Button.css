@@ -11,7 +11,7 @@
   font-weight: var(--weight-medium);
   line-height: 1;
   cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
 }
 
 .button--sm {
@@ -28,7 +28,6 @@
 .button--primary {
   background: var(--color-accent);
   color: var(--color-on-accent);
-  box-shadow: var(--shadow-1);
 }
 
 .button--primary:hover:not(:disabled) {
@@ -36,18 +35,17 @@
 }
 
 .button--secondary {
-  background: var(--color-surface);
-  border-color: var(--color-border-strong);
+  background: var(--color-accent-soft);
   color: var(--color-text);
 }
 
 .button--secondary:hover:not(:disabled) {
-  background: var(--color-surface-sunken);
+  background: var(--color-border);
 }
 
 .button--ghost {
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .button--ghost:hover:not(:disabled) {
@@ -56,7 +54,7 @@
 
 .button--danger {
   background: var(--color-danger);
-  color: var(--color-bg);
+  color: #ffffff;
 }
 
 .button--danger:hover:not(:disabled) {
@@ -69,8 +67,7 @@
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
-  box-shadow: none;
+  opacity: 0.45;
 }
 
 .button--loading {

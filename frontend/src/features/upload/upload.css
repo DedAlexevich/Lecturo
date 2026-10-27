@@ -17,8 +17,8 @@
   min-height: 7.5rem;
   padding: var(--space-5);
   background: var(--color-surface-sunken);
-  border: 2px solid transparent;
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: border-color var(--transition), background var(--transition);
 }
@@ -29,7 +29,8 @@
 }
 
 .add-lecture__drop--active {
-  background: var(--color-accent-soft);
+  background: var(--color-data-soft);
+  border-color: var(--color-data);
 }
 
 .add-lecture__drop:focus-within {
@@ -89,7 +90,7 @@
   padding: 0;
   background: none;
   border: 0;
-  color: var(--color-accent);
+  color: var(--color-text);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

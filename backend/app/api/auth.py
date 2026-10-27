@@ -1,9 +1,10 @@
+import logging
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from fastapi.exceptions import RequestValidationError
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import delete, select, update
 
+from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
 from app.models import AuthToken, AuthTokenKind, User
@@ -12,30 +13,29 @@ from app.schemas.user import (
     LoginIn,
     PasswordResetIn,
     RegisterIn,
-    TelegramLoginIn,
+    TelegramSignupIn,
     TokenIn,
     TokenOut,
 )
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import consume_token, issue_token
+from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
-from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
+from app.services.rate_limit import enforce_mail_rate_limit
+from app.services.telegram_auth import (
+    TELEGRAM_PROFILE_FIELDS,
+    get_or_create_telegram_user,
+    verify_login_widget,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
-    if not body.accept_terms:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("body", "accept_terms"),
-                    "msg": "Нужно принять условия использования",
-                    "type": "value_error",
-                }
-            ]
-        )
+    require_signup_consents(body.accept_terms, body.accept_personal_data)
     user = await register_user(session, body.email, body.password, body.display_name)
     return TokenOut(access_token=create_access_token(user.id))
 
@@ -46,20 +46,35 @@ async def login(body: LoginIn, session: SessionDep) -> TokenOut:
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/telegram")
-async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut:
+@router.post(
+    "/telegram",
+    responses={
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"}
+    },
+)
+async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOut:
     verify_login_widget(body)
-    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
-    user = await get_or_create_telegram_user(session, body.id, profile)
+    profile = body.model_dump(include=TELEGRAM_PROFILE_FIELDS, exclude_none=True)
+    user = await get_or_create_telegram_user(
+        session, body.id, profile, body.accept_terms, body.accept_personal_data
+    )
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/verify-email/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/verify-email/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_email_verification(
-    user: CurrentUser, session: SessionDep, background: BackgroundTasks
+    user: CurrentUser, session: SessionDep, background: BackgroundTasks, request: Request
 ) -> None:
     if not user.email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "У аккаунта нет email")
+    await enforce_mail_rate_limit(request, f"verify:{user.id}")
     if user.email_verified_at is not None:
         return
     token = await issue_token(session, user.id, AuthTokenKind.verify_email)
@@ -77,15 +92,32 @@ async def confirm_email(body: TokenIn, session: SessionDep) -> None:
     await session.commit()
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_password_reset(
-    body: EmailIn, session: SessionDep, background: BackgroundTasks
+    body: EmailIn, background: BackgroundTasks, request: Request
 ) -> None:
-    user = await session.scalar(select(User).where(User.email == normalize_email(body.email)))
-    if user is None or user.email is None:
-        return
-    token = await issue_token(session, user.id, AuthTokenKind.reset_password)
-    background.add_task(send_password_reset_mail, user.email, token)
+    email = normalize_email(body.email)
+    await enforce_mail_rate_limit(request, f"reset:{email}", per_ip=True)
+    background.add_task(issue_and_send_password_reset, email)
+
+
+async def issue_and_send_password_reset(email: str) -> None:
+    try:
+        async with SessionLocal() as session:
+            user = await session.scalar(select(User).where(User.email == email))
+            if user is None or user.email is None:
+                return
+            token = await issue_token(session, user.id, AuthTokenKind.reset_password)
+        await send_password_reset_mail(user.email, token)
+    except Exception:
+        logger.exception("Не удалось выдать и отправить ссылку сброса пароля")
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)

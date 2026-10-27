@@ -123,7 +123,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TelegramLoginIn"
+                "$ref": "#/components/schemas/TelegramSignupIn"
               }
             }
           },
@@ -139,6 +139,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
           },
           "422": {
             "description": "Validation Error",
@@ -163,6 +166,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
           }
         },
         "security": [
@@ -227,6 +236,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -288,6 +303,89 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Update Me",
+        "operationId": "update_me_api_v1_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/password": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Change My Password",
+        "operationId": "change_my_password_api_v1_me_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -501,6 +599,30 @@
             "HTTPBearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Revoke Ai Transfer",
+        "operationId": "revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/telegram-webapp": {
@@ -530,6 +652,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
           },
           "422": {
             "description": "Validation Error",
@@ -2896,6 +3021,32 @@
         ],
         "title": "LoginIn"
       },
+      "PasswordChangeIn": {
+        "properties": {
+          "current_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_password"
+        ],
+        "title": "PasswordChangeIn"
+      },
       "PasswordResetIn": {
         "properties": {
           "token": {
@@ -3062,6 +3213,21 @@
           "seconds"
         ],
         "title": "ProductOut"
+      },
+      "ProfileUpdateIn": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name"
+        ],
+        "title": "ProfileUpdateIn"
       },
       "PublicCourseOut": {
         "properties": {
@@ -3395,13 +3561,18 @@
           "accept_terms": {
             "type": "boolean",
             "title": "Accept Terms"
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data"
           }
         },
         "type": "object",
         "required": [
           "email",
           "password",
-          "accept_terms"
+          "accept_terms",
+          "accept_personal_data"
         ],
         "title": "RegisterIn"
       },
@@ -3699,11 +3870,92 @@
         ],
         "title": "TelegramLoginIn"
       },
+      "TelegramSignupIn": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "auth_date": {
+            "type": "integer",
+            "title": "Auth Date"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "auth_date",
+          "hash"
+        ],
+        "title": "TelegramSignupIn"
+      },
       "TelegramWebAppIn": {
         "properties": {
           "init_data": {
             "type": "string",
             "title": "Init Data"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
           }
         },
         "type": "object",

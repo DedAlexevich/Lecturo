@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Chapter, Lecture, Summary, TranscriptSegment
 from app.pipeline.runner import Report
-from app.pipeline.stages import load_segments
+from app.pipeline.stages import load_segments, require_ai_transfer
 from app.providers import LLM, get_llm
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -171,6 +171,7 @@ async def clear_previous(session: AsyncSession, lecture: Lecture) -> None:
 
 
 async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> None:
+    await require_ai_transfer(session, lecture)
     segments = await load_segments(session, lecture)
     if not segments:
         await clear_previous(session, lecture)

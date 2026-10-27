@@ -10,8 +10,10 @@ from sqlalchemy import delete, select
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import AuthIdentity, AuthProvider, User
+from app.services.legal import read_document
 
 BOT_TOKEN = "123456:test-bot-token"
+CONSENTS = {"accept_terms": True, "accept_personal_data": True}
 
 
 @pytest.fixture
@@ -49,7 +51,7 @@ async def test_login_creates_and_returns_same_user(client, bot_token, telegram_i
         username="ivan",
         auth_date=int(time.time()),
     )
-    first = await client.post("/api/v1/auth/telegram", json=payload)
+    first = await client.post("/api/v1/auth/telegram", json={**payload, **CONSENTS})
     assert first.status_code == 200
     second = await client.post("/api/v1/auth/telegram", json=payload)
     assert second.status_code == 200
@@ -67,6 +69,35 @@ async def test_login_creates_and_returns_same_user(client, bot_token, telegram_i
     async with SessionLocal() as session:
         user = await session.get(User, me_first.json()["id"])
         assert user.telegram_chat_id == telegram_id
+
+
+async def test_new_user_without_consents_not_created(client, bot_token, telegram_id):
+    payload = signed(bot_token, id=telegram_id, first_name="Иван", auth_date=int(time.time()))
+    for extra in ({}, {"accept_terms": True}, {"accept_personal_data": True}):
+        response = await client.post("/api/v1/auth/telegram", json={**payload, **extra})
+        assert response.status_code == 403
+    async with SessionLocal() as session:
+        identity = await session.scalar(
+            select(AuthIdentity).where(
+                AuthIdentity.provider == AuthProvider.telegram,
+                AuthIdentity.provider_user_id == str(telegram_id),
+            )
+        )
+    assert identity is None
+
+
+async def test_consents_saved_on_first_login(client, bot_token, telegram_id):
+    payload = signed(bot_token, id=telegram_id, first_name="Иван", auth_date=int(time.time()))
+    response = await client.post("/api/v1/auth/telegram", json={**payload, **CONSENTS})
+    assert response.status_code == 200
+    me = await client.get(
+        "/api/v1/me", headers={"Authorization": f"Bearer {response.json()['access_token']}"}
+    )
+    async with SessionLocal() as session:
+        user = await session.get(User, me.json()["id"])
+    assert user.terms_accepted_at is not None
+    assert user.personal_data_accepted_at is not None
+    assert user.personal_data_revision == read_document("personal-data-consent").revision_date
 
 
 async def test_forged_hash_rejected(client, bot_token, telegram_id):

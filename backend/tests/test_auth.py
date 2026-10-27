@@ -2,10 +2,11 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.core.db import SessionLocal
 from app.models import User
+from app.services.legal import read_document
 
 
 @pytest.fixture
@@ -18,7 +19,13 @@ async def email() -> AsyncIterator[str]:
 
 
 def register_body(email: str, **overrides) -> dict:
-    return {"email": email, "password": "секретный-пароль", "accept_terms": True, **overrides}
+    return {
+        "email": email,
+        "password": "секретный-пароль",
+        "accept_terms": True,
+        "accept_personal_data": True,
+        **overrides,
+    }
 
 
 async def test_register_login_and_me(client, email):
@@ -46,6 +53,27 @@ async def test_register_requires_terms(client, email):
     )
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["body", "accept_terms"]
+
+
+async def test_register_requires_personal_data_consent(client, email):
+    response = await client.post(
+        "/api/v1/auth/register", json=register_body(email, accept_personal_data=False)
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "accept_personal_data"]
+    async with SessionLocal() as session:
+        assert await session.scalar(select(User).where(User.email == email)) is None
+
+
+async def test_register_stores_consents(client, email):
+    response = await client.post("/api/v1/auth/register", json=register_body(email))
+    assert response.status_code == 201
+    async with SessionLocal() as session:
+        user = await session.scalar(select(User).where(User.email == email))
+    assert user.terms_accepted_at is not None
+    assert user.personal_data_accepted_at is not None
+    assert user.terms_revision == read_document("terms").revision_date
+    assert user.personal_data_revision == read_document("personal-data-consent").revision_date
 
 
 async def test_register_duplicate_email(client, email):

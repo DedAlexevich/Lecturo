@@ -15,6 +15,7 @@ from app.models import AuthIdentity, AuthProvider, User
 
 BOT_TOKEN = "123456:test-bot-token"
 URL = "/api/v1/auth/telegram-webapp"
+CONSENTS = {"accept_terms": True, "accept_personal_data": True}
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def webapp_fields(telegram_id: int, **overrides) -> dict:
 
 async def test_login_creates_and_returns_same_user(client, bot_token, telegram_id):
     payload = {"init_data": init_data(bot_token, **webapp_fields(telegram_id))}
-    first = await client.post(URL, json=payload)
+    first = await client.post(URL, json={**payload, **CONSENTS})
     assert first.status_code == 200
     second = await client.post(URL, json=payload)
     assert second.status_code == 200
@@ -82,7 +83,7 @@ async def test_same_user_as_login_widget(client, bot_token, telegram_id):
     check_string = "\n".join(f"{key}={value}" for key, value in sorted(widget_fields.items()))
     secret = hashlib.sha256(bot_token.encode()).digest()
     widget_fields["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
-    widget = await client.post("/api/v1/auth/telegram", json=widget_fields)
+    widget = await client.post("/api/v1/auth/telegram", json={**widget_fields, **CONSENTS})
     webapp = await client.post(
         URL, json={"init_data": init_data(bot_token, **webapp_fields(telegram_id))}
     )
@@ -96,6 +97,32 @@ async def test_same_user_as_login_widget(client, bot_token, telegram_id):
         "/api/v1/me", headers={"Authorization": f"Bearer {webapp.json()['access_token']}"}
     )
     assert me_widget.json()["id"] == me_webapp.json()["id"]
+
+
+async def test_new_user_without_consents_not_created(client, bot_token, telegram_id):
+    payload = {"init_data": init_data(bot_token, **webapp_fields(telegram_id))}
+    response = await client.post(URL, json={**payload, "accept_terms": True})
+    assert response.status_code == 403
+    async with SessionLocal() as session:
+        identity = await session.scalar(
+            select(AuthIdentity).where(
+                AuthIdentity.provider == AuthProvider.telegram,
+                AuthIdentity.provider_user_id == str(telegram_id),
+            )
+        )
+    assert identity is None
+
+
+async def test_consents_saved_on_first_login(client, bot_token, telegram_id):
+    payload = {"init_data": init_data(bot_token, **webapp_fields(telegram_id))}
+    response = await client.post(URL, json={**payload, **CONSENTS})
+    assert response.status_code == 200
+    async with SessionLocal() as session:
+        user = await session.scalar(
+            select(User).join(AuthIdentity).where(AuthIdentity.provider_user_id == str(telegram_id))
+        )
+    assert user.terms_accepted_at is not None
+    assert user.personal_data_accepted_at is not None
 
 
 async def test_forged_hash_rejected(client, bot_token, telegram_id):

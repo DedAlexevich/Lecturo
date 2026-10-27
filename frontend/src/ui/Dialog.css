@@ -10,7 +10,7 @@
 }
 
 .dialog::backdrop {
-  background: rgb(20 17 10 / 0.55);
+  background: var(--color-scrim);
 }
 
 .dialog[open] {

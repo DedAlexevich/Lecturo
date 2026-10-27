@@ -31,8 +31,8 @@
 }
 
 .tabs__tab[aria-selected="true"] {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+  border-bottom-color: var(--color-text);
 }
 
 .tabs__tab:focus-visible {
