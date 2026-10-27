@@ -15,12 +15,17 @@ LIMIT = 20
 LEXEME_PATTERN = r"'((?:[^']|'')+)'"
 
 
+async def embed_query(q: str) -> list[float]:
+    [vector] = await get_embeddings().embed([q])
+    return vector
+
+
 async def hybrid_search(
-    session: AsyncSession, scope: ColumnElement[bool], q: str
+    session: AsyncSession, scope: ColumnElement[bool], q: str, vector: list[float]
 ) -> list[SearchHit]:
     ranked_lists = [
         await fulltext_ids(session, scope, q),
-        await vector_ids(session, scope, q),
+        await vector_ids(session, scope, vector),
     ]
     scores = rrf(ranked_lists)
     top = sorted(scores, key=scores.__getitem__, reverse=True)[:LIMIT]
@@ -62,8 +67,9 @@ def prefix_tsquery(q: str) -> ColumnElement:
     return func.to_tsquery(literal("simple", REGCONFIG), prefixed)
 
 
-async def vector_ids(session: AsyncSession, scope: ColumnElement[bool], q: str) -> list[int]:
-    [vector] = await get_embeddings().embed([q])
+async def vector_ids(
+    session: AsyncSession, scope: ColumnElement[bool], vector: list[float]
+) -> list[int]:
     rows = await session.scalars(
         select(SearchChunk.id)
         .where(scope, SearchChunk.embedding.is_not(None))
