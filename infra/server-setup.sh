@@ -73,6 +73,10 @@ if [ ! -f "$app_dir/.env" ]; then
   chmod 600 "$app_dir/.env"
 fi
 
+install -m 644 "$app_dir/infra/backup/lecturo-backup.service" "$app_dir/infra/backup/lecturo-backup.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now lecturo-backup.timer
+
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow OpenSSH

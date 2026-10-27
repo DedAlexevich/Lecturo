@@ -72,3 +72,48 @@ infra/status.sh
 `infra/server-setup.sh` ставит таймер сам. На сервере, настроенном раньше, поставьте его вручную под root: `bash /opt/lecturo/infra/install-monitoring.sh`. Повторный запуск `server-setup.sh` для этого не нужен, он заодно перевыпустит ключ деплоя.
 
 Проверить алерт: `docker compose stop api`, через 3–4 минуты должно прийти сообщение, затем `docker compose start api`. Статус таймера и последние проверки: `systemctl list-timers lecturo-health.timer` и `journalctl -u lecturo-health -n 20`.
+
+## Бэкапы базы
+
+Раз в сутки (около 03:30 UTC) таймер systemd `lecturo-backup.timer` от пользователя `deploy` запускает `infra/backup/backup.sh`, а затем `infra/backup/check.sh`.
+
+- `backup.sh` делает `pg_dump` в формате custom из контейнера `db` и кладёт файл `lecturo-<дата>-<время>.dump` в папку `BACKUP_DIR` на хосте (по умолчанию `/opt/lecturo/backups`), то есть вне контейнера и вне `data/postgres`. Файл сначала пишется во временный, проверяется через `pg_restore --list` и только потом переименовывается. Хранятся последние `BACKUP_KEEP` копий (по умолчанию 7), старые удаляются. Папка и файлы доступны только `deploy` (права `700` и `600`).
+- `check.sh [файл]` поднимает временный контейнер Postgres без сети (`lecturo-backup-check`, образ как у `db`), восстанавливает в него последний бэкап или указанный файл и печатает ревизию миграций, число таблиц и пользователей. Если восстановление не прошло, сервис завершается с ошибкой. Контейнер удаляется в любом случае.
+- Пока идёт деплой, бэкап ждёт его окончания (та же блокировка, что в `infra/deploy.sh`).
+
+На новом сервере таймер ставит `infra/server-setup.sh`. На уже настроенном сервере после деплоя с этой версией один раз выполните под root:
+
+```sh
+install -m 644 /opt/lecturo/infra/backup/lecturo-backup.service /opt/lecturo/infra/backup/lecturo-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now lecturo-backup.timer
+systemctl start lecturo-backup.service
+```
+
+Юниты копируются, а не подключаются ссылкой на репозиторий: файлы в `/opt/lecturo` может менять `deploy`, а юнит systemd от его имени менять нельзя.
+
+Проверка:
+
+```sh
+systemctl list-timers lecturo-backup.timer
+journalctl -u lecturo-backup.service -n 20
+ls -l /opt/lecturo/backups
+```
+
+В журнале должна быть строка `ok ... revision ..., N tables, M users`.
+
+Сообщений о сбое бэкапа нет, поэтому журнал стоит время от времени смотреть: при ошибке `systemctl status lecturo-backup.service` показывает `failed`. На новом сервере таймер включается до первого деплоя, и пока проект не запущен, ночные запуски падают на `docker compose exec db`. Это ожидаемо и проходит после первого деплоя.
+
+Бэкапы лежат на том же диске, что и база: от удалённой строки или неудачной миграции они спасут, от потери сервера нет. Копию стоит регулярно уносить с сервера. Автоматической выгрузки пока нет: под root скопируйте свежий дамп в `/home/admin` (`install -m 600 -o admin /opt/lecturo/backups/lecturo-<дата>-<время>.dump /home/admin/`), заберите его `scp admin@<ip>:lecturo-*.dump .` и удалите с сервера. Ключ `deploy` для этого не подходит, он может запускать только `infra/deploy.sh`.
+
+### Восстановление
+
+```sh
+ssh admin@<ip>
+su -
+su - deploy -c "/opt/lecturo/infra/backup/restore.sh /opt/lecturo/backups/lecturo-<дата>-<время>.dump"
+```
+
+Скрипт просит ввести `yes`, затем сохраняет текущую базу в `pre-restore-<дата>-<время>.dump` в той же папке (эти файлы не удаляются автоматически), останавливает `api`, `worker` и `bot`, пересоздаёт базу `lecturo`, восстанавливает дамп и поднимает сервисы обратно. Если дамп старее кода, недостающие миграции применит `api` при старте. Если восстановление упало, сервисы остаются остановленными, а скрипт печатает путь к сохранённой прежней базе: её можно вернуть тем же `restore.sh`.
+
+Для `restore.sh` контейнер `db` должен работать. Если сама база повреждена и не запускается, остановите проект, переложите `data/postgres` в сторону, поднимите `db` с пустой папкой и восстановите бэкап.
