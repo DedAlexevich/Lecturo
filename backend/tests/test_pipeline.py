@@ -384,7 +384,8 @@ async def test_broken_original_fails_audio_step(user, storage, tmp_path):
     assert not list((storage / "tmp").iterdir())
 
 
-async def test_downloaded_stereo_audio_becomes_mono(storage):
+@pytest.fixture
+def stereo_audio(storage) -> Path:
     stereo = storage / "audio" / "lecture.opus"
     stereo.parent.mkdir()
     subprocess.run(
@@ -410,6 +411,11 @@ async def test_downloaded_stereo_audio_becomes_mono(storage):
         ],
         check=True,
     )
+    return stereo
+
+
+async def test_downloaded_stereo_audio_becomes_mono(stereo_audio):
+    stereo = stereo_audio
     assert await media.audio_channels(stereo) == 2
 
     async def report(progress):
