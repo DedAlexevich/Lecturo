@@ -9,9 +9,11 @@ import pytest
 
 from app.core.config import Settings
 from app.providers import Segment, get_speech_to_text
+from app.providers import salute
 from app.providers.salute import (
     API_URL,
     OAUTH_URL,
+    RUSSIAN_TRUSTED_CA,
     SaluteSpeechError,
     SaluteSpeechToText,
     parse_recognition,
@@ -310,3 +312,56 @@ async def test_repeated_unauthorized_is_reported(tmp_path: Path):
     with pytest.raises(SaluteSpeechError, match="после обновления токена: scope denied"):
         await provider.transcribe(audio)
     assert len(oauth_calls) == 2
+
+
+def ca_names(context) -> set[str]:
+    return {
+        value
+        for cert in context.get_ca_certs()
+        for rdn in cert["subject"]
+        for key, value in rdn
+        if key == "commonName"
+    }
+
+
+def test_russian_trusted_ca_is_trusted_without_settings():
+    context = SaluteSpeechToText(salute_settings())._ssl_context()
+
+    assert {"Russian Trusted Root CA", "Russian Trusted Sub CA"} <= ca_names(context)
+
+
+def test_russian_trusted_ca_file_is_bundled():
+    assert RUSSIAN_TRUSTED_CA.read_text().count("BEGIN CERTIFICATE") == 2
+
+
+async def test_audio_at_size_limit_is_uploaded(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(salute, "MAX_UPLOAD_BYTES", 10)
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"0123456789")
+    requests: list[httpx.Request] = []
+    handler = api_handler(
+        requests, [{"id": "task-1", "status": "DONE", "response_file_id": "result-1"}]
+    )
+
+    provider = SaluteSpeechToText(
+        salute_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    await provider.transcribe(audio)
+
+    assert requests[1].content == b"0123456789"
+
+
+async def test_audio_over_size_limit_is_rejected_before_upload(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    with audio.open("wb") as file:
+        file.truncate(salute.MAX_UPLOAD_BYTES + 1)
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200)
+
+    provider = SaluteSpeechToText(salute_settings(), transport=httpx.MockTransport(handler))
+    with pytest.raises(SaluteSpeechError, match="до 1 ГБ"):
+        await provider.transcribe(audio)
+    assert requests == []
