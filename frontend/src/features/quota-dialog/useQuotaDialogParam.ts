@@ -20,7 +20,7 @@ export function useQuotaDialogParam() {
           }
           return params;
         },
-        { replace: !next },
+        { replace: true },
       ),
     [setSearchParams],
   );
