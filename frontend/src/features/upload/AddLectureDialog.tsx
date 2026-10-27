@@ -80,8 +80,10 @@ export function AddLectureDialog() {
     void waitsForQuota(lectureId).then((waiting) => {
       if (waiting) {
         toast.show(`Запись «${name}» загружена, но лимита на неё не хватает`);
-        resetLink();
-        setQuotaDialogOpen(true);
+        if (open && tab === "file") {
+          resetLink();
+          setQuotaDialogOpen(true);
+        }
         return;
       }
       toast.show(`Запись «${name}» загружена, начинаем обработку`, "success");
