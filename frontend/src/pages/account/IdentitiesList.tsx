@@ -6,9 +6,12 @@ import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import { VkButton } from "../auth/VkButton";
+import { YandexButton } from "../auth/YandexButton";
 import { useVkEnabled } from "../auth/vk";
+import { useYandexEnabled } from "../auth/yandex";
 import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
+import { getMiniAppInitData } from "./miniApp";
 import styles from "./SettingsSection.module.css";
 import { settingsError, useLinkEmail, useLinkTelegram, useUnlink, type Me, type Provider, type TelegramUser } from "./settings";
 
@@ -28,13 +31,18 @@ export function IdentitiesList({ me }: { me: Me }) {
   const { reset } = unlink;
   const linked = (provider: Provider) => me.identities.find((identity) => identity.provider === provider);
   const vkEnabled = useVkEnabled();
+  const yandexEnabled = useYandexEnabled();
   const providers: Provider[] = [
     "telegram",
     "email",
     ...(vkEnabled || linked("vk") ? (["vk"] as const) : []),
+    ...(yandexEnabled || linked("yandex") ? (["yandex"] as const) : []),
     ...me.identities
       .map((identity) => identity.provider)
-      .filter((provider) => provider !== "telegram" && provider !== "email" && provider !== "vk"),
+      .filter(
+        (provider) =>
+          provider !== "telegram" && provider !== "email" && provider !== "vk" && provider !== "yandex",
+      ),
   ];
   const onlyOne = me.identities.length <= 1;
 
@@ -75,6 +83,8 @@ export function IdentitiesList({ me }: { me: Me }) {
                 <LinkTelegram />
               ) : provider === "vk" ? (
                 <LinkVk />
+              ) : provider === "yandex" ? (
+                <LinkYandex />
               ) : (
                 <LinkEmail />
               )}
@@ -123,11 +133,25 @@ function LinkTelegram() {
     [mutate, toast],
   );
 
-  if (!telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
+  const initData = getMiniAppInitData();
+  if (!initData && !telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
 
   return (
     <div className={styles.identityAction}>
-      <TelegramButton onAuth={onAuth} />
+      {initData ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={link.isPending}
+          onClick={() =>
+            mutate({ telegram_init_data: initData }, { onSuccess: () => toast.show("Telegram привязан", "success") })
+          }
+        >
+          Привязать этот Telegram
+        </Button>
+      ) : (
+        <TelegramButton onAuth={onAuth} />
+      )}
       {link.isError && (
         <p className={styles.alert} role="alert">
           {settingsError(link.error)}
@@ -142,6 +166,20 @@ function LinkVk() {
   return (
     <div className={styles.identityAction}>
       <VkButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
+      {error !== undefined && (
+        <p className={styles.alert} role="alert">
+          {settingsError(error)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LinkYandex() {
+  const [error, setError] = useState<unknown>();
+  return (
+    <div className={styles.identityAction}>
+      <YandexButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
       {error !== undefined && (
         <p className={styles.alert} role="alert">
           {settingsError(error)}

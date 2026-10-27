@@ -29,6 +29,7 @@ from app.models import (
     SourceType,
     StepName,
     StepStatus,
+    Subscription,
     Summary,
     TranscriptSegment,
     UsageEntry,
@@ -170,7 +171,26 @@ async def test_upload_gets_compressed_audio_and_video(
     assert content.index(b"moov") < content.index(b"mdat")
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
-    assert response.json()["video_url"] == f"/media/{lecture.id}.mp4"
+    assert response.json()["video_url"].startswith(f"/media/{lecture.id}.mp4?expires=")
+
+
+async def test_subscriber_video_kept_longer(user, sample_video):
+    now = datetime.now(UTC)
+    async with SessionLocal() as session:
+        session.add(
+            Subscription(
+                user_id=user.id, starts_at=now - timedelta(days=1), ends_at=now + timedelta(days=29)
+            )
+        )
+        await session.commit()
+    lecture = await create_lecture(user, sample_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    lecture = await load(lecture.id)
+    days = get_settings().subscription_video_retention_days
+    expected_expiry = datetime.now(UTC) + timedelta(days=days)
+    assert abs(lecture.video_expires_at - expected_expiry) < timedelta(minutes=1)
 
 
 async def test_odd_sized_video_is_transcoded(user, storage, tmp_path):

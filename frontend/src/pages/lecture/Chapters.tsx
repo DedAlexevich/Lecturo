@@ -1,5 +1,6 @@
 import type { components } from "../../api/schema";
-import { findActiveSegment, formatTimecode } from "./time";
+import { formatTimecode } from "../../lib/timecode";
+import { findActiveSegment } from "./time";
 
 type Chapter = components["schemas"]["ChapterOut"];
 

@@ -8,12 +8,15 @@ from app.schemas.user import (
     EmailIdentityIn,
     PasswordChangeIn,
     ProfileUpdateIn,
+    TelegramLinkIn,
     TelegramLoginIn,
     UserOut,
     VkCallbackIn,
     VkStartOut,
+    YandexCallbackIn,
+    YandexStartOut,
 )
-from app.services import identities
+from app.services import identities, yandex_auth
 from app.services.account import (
     change_password,
     confirm_deletion,
@@ -21,7 +24,7 @@ from app.services.account import (
     update_display_name,
 )
 from app.services.rate_limit import enforce_rate_limit
-from app.services.telegram_auth import verify_login_widget
+from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
 from app.services.vk_auth import VkClientDep, complete_flow, start_flow
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -66,10 +69,19 @@ async def delete_me(body: AccountDeleteIn, user: CurrentUser, session: SessionDe
 
 
 @router.post("/identities/telegram")
-async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: SessionDep) -> UserOut:
-    verify_login_widget(body)
-    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
-    await identities.link_telegram(session, user, body.id, profile)
+async def link_telegram(body: TelegramLinkIn, user: CurrentUser, session: SessionDep) -> UserOut:
+    if body.telegram_init_data is not None:
+        telegram_user = verify_webapp_init_data(body.telegram_init_data)
+        telegram_id = telegram_user["id"]
+        profile = {
+            key: value for key, value in telegram_user.items() if key != "id" and value is not None
+        }
+    else:
+        widget = TelegramLoginIn.model_validate(body.model_dump(exclude={"telegram_init_data"}))
+        verify_login_widget(widget)
+        telegram_id = widget.id
+        profile = widget.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
+    await identities.link_telegram(session, user, telegram_id, profile)
     return await identities.user_out(session, user)
 
 
@@ -102,6 +114,48 @@ async def link_vk(
         get_settings(), client, body.code, body.state, body.device_id, body.nonce, user.id
     )
     await identities.link_vk(session, user, vk_id, profile)
+    return await identities.user_out(session, user)
+
+
+@router.post(
+    "/identities/yandex/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток привязки"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def start_yandex_link(user: CurrentUser) -> YandexStartOut:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-link-start:{user.id}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
+    url, nonce = await yandex_auth.start_flow(get_settings(), user_id=user.id)
+    return YandexStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/identities/yandex",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия привязки не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
+        status.HTTP_409_CONFLICT: {"description": "Яндекс уже привязан к другому аккаунту"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def link_yandex(
+    body: YandexCallbackIn,
+    user: CurrentUser,
+    session: SessionDep,
+    client: yandex_auth.YandexClientDep,
+) -> UserOut:
+    yandex_id, profile, _ = await yandex_auth.complete_flow(
+        get_settings(), client, body.code, body.state, body.nonce, user.id
+    )
+    await identities.link_yandex(session, user, yandex_id, profile)
     return await identities.user_out(session, user)
 
 

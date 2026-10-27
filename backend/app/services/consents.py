@@ -12,6 +12,11 @@ CONSENT_REQUIRED = (
     "и согласие на обработку персональных данных"
 )
 
+AI_TRANSFER_REQUIRED = (
+    "Нет действующего согласия на передачу данных провайдерам ИИ: "
+    "оно отозвано или обновилась редакция. Дайте согласие заново и повторите обработку"
+)
+
 
 def require_signup_consents(accept_terms: bool, accept_personal_data: bool) -> None:
     missing = []
@@ -44,6 +49,11 @@ def ai_transfer_given(accepted_at: datetime | None, revision: date | None) -> bo
     if accepted_at is None or revision is None:
         return False
     return revision >= current_ai_transfer_revision()
+
+
+def require_ai_transfer_consent(user: User) -> None:
+    if not ai_transfer_given(user.ai_transfer_accepted_at, user.ai_transfer_revision):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, AI_TRANSFER_REQUIRED)
 
 
 def record_signup_consents(user: User) -> None:

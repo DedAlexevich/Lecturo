@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     vk_start_rate_limit: int = 30
     vk_start_rate_window_seconds: int = 3600
 
+    yandex_oauth_client_id: str = ""
+    yandex_oauth_redirect_uri: str = ""
+    yandex_oauth_client_secret: str = ""
+    yandex_oauth_authorize_url: str = "https://oauth.yandex.ru/authorize"
+    yandex_oauth_token_url: str = "https://oauth.yandex.ru/token"
+    yandex_oauth_user_info_url: str = "https://login.yandex.ru/info"
+    yandex_oauth_start_rate_limit: int = 30
+    yandex_oauth_start_rate_window_seconds: int = 3600
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_api_url: str = "https://api.yookassa.ru/v3"
@@ -84,6 +93,10 @@ class Settings(BaseSettings):
     account_delete_rate_window_seconds: int = 3600
     password_change_rate_limit: int = 10
     password_change_rate_window_seconds: int = 3600
+
+    @property
+    def yandex_oauth_enabled(self) -> bool:
+        return bool(self.yandex_oauth_client_id and self.yandex_oauth_redirect_uri)
 
     @property
     def vk_enabled(self) -> bool:

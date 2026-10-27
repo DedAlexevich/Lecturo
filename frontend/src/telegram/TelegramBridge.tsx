@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { api, tokenStorage } from "../api/client";
+import { api } from "../api/client";
 import { ApiError } from "../app/queryClient";
-import { signIn, useToken } from "../app/session";
+import { signIn, useToken, wasSignedOutByUser } from "../app/session";
 import { ConsentFields } from "../pages/auth/ConsentFields";
 import { messageOf } from "../pages/auth/errors";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { bindTheme, getWebApp } from "./sdk";
+import { TelegramIcon } from "./TelegramIcon";
+import "./TelegramBridge.css";
 
 const app = getWebApp();
-let initialSessionHandled = tokenStorage.get() !== null;
+let automaticLoginDone = false;
 let automaticLogin: ReturnType<typeof authenticate> | undefined;
 
 async function authenticate(acceptTerms = false, acceptPersonalData = false) {
@@ -52,13 +54,13 @@ export function TelegramBridge() {
   }, [location.key, navigate]);
 
   useEffect(() => {
-    if (!app || token !== null || initialSessionHandled) return;
+    if (!app || token !== null || automaticLoginDone || wasSignedOutByUser()) return;
     let active = true;
     automaticLogin ??= authenticate();
     automaticLogin.then(
       (tokens) => {
         if (active) {
-          initialSessionHandled = true;
+          automaticLoginDone = true;
           signIn(tokens.access_token);
         }
       },
@@ -81,7 +83,7 @@ export function TelegramBridge() {
     try {
       const tokens = await authenticate(terms, personalData);
       automaticLogin = Promise.resolve(tokens);
-      initialSessionHandled = true;
+      automaticLoginDone = true;
       signIn(tokens.access_token);
       setConsent(false);
     } catch (failure) {
@@ -94,10 +96,13 @@ export function TelegramBridge() {
 
   return (
     <>
-      {error && !consent && (
-        <div>
-          <p role="alert">Вход через Telegram: {error}</p>
-          <Button variant="ghost" loading={busy} onClick={submit}>Повторить вход</Button>
+      {!consent && (error || (token === null && wasSignedOutByUser())) && (
+        <div className="telegram-login">
+          {error && <p role="alert" className="telegram-login__error">Вход через Telegram: {error}</p>}
+          <Button fullWidth loading={busy} onClick={submit}>
+            {!busy && <TelegramIcon />}
+            {error ? "Повторить вход" : "Войти через Telegram"}
+          </Button>
         </div>
       )}
       <Dialog

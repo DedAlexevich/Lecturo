@@ -1,26 +1,36 @@
 import asyncio
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from redis.exceptions import RedisError
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
-from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import not_ready
+from app.core.deps import CurrentUser, RequireSubscription, SessionDep
 from app.models import (
     Lecture,
     LectureStatus,
     ProcessingStep,
+    Quiz,
+    ShareLink,
     SourceType,
+    StepName,
     StepStatus,
     course_lectures,
 )
 from app.pipeline.download import LinkError, inspect_link
 from app.pipeline.events import publish_status
-from app.pipeline.tasks import cancel_lecture_job, enqueue_lecture
+from app.pipeline.runner import get_step
+from app.pipeline.tasks import (
+    cancel_lecture_job,
+    cancel_quiz_job,
+    enqueue_lecture,
+    enqueue_quiz,
+    quiz_job_active,
+)
+from app.pipeline.video_access import is_valid_signature, signed_video_url
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -31,10 +41,12 @@ from app.schemas.lecture import (
 )
 from app.services import quota
 from app.services.account import lecture_files, remove_files
+from app.services.consents import require_ai_transfer_consent
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
+VIDEO_FORBIDDEN = "Нет доступа к видео"
 
 
 async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
@@ -74,12 +86,35 @@ async def get_lecture(
     )
     if lecture is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
-    video_url = f"/media/{lecture.id}.mp4" if lecture.video_path else None
+    video_url = signed_video_url(lecture.id) if lecture.video_path else None
     return LectureDetail.model_validate(lecture).model_copy(update={"video_url": video_url})
+
+
+@router.get("/{lecture_id}/video-access")
+async def video_access(
+    lecture_id: uuid.UUID,
+    session: SessionDep,
+    expires: str = "",
+    signature: str = "",
+    share: str | None = None,
+) -> Response:
+    if not expires.isdecimal() or not is_valid_signature(
+        lecture_id, int(expires), signature, share
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    query = select(Lecture.id).where(Lecture.id == lecture_id, Lecture.video_path.is_not(None))
+    if share is not None:
+        query = query.join(ShareLink, ShareLink.lecture_id == Lecture.id).where(
+            ShareLink.token == share, ShareLink.revoked_at.is_(None)
+        )
+    if await session.scalar(query) is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    return Response(status_code=status.HTTP_200_OK)
 
 
 @router.post("/link", status_code=status.HTTP_201_CREATED)
 async def add_link(body: LinkIn, user: CurrentUser, session: SessionDep) -> LectureOut:
+    require_ai_transfer_consent(user)
     await session.commit()
     url = str(body.url)
     try:
@@ -154,6 +189,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
 
     try:
         await cancel_lecture_job(lecture_id)
+        await cancel_quiz_job(lecture_id)
     except (OSError, RedisError):
         pass
     await asyncio.to_thread(remove_files, files)
@@ -224,10 +260,47 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
 
 
 @router.post("/{lecture_id}/quiz", status_code=status.HTTP_202_ACCEPTED)
-async def create_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> None:
-    not_ready()
+async def create_quiz(
+    lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
+) -> None:
+    require_ai_transfer_consent(user)
+    lecture = await session.scalar(
+        select(Lecture)
+        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+        .with_for_update()
+    )
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    if lecture.status != LectureStatus.ready:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Квиз можно сделать, когда лекция обработана")
+    step = await get_step(session, lecture.id, StepName.quiz)
+    try:
+        if step.status in (StepStatus.pending, StepStatus.running) and await quiz_job_active(
+            lecture.id
+        ):
+            return
+        step.status = StepStatus.pending
+        step.progress = 0.0
+        step.error = None
+        await session.commit()
+        await enqueue_quiz(lecture.id)
+    except (OSError, RedisError) as error:
+        step.status = StepStatus.failed
+        step.error = QUEUE_UNAVAILABLE
+        await session.commit()
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
 
 
 @router.get("/{lecture_id}/quiz")
-async def get_quiz(lecture_id: uuid.UUID, user: CurrentUser) -> QuizOut:
-    not_ready()
+async def get_quiz(
+    lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
+) -> QuizOut:
+    owned = await session.scalar(
+        select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+    )
+    if owned is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    quiz = await session.scalar(select(Quiz).where(Quiz.lecture_id == lecture_id))
+    if quiz is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Квиз ещё не готов")
+    return QuizOut.model_validate(quiz)

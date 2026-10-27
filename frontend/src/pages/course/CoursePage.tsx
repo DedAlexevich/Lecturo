@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError } from "../../app/queryClient";
+import { SearchPanel } from "../../features/search/SearchPanel";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { EmptyState } from "../../ui/EmptyState";
 import { useToast } from "../../ui/Toast";
+import { ShareButton } from "../../features/share/ShareButton";
 import { lecturesCount } from "../home/format";
 import { useLectures } from "../home/queries";
 import { AddLecturesDialog } from "./AddLecturesDialog";
@@ -101,6 +103,7 @@ export function CoursePage() {
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
           </div>
           <div className="course__actions">
+            <ShareButton target={{ courseId: data.id }} title={data.title} />
             <button type="button" className="course__text-action" onClick={() => setDialog("rename")}>
               Переименовать
             </button>
@@ -118,6 +121,7 @@ export function CoursePage() {
         <CourseHeaderSkeleton />
       )}
 
+      {items && items.length > 0 && <SearchPanel scope={{ courseId: id }} />}
       <section className="course__lectures" aria-label="Лекции курса">
         {lectures.isPending && <CourseLectureListSkeleton />}
         {lectures.isError && !items && !isMissing(lectures.error) && (
