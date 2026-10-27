@@ -365,6 +365,22 @@ async def test_payment_uses_receipt_email_without_account_email(client, user, au
         assert (await session.get(User, user.id)).email is None
 
 
+async def test_account_email_is_kept_over_receipt_email(client, user, auth_headers, fake):
+    response = await client.post(
+        "/api/v1/billing/payments",
+        json={
+            "product_code": "hours_5",
+            "accept_offer": True,
+            "receipt_email": "buyer@example.org",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    [request] = fake.requests
+    assert json.loads(request.content)["metadata"]["receipt_email"] == user.email
+
+
 async def test_receipt_email_goes_to_receipt(user):
     await remove_email(user)
     settings = SETTINGS.model_copy(update={"yookassa_receipt": True})
