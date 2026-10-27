@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     llm_model: str = "deepseek-chat"
+    llm_timeout: float = 600.0
+    llm_max_tokens: int = 8192
 
     embeddings_provider: str = "stub"
     embeddings_base_url: str = ""

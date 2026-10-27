@@ -62,6 +62,41 @@ async def test_llm_request_and_json_mode():
         {"role": "user", "content": "текст"},
     ]
     assert body["response_format"] == {"type": "json_object"}
+    assert body["max_tokens"] == 8192
+    assert llm.client.timeout == 600
+
+
+async def test_llm_settings_set_limits():
+    settings = SETTINGS.model_copy(update={"llm_timeout": 30.0, "llm_max_tokens": 1000})
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return chat_response("ответ")
+
+    llm = OpenAICompatibleLLM(settings, transport=httpx.MockTransport(handler))
+    await llm.complete("система", "текст")
+
+    assert llm.client.timeout == 30
+    assert requests[0]["max_tokens"] == 1000
+    assert "response_format" not in requests[0]
+
+
+async def test_truncated_answer_gives_clear_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": '{"summary": "нача'}, "finish_reason": "length"}
+                ]
+            },
+        )
+
+    llm = OpenAICompatibleLLM(SETTINGS, transport=httpx.MockTransport(handler))
+
+    with pytest.raises(OpenAICompatibleError, match="ответ обрезан"):
+        await llm.complete("система", "текст", json_mode=True)
 
 
 async def test_llm_retries_on_rate_limit_and_server_error():
