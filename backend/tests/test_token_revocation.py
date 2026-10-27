@@ -227,7 +227,7 @@ async def test_link_email_removes_unused_tokens(client, user):
     response = await client.post(
         f"{API}/me/identities/email",
         json={"email": address, "password": PASSWORD},
-        headers=bearer(create_access_token(user.id)),
+        headers=bearer(create_access_token(user.id, user.token_version)),
     )
 
     assert response.status_code == 200

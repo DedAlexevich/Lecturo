@@ -29,7 +29,7 @@ class AccessGrant:
     version: int
 
 
-def create_access_token(user_id: uuid.UUID, version: int = 0) -> str:
+def create_access_token(user_id: uuid.UUID, version: int) -> str:
     settings = get_settings()
     expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_ttl_minutes)
     payload = {"sub": str(user_id), "ver": version, "exp": expires}

@@ -57,7 +57,7 @@ async def reset_auth_rate_limits() -> AsyncIterator[None]:
 
 @pytest.fixture
 def auth_headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 @pytest.fixture(autouse=True)

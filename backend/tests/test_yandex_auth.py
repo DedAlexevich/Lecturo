@@ -109,7 +109,7 @@ async def create_user(cleanup: list[uuid.UUID], providers=()) -> User:
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 NONCES: dict[str, str] = {}

@@ -31,7 +31,7 @@ async def account() -> AsyncIterator[User]:
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 async def stored_hash(user: User) -> str | None:
