@@ -206,16 +206,19 @@ async def resume_interrupted_lectures(redis: ArqRedis) -> int:
         running = select(ProcessingStep.lecture_id).where(
             ProcessingStep.step.in_(LECTURE_STEPS), ProcessingStep.status == StepStatus.running
         )
-        lecture_ids = list(
-            await session.scalars(
-                select(Lecture.id).where(
-                    or_(
-                        Lecture.status.in_([LectureStatus.queued, LectureStatus.processing]),
-                        Lecture.id.in_(running),
-                    )
+        candidates = await session.scalars(
+            select(Lecture.id).where(
+                or_(
+                    Lecture.status.in_([LectureStatus.queued, LectureStatus.processing]),
+                    Lecture.id.in_(running),
                 )
             )
         )
+    lecture_ids = [
+        lecture_id
+        for lecture_id in candidates
+        if await Job(regeneration_job_id(lecture_id), redis).info() is None
+    ]
     if not lecture_ids:
         return 0
     await return_to_queue(lecture_ids)

@@ -929,3 +929,16 @@ async def test_finished_and_waiting_lectures_are_not_resumed(user, sample_audio,
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 0
     assert await arq_redis.zcard(default_queue_name) == 0
+
+
+async def test_interrupted_regeneration_is_left_to_its_job(user, sample_audio, arq_redis):
+    lecture = await interrupted_lecture(user, sample_audio, StepName.summarize)
+    job_id = tasks.regeneration_job_id(lecture.id)
+    await arq_redis.enqueue_job("process_regeneration", str(lecture.id), _job_id=job_id)
+    await arq_redis.set(in_progress_key_prefix + job_id, b"1")
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 0
+
+    assert await Job(job_id, arq_redis).status() == JobStatus.queued
+    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).info() is None
+    assert (await load(lecture.id)).status == LectureStatus.processing
