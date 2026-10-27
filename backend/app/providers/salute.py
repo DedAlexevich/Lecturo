@@ -9,6 +9,7 @@ import httpx
 
 from app.core.config import Settings
 from app.providers.base import Segment
+from app.providers.retry import RetryPolicy, request_with_retry
 
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 API_URL = "https://smartspeech.sber.ru/rest/v1"
@@ -24,6 +25,10 @@ LANGUAGE_CODES = {"ru": "ru-RU", "en": "en-US", "kk": "kk-KZ"}
 
 
 class SaluteSpeechError(RuntimeError):
+    pass
+
+
+class SaluteNetworkError(SaluteSpeechError):
     pass
 
 
@@ -72,6 +77,7 @@ class SaluteSpeechToText:
         self.transport = transport
         self._token = ""
         self._token_expires_at = 0.0
+        self.retry = RetryPolicy.from_settings(settings)
 
     async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]:
         audio_format = AUDIO_FORMATS.get(audio_path.suffix.lower())
@@ -151,7 +157,7 @@ class SaluteSpeechToText:
                 params={"id": task_id},
                 check=False,
             )
-        except httpx.TransportError:
+        except SaluteNetworkError:
             return {}
         if response.status_code == 429 or response.is_server_error:
             return {}
@@ -187,10 +193,10 @@ class SaluteSpeechToText:
         headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> httpx.Response:
-        response = await self._send(client, method, path, headers, **kwargs)
+        response = await self._send_with_retry(client, method, path, action, headers, **kwargs)
         if response.status_code == 401:
             self._token = ""
-            response = await self._send(client, method, path, headers, **kwargs)
+            response = await self._send_with_retry(client, method, path, action, headers, **kwargs)
             if response.status_code == 401:
                 raise SaluteSpeechError(
                     f"SaluteSpeech: {action} отклонена после обновления токена: "
@@ -199,6 +205,23 @@ class SaluteSpeechToText:
         if check:
             self._raise_for_status(response, action)
         return response
+
+    async def _send_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        path: str,
+        action: str,
+        headers: dict[str, str] | None,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        return await request_with_retry(
+            lambda: self._send(client, method, path, headers, **kwargs),
+            policy=self.retry,
+            provider="SaluteSpeech",
+            action=action,
+            error_cls=SaluteNetworkError,
+        )
 
     async def _send(
         self,
