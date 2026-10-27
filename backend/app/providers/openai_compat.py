@@ -13,6 +13,10 @@ class OpenAICompatibleError(RuntimeError):
     pass
 
 
+class OpenAICompatibleUnavailable(OpenAICompatibleError):
+    pass
+
+
 class OpenAICompatibleClient:
     def __init__(
         self,
@@ -42,12 +46,12 @@ class OpenAICompatibleClient:
                     )
                 except httpx.TransportError as error:
                     if attempt == self.attempts:
-                        raise OpenAICompatibleError(f"{path}: нет ответа от API") from error
+                        raise OpenAICompatibleUnavailable(f"{path}: нет ответа от API") from error
                     await asyncio.sleep(self._delay(attempt, None))
                     continue
                 if response.status_code == 429 or response.is_server_error:
                     if attempt == self.attempts:
-                        raise OpenAICompatibleError(
+                        raise OpenAICompatibleUnavailable(
                             f"{path}: API ответил {response.status_code} после {attempt} попыток"
                         )
                     await asyncio.sleep(self._delay(attempt, response))
