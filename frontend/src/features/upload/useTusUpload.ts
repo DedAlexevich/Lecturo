@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, type DetailedError } from "tus-js-client";
+import { extractAudio } from "../../local/audio";
 import { tokenStorage } from "../../api/client";
 import { detailOf } from "./errors";
 
@@ -8,7 +9,7 @@ export const MAX_FILE_BYTES = 2 * 1024 ** 3;
 const CHUNK_BYTES = 32 * 1024 ** 2;
 const RETRY_DELAYS = [0, 1000, 3000, 5000, 10000, 20000];
 
-export type UploadPhase = "idle" | "uploading" | "paused" | "offline" | "finishing" | "done" | "failed";
+export type UploadPhase = "idle" | "extracting" | "uploading" | "paused" | "offline" | "finishing" | "done" | "failed";
 
 export type UploadState = {
   phase: UploadPhase;
@@ -72,14 +73,38 @@ async function launch(upload: Upload) {
 export function useTusUpload(userId: string | undefined) {
   const [state, setState] = useState<UploadState>(idle);
   const current = useRef<Upload | null>(null);
+  const extraction = useRef<AbortController | null>(null);
 
   const update = useCallback((upload: Upload, next: (state: UploadState) => UploadState) => {
     setState((state) => (current.current === upload ? next(state) : state));
   }, []);
 
   const start = useCallback(
-    (file: File, courseId: string | null) => {
+    async (original: File, courseId: string | null, audioOnly: boolean) => {
+      let file = original;
+      if (audioOnly) {
+        const controller = new AbortController();
+        extraction.current = controller;
+        setState({ phase: "extracting", file, sent: 0, total: 100, error: null, lectureId: null });
+        try {
+          const result = await extractAudio(file, {
+            opus: true,
+            signal: controller.signal,
+            onProgress: (value) => setState((state) => extraction.current === controller ? { ...state, sent: value * 100 } : state),
+          });
+          if (!result.opus || result.opus.size === 0) throw new Error("Не удалось извлечь звук из файла");
+          if (extraction.current !== controller) return;
+          file = new File([result.opus], `${original.name.replace(/\.[^.]+$/, "")}.webm`, { type: result.opus.type, lastModified: original.lastModified });
+          extraction.current = null;
+        } catch (error) {
+          if (extraction.current !== controller) return;
+          extraction.current = null;
+          setState({ ...idle, error: error instanceof Error ? error.message : "Не удалось извлечь звук из файла" });
+          return;
+        }
+      }
       const metadata: Record<string, string> = { filename: file.name, filetype: file.type };
+      if (audioOnly) metadata.audio_only = "true";
       if (courseId) metadata.course_id = courseId;
       const upload: Upload = new Upload(file, {
         endpoint: "/files/",
@@ -123,7 +148,8 @@ export function useTusUpload(userId: string | undefined) {
       });
       current.current = upload;
       setState({ phase: "uploading", file, sent: 0, total: file.size, error: null, lectureId: null });
-      void launch(upload);
+      if (audioOnly) upload.start();
+      else void launch(upload);
     },
     [update, userId],
   );
@@ -149,6 +175,8 @@ export function useTusUpload(userId: string | undefined) {
 
   const cancel = useCallback(() => {
     const upload = current.current;
+    extraction.current?.abort();
+    extraction.current = null;
     current.current = null;
     setState(idle);
     upload?.abort(true).catch(() => upload.abort());
@@ -160,7 +188,7 @@ export function useTusUpload(userId: string | undefined) {
     return () => window.removeEventListener("online", resume);
   }, [state.phase, resume]);
 
-  const active = state.phase === "uploading" || state.phase === "paused" || state.phase === "offline" || state.phase === "finishing";
+  const active = state.phase === "extracting" || state.phase === "uploading" || state.phase === "paused" || state.phase === "offline" || state.phase === "finishing";
 
   useEffect(() => {
     if (!active) return;
@@ -172,7 +200,7 @@ export function useTusUpload(userId: string | undefined) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [active]);
 
-  useEffect(() => () => void current.current?.abort(), []);
+  useEffect(() => () => { extraction.current?.abort(); void current.current?.abort(); }, []);
 
   return { state, active, start, pause, resume, reset, cancel };
 }
