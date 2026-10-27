@@ -70,7 +70,7 @@ async def test_yandex_start_recovers_after_internal_error(
     assert len(retry_pauses) == 1
     assert len(calls["PUT"]) == 1
     assert "попытка 1 из 5" in caplog.text
-    assert "api-key" not in caplog.text
+    assert yandex_settings().yandex_speechkit_api_key not in caplog.text
 
 
 @pytest.mark.parametrize("status", [429, 502, 503, 504])
@@ -253,3 +253,25 @@ async def test_salute_permanent_error_is_not_retried(tmp_path: Path, retry_pause
         await salute_provider(handler).transcribe(make_audio(tmp_path))
     assert uploads == 1
     assert retry_pauses == []
+
+
+async def test_salute_token_request_is_retried(tmp_path: Path, retry_pauses: list[float]):
+    tokens = iter([httpx.Response(503), token_response()])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == OAUTH_URL:
+            return next(tokens)
+        match request.url.path:
+            case "/rest/v1/data:upload":
+                return result({"request_file_id": "file-1"})
+            case "/rest/v1/speech:async_recognize":
+                return result({"id": "task-1"})
+            case "/rest/v1/task:get":
+                return result({"status": "DONE", "response_file_id": "r1"})
+            case "/rest/v1/data:download":
+                return httpx.Response(200, json=saved_result())
+        return httpx.Response(404)
+
+    segments = await salute_provider(handler).transcribe(make_audio(tmp_path))
+    assert len(segments) == 3
+    assert len(retry_pauses) == 1

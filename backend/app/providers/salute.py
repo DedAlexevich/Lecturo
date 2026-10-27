@@ -242,14 +242,20 @@ class SaluteSpeechToText:
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         if self._token and time.time() < self._token_expires_at - TOKEN_REFRESH_MARGIN_SECONDS:
             return self._token
-        response = await client.post(
-            OAUTH_URL,
-            data={"scope": self.scope},
-            headers={
-                "Authorization": f"Basic {self.auth_key}",
-                "RqUID": str(uuid.uuid4()),
-                "Accept": "application/json",
-            },
+        response = await request_with_retry(
+            lambda: client.post(
+                OAUTH_URL,
+                data={"scope": self.scope},
+                headers={
+                    "Authorization": f"Basic {self.auth_key}",
+                    "RqUID": str(uuid.uuid4()),
+                    "Accept": "application/json",
+                },
+            ),
+            policy=self.retry,
+            provider="SaluteSpeech",
+            action="получение токена",
+            error_cls=SaluteNetworkError,
         )
         self._raise_for_status(response, "получение токена")
         try:
