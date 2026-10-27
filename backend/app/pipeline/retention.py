@@ -1,11 +1,30 @@
 import asyncio
-from datetime import UTC, datetime
+import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.db import SessionLocal
 from app.models import Lecture
+
+
+async def extend_video_retention(
+    session: AsyncSession, user_id: uuid.UUID, now: datetime, settings: Settings
+) -> None:
+    subscription_expiry = now + timedelta(days=settings.subscription_video_retention_days)
+    await session.execute(
+        update(Lecture)
+        .where(
+            Lecture.owner_id == user_id,
+            Lecture.video_path.is_not(None),
+            Lecture.video_expires_at.is_not(None),
+        )
+        .values(video_expires_at=func.greatest(Lecture.video_expires_at, subscription_expiry))
+        .execution_options(synchronize_session=False)
+    )
 
 
 async def delete_expired_videos(ctx: dict) -> int:

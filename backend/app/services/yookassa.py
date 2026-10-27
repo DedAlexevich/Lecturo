@@ -19,6 +19,7 @@ from app.models import (
     Subscription,
     User,
 )
+from app.pipeline.retention import extend_video_retention
 from app.schemas.billing import PaymentOut, ProductOut
 from app.services.quota import list_products
 
@@ -259,6 +260,7 @@ async def grant_subscription(
         ends_at=starts_at + timedelta(days=settings.subscription_days),
     )
     session.add(subscription)
+    await extend_video_retention(session, payment.user_id, now, settings)
     return subscription
 
 
