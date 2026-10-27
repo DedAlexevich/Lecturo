@@ -10,8 +10,12 @@ from app.schemas.user import (
     ProfileUpdateIn,
     TelegramLoginIn,
     UserOut,
+    VkCallbackIn,
+    VkStartOut,
+    YandexCallbackIn,
+    YandexStartOut,
 )
-from app.services import identities
+from app.services import identities, yandex_auth
 from app.services.account import (
     change_password,
     confirm_deletion,
@@ -20,6 +24,7 @@ from app.services.account import (
 )
 from app.services.rate_limit import enforce_rate_limit
 from app.services.telegram_auth import verify_login_widget
+from app.services.vk_auth import VkClientDep, complete_flow, start_flow
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -70,6 +75,80 @@ async def link_telegram(body: TelegramLoginIn, user: CurrentUser, session: Sessi
     return await identities.user_out(session, user)
 
 
+@router.post(
+    "/identities/vk/start",
+    responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"}},
+)
+async def start_vk_link(user: CurrentUser) -> VkStartOut:
+    url, nonce = await start_flow(get_settings(), user_id=user.id)
+    return VkStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/identities/vk",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия привязки не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "VK отклонил вход"},
+        status.HTTP_409_CONFLICT: {"description": "VK уже привязан к другому аккаунту"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "VK недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
+)
+async def link_vk(
+    body: VkCallbackIn,
+    user: CurrentUser,
+    session: SessionDep,
+    client: VkClientDep,
+) -> UserOut:
+    vk_id, profile, _ = await complete_flow(
+        get_settings(), client, body.code, body.state, body.device_id, body.nonce, user.id
+    )
+    await identities.link_vk(session, user, vk_id, profile)
+    return await identities.user_out(session, user)
+
+
+@router.post(
+    "/identities/yandex/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток привязки"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def start_yandex_link(user: CurrentUser) -> YandexStartOut:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-link-start:{user.id}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
+    url, nonce = await yandex_auth.start_flow(get_settings(), user_id=user.id)
+    return YandexStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/identities/yandex",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия привязки не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
+        status.HTTP_409_CONFLICT: {"description": "Яндекс уже привязан к другому аккаунту"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def link_yandex(
+    body: YandexCallbackIn,
+    user: CurrentUser,
+    session: SessionDep,
+    client: yandex_auth.YandexClientDep,
+) -> UserOut:
+    yandex_id, profile, _ = await yandex_auth.complete_flow(
+        get_settings(), client, body.code, body.state, body.nonce, user.id
+    )
+    await identities.link_yandex(session, user, yandex_id, profile)
+    return await identities.user_out(session, user)
+
+
 @router.post("/identities/email")
 async def link_email(body: EmailIdentityIn, user: CurrentUser, session: SessionDep) -> UserOut:
     await identities.link_email(session, user, body)
@@ -87,4 +166,10 @@ async def unlink_identity(
 @router.post("/consents/ai-transfer")
 async def accept_ai_transfer(user: CurrentUser, session: SessionDep) -> UserOut:
     await identities.accept_ai_transfer(session, user)
+    return await identities.user_out(session, user)
+
+
+@router.delete("/consents/ai-transfer")
+async def revoke_ai_transfer(user: CurrentUser, session: SessionDep) -> UserOut:
+    await identities.revoke_ai_transfer(session, user)
     return await identities.user_out(session, user)

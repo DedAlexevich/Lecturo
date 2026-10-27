@@ -44,6 +44,23 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
 
+    vk_client_id: str = ""
+    vk_redirect_uri: str = ""
+    vk_authorize_url: str = "https://id.vk.com/authorize"
+    vk_token_url: str = "https://id.vk.com/oauth2/auth"
+    vk_user_info_url: str = "https://id.vk.com/oauth2/user_info"
+    vk_start_rate_limit: int = 30
+    vk_start_rate_window_seconds: int = 3600
+
+    yandex_oauth_client_id: str = ""
+    yandex_oauth_redirect_uri: str = ""
+    yandex_oauth_client_secret: str = ""
+    yandex_oauth_authorize_url: str = "https://oauth.yandex.ru/authorize"
+    yandex_oauth_token_url: str = "https://oauth.yandex.ru/token"
+    yandex_oauth_user_info_url: str = "https://login.yandex.ru/info"
+    yandex_oauth_start_rate_limit: int = 30
+    yandex_oauth_start_rate_window_seconds: int = 3600
+
     yookassa_shop_id: str = ""
     yookassa_secret_key: str = ""
     yookassa_api_url: str = "https://api.yookassa.ru/v3"
@@ -66,13 +83,24 @@ class Settings(BaseSettings):
     local_timecode_tolerance_sec: float = 1.0
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60
+    complaints_rate_limit: int = 5
+    complaints_rate_window_seconds: int = 3600
     auth_mail_rate_limit: int = 3
     auth_mail_ip_rate_limit: int = 20
+    auth_mail_address_rate_limit: int = 10
     auth_mail_rate_window_seconds: int = 3600
     account_delete_rate_limit: int = 5
     account_delete_rate_window_seconds: int = 3600
     password_change_rate_limit: int = 10
     password_change_rate_window_seconds: int = 3600
+
+    @property
+    def yandex_oauth_enabled(self) -> bool:
+        return bool(self.yandex_oauth_client_id and self.yandex_oauth_redirect_uri)
+
+    @property
+    def vk_enabled(self) -> bool:
+        return bool(self.vk_client_id and self.vk_redirect_uri)
 
 
 @lru_cache

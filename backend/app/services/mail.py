@@ -38,7 +38,7 @@ async def send_mail(to: str, subject: str, body: str) -> None:
     message.set_content(body)
     try:
         await asyncio.to_thread(deliver, message)
-    except (smtplib.SMTPException, OSError):
+    except Exception:
         logger.exception("Не удалось отправить письмо для %s", to)
 
 

@@ -4,9 +4,10 @@ import random
 import time
 import uuid
 from collections.abc import AsyncIterator
+from datetime import date
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -211,3 +212,29 @@ async def test_accept_ai_transfer_records_time_once(client, cleanup):
     assert accepted_at is not None
     second = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
     assert second.json()["ai_transfer_accepted_at"] == accepted_at
+
+
+async def test_revoke_ai_transfer_clears_consent(client, cleanup):
+    user = await create_user(cleanup)
+    await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    response = await client.delete("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    assert response.status_code == 200
+    assert response.json()["ai_transfer_accepted_at"] is None
+    me = await client.get("/api/v1/me", headers=headers(user))
+    assert me.json()["ai_transfer_accepted_at"] is None
+    again = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    assert again.json()["ai_transfer_accepted_at"] is not None
+
+
+async def test_outdated_ai_transfer_revision_is_not_consent(client, cleanup):
+    user = await create_user(cleanup)
+    await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
+        )
+        await session.commit()
+    me = await client.get("/api/v1/me", headers=headers(user))
+    assert me.json()["ai_transfer_accepted_at"] is None
+    renewed = await client.post("/api/v1/me/consents/ai-transfer", headers=headers(user))
+    assert renewed.json()["ai_transfer_accepted_at"] is not None

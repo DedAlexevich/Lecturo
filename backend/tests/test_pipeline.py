@@ -34,7 +34,6 @@ from app.models import (
     UsageEntry,
 )
 from app.pipeline import events, media, stages, tasks
-from app.pipeline.stages import split_into_chunks
 from app.providers.stub import STUB_PHRASES
 
 
@@ -290,19 +289,6 @@ async def test_retry_rejects_lecture_that_did_not_fail(user, sample_video, clien
     lecture = await create_lecture(user, sample_video)
     response = await client.post(f"/api/v1/lectures/{lecture.id}/retry", headers=auth_headers)
     assert response.status_code == 409
-
-
-@pytest.mark.parametrize(
-    ("bounds", "expected"),
-    [
-        ([(0, 20), (20, 40), (40, 59)], [(0, 59)]),
-        ([(0, 30), (30, 61), (61, 90)], [(0, 30), (30, 90)]),
-        ([], []),
-    ],
-)
-def test_split_into_chunks(bounds, expected):
-    segments = [TranscriptSegment(start=s, end=e, text="т") for s, e in bounds]
-    assert [(s, e) for s, e, _ in split_into_chunks(segments)] == expected
 
 
 async def test_error_outside_step_marks_lecture_failed(user, sample_video, monkeypatch):

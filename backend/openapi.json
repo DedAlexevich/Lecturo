@@ -123,7 +123,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TelegramLoginIn"
+                "$ref": "#/components/schemas/TelegramSignupIn"
               }
             }
           },
@@ -139,6 +139,236 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Providers",
+        "operationId": "providers_api_v1_auth_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/vk/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start Vk Login",
+        "operationId": "start_vk_login_api_v1_auth_vk_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VkStartOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток входа"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/vk/callback": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Vk",
+        "operationId": "login_vk_api_v1_auth_vk_callback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия входа не найдена или устарела"
+          },
+          "401": {
+            "description": "VK отклонил вход"
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
+          },
+          "502": {
+            "description": "VK недоступен"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/yandex/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start Yandex Login",
+        "operationId": "start_yandex_login_api_v1_auth_yandex_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexStartOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток входа"
+          },
+          "503": {
+            "description": "Вход через Яндекс не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/yandex/callback": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login Yandex",
+        "operationId": "login_yandex_api_v1_auth_yandex_callback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия входа не найдена или устарела"
+          },
+          "401": {
+            "description": "Яндекс отклонил вход"
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
+          },
+          "502": {
+            "description": "Яндекс недоступен"
+          },
+          "503": {
+            "description": "Вход через Яндекс не настроен"
           },
           "422": {
             "description": "Validation Error",
@@ -163,6 +393,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
           }
         },
         "security": [
@@ -226,6 +462,12 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много запросов писем"
+          },
+          "503": {
+            "description": "Хранилище лимитов недоступно"
           },
           "422": {
             "description": "Validation Error",
@@ -468,6 +710,189 @@
         ]
       }
     },
+    "/api/v1/me/identities/vk/start": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Start Vk Link",
+        "operationId": "start_vk_link_api_v1_me_identities_vk_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VkStartOut"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities/vk": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Link Vk",
+        "operationId": "link_vk_api_v1_me_identities_vk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VkCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия привязки не найдена или устарела"
+          },
+          "401": {
+            "description": "VK отклонил вход"
+          },
+          "409": {
+            "description": "VK уже привязан к другому аккаунту"
+          },
+          "502": {
+            "description": "VK недоступен"
+          },
+          "503": {
+            "description": "Вход через VK не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities/yandex/start": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Start Yandex Link",
+        "operationId": "start_yandex_link_api_v1_me_identities_yandex_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YandexStartOut"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток привязки"
+          },
+          "503": {
+            "description": "Вход через Яндекс не настроен"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/identities/yandex": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Link Yandex",
+        "operationId": "link_yandex_api_v1_me_identities_yandex_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YandexCallbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Сессия привязки не найдена или устарела"
+          },
+          "401": {
+            "description": "Яндекс отклонил вход"
+          },
+          "409": {
+            "description": "Яндекс уже привязан к другому аккаунту"
+          },
+          "502": {
+            "description": "Яндекс недоступен"
+          },
+          "503": {
+            "description": "Вход через Яндекс не настроен"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/identities/email": {
       "post": {
         "tags": [
@@ -584,6 +1009,30 @@
             "HTTPBearer": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Revoke Ai Transfer",
+        "operationId": "revoke_ai_transfer_api_v1_me_consents_ai_transfer_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/v1/auth/telegram-webapp": {
@@ -613,6 +1062,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Новому пользователю нужны оба согласия"
           },
           "422": {
             "description": "Validation Error",
@@ -3187,6 +3639,24 @@
         ],
         "title": "ProfileUpdateIn"
       },
+      "ProvidersOut": {
+        "properties": {
+          "vk": {
+            "type": "boolean",
+            "title": "Vk"
+          },
+          "yandex": {
+            "type": "boolean",
+            "title": "Yandex"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vk",
+          "yandex"
+        ],
+        "title": "ProvidersOut"
+      },
       "PublicCourseOut": {
         "properties": {
           "id": {
@@ -3519,13 +3989,18 @@
           "accept_terms": {
             "type": "boolean",
             "title": "Accept Terms"
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data"
           }
         },
         "type": "object",
         "required": [
           "email",
           "password",
-          "accept_terms"
+          "accept_terms",
+          "accept_personal_data"
         ],
         "title": "RegisterIn"
       },
@@ -3823,11 +4298,92 @@
         ],
         "title": "TelegramLoginIn"
       },
+      "TelegramSignupIn": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "auth_date": {
+            "type": "integer",
+            "title": "Auth Date"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "first_name",
+          "auth_date",
+          "hash"
+        ],
+        "title": "TelegramSignupIn"
+      },
       "TelegramWebAppIn": {
         "properties": {
           "init_data": {
             "type": "string",
             "title": "Init Data"
+          },
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
           }
         },
         "type": "object",
@@ -3964,6 +4520,76 @@
         ],
         "title": "ValidationError"
       },
+      "VkCallbackIn": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "State"
+          },
+          "device_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Device Id"
+          },
+          "nonce": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state",
+          "device_id",
+          "nonce"
+        ],
+        "title": "VkCallbackIn"
+      },
+      "VkStartIn": {
+        "properties": {
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "VkStartIn"
+      },
+      "VkStartOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "nonce": {
+            "type": "string",
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "nonce"
+        ],
+        "title": "VkStartOut"
+      },
       "WaitingLectureOut": {
         "properties": {
           "id": {
@@ -4021,6 +4647,69 @@
           "resets_at"
         ],
         "title": "WaitingOut"
+      },
+      "YandexCallbackIn": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Code"
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "State"
+          },
+          "nonce": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "state",
+          "nonce"
+        ],
+        "title": "YandexCallbackIn"
+      },
+      "YandexStartIn": {
+        "properties": {
+          "accept_terms": {
+            "type": "boolean",
+            "title": "Accept Terms",
+            "default": false
+          },
+          "accept_personal_data": {
+            "type": "boolean",
+            "title": "Accept Personal Data",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "YandexStartIn"
+      },
+      "YandexStartOut": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "nonce": {
+            "type": "string",
+            "title": "Nonce"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "nonce"
+        ],
+        "title": "YandexStartOut"
       }
     },
     "securitySchemes": {

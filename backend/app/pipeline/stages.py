@@ -3,13 +3,11 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Lecture, SearchChunk, TranscriptSegment, User
+from app.models import Lecture, TranscriptSegment, User
 from app.pipeline.runner import Report
-from app.providers import get_embeddings, get_speech_to_text
-from app.services.consent import AI_TRANSFER_REQUIRED
+from app.providers import get_speech_to_text
+from app.services.consents import AI_TRANSFER_REQUIRED, ai_transfer_given
 from app.services.quota import QuotaExceeded, charge_lecture
-
-CHUNK_SECONDS = 60.0
 
 
 class ConsentMissing(Exception):
@@ -17,10 +15,14 @@ class ConsentMissing(Exception):
 
 
 async def require_ai_transfer(session: AsyncSession, lecture: Lecture) -> None:
-    accepted_at = await session.scalar(
-        select(User.ai_transfer_accepted_at).where(User.id == lecture.owner_id)
-    )
-    if accepted_at is None:
+    row = (
+        await session.execute(
+            select(User.ai_transfer_accepted_at, User.ai_transfer_revision).where(
+                User.id == lecture.owner_id
+            )
+        )
+    ).one_or_none()
+    if row is None or not ai_transfer_given(*row):
         raise ConsentMissing(AI_TRANSFER_REQUIRED)
 
 
@@ -42,16 +44,6 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
         raise QuotaExceeded("Не хватает лимита на обработку лекции")
 
 
-async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
-    chunks = split_into_chunks(await load_segments(session, lecture))
-    vectors = await get_embeddings().embed([text for _, _, text in chunks])
-    await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))
-    session.add_all(
-        SearchChunk(lecture_id=lecture.id, start=start, end=end, text=text, embedding=vector)
-        for (start, end, text), vector in zip(chunks, vectors, strict=True)
-    )
-
-
 async def load_segments(session: AsyncSession, lecture: Lecture) -> list[TranscriptSegment]:
     rows = await session.scalars(
         select(TranscriptSegment)
@@ -59,16 +51,3 @@ async def load_segments(session: AsyncSession, lecture: Lecture) -> list[Transcr
         .order_by(TranscriptSegment.idx)
     )
     return list(rows)
-
-
-def split_into_chunks(segments: list[TranscriptSegment]) -> list[tuple[float, float, str]]:
-    chunks: list[tuple[float, float, str]] = []
-    current: list[TranscriptSegment] = []
-    for segment in segments:
-        if current and segment.end - current[0].start > CHUNK_SECONDS:
-            chunks.append((current[0].start, current[-1].end, " ".join(s.text for s in current)))
-            current = []
-        current.append(segment)
-    if current:
-        chunks.append((current[0].start, current[-1].end, " ".join(s.text for s in current)))
-    return chunks

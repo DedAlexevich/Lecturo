@@ -31,7 +31,7 @@ from app.schemas.lecture import (
 )
 from app.services import quota
 from app.services.account import lecture_files, remove_files
-from app.services.consent import require_ai_transfer_consent
+from app.services.consents import require_ai_transfer_consent
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 

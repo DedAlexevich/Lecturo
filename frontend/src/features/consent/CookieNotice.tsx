@@ -30,7 +30,7 @@ export function CookieNotice() {
   return (
     <aside className="cookie-notice" role="region" aria-label="Уведомление о cookie">
       <p className="cookie-notice__text">
-        Мы используем cookie и локальное хранилище браузера, чтобы вы оставались в аккаунте и работала тема оформления.{" "}
+        Мы храним в браузере только то, что нужно для работы сервиса, без аналитики и рекламы, а встроенные видеоплееры и вход через Telegram могут ставить свои cookie.{" "}
         <Link to="/legal/cookies">Подробнее</Link>
       </p>
       <Button size="sm" onClick={acknowledge}>

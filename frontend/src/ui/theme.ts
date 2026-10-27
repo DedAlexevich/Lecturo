@@ -1,3 +1,4 @@
+import { getWebApp } from "../telegram/sdk";
 import { useCallback, useEffect, useState } from "react";
 
 export type ThemeChoice = "system" | "light" | "dark";
@@ -23,7 +24,7 @@ export function useTheme() {
   const [choice, setChoice] = useState<ThemeChoice>(readStored);
 
   useEffect(() => {
-    apply(choice);
+    if (!getWebApp()) apply(choice);
   }, [choice]);
 
   const select = useCallback((next: ThemeChoice) => {

@@ -23,7 +23,7 @@ from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
 from app.pipeline.tasks import enqueue_lecture
 from app.services import quota
-from app.services.consent import require_ai_transfer_consent
+from app.services.consents import require_ai_transfer_consent
 
 logger = logging.getLogger(__name__)
 

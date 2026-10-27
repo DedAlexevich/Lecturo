@@ -10,7 +10,7 @@ cp .env.example .env
 
 ## Что нужно для запуска
 
-Локально ничего заполнять не нужно: `cp .env.example .env` и `docker compose up --build`. При `STT_PROVIDER=stub`, `LLM_PROVIDER=stub` и `EMBEDDINGS_PROVIDER=stub` провайдеры возвращают тестовые данные и обходятся без ключей. Без `SMTP_HOST` письма не отправляются, а пишутся в лог сервиса `api` (там же видны ссылки подтверждения почты и сброса пароля). Без `TELEGRAM_BOT_TOKEN` бот не запускается, а вход через Telegram отвечает 503.
+Локально ничего заполнять не нужно: `cp .env.example .env` и `docker compose up --build`. При `STT_PROVIDER=stub`, `LLM_PROVIDER=stub` и `EMBEDDINGS_PROVIDER=stub` провайдеры возвращают тестовые данные и обходятся без ключей. Без `SMTP_HOST` письма не отправляются, а пишутся в лог сервиса `api` (там же видны ссылки подтверждения почты и сброса пароля). Без `TELEGRAM_BOT_TOKEN` бот не запускается, а вход через Telegram отвечает 503. Без `VK_CLIENT_ID` и `VK_REDIRECT_URI` кнопка входа через VK не показывается, а запросы к VK-эндпоинтам отвечают 503. Так же ведёт себя вход через Яндекс без `YANDEX_OAUTH_CLIENT_ID` и `YANDEX_OAUTH_REDIRECT_URI`.
 
 Для боевого сервера нужно:
 
@@ -19,6 +19,8 @@ cp .env.example .env
 - настоящие провайдеры `STT_PROVIDER`, `LLM_PROVIDER`, `EMBEDDINGS_PROVIDER` и их ключи;
 - SMTP, иначе пользователи не получат письма для подтверждения почты и сброса пароля;
 - Telegram-бот, если нужен вход через Telegram и бот;
+- приложение VK ID, если нужен вход через VK;
+- приложение на oauth.yandex.ru, если нужен вход через Яндекс;
 - ЮKassa, если нужна оплата.
 
 ## Основные
@@ -137,10 +139,10 @@ Gmail:
 | Переменная | Описание | Обязательна | По умолчанию | Где используется |
 |---|---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
-| `TELEGRAM_BOT_USERNAME` | Имя бота без `@` | нет | пусто | `backend/app/core/config.py` |
-| `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
+| `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
+| `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
 
-Если `VITE_TELEGRAM_BOT_USERNAME` не задана при сборке, кнопка входа через Telegram не показывается. Этой переменной нет в `.env.example`, а `docker-compose.yml` и `frontend/Dockerfile` не передают её в сборку, так что при сборке через `docker compose` кнопка пока не появится.
+Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
 Получение токена и настройка бота:
 
@@ -150,6 +152,54 @@ Gmail:
 4. Примените настройки: `docker compose up -d`. Бот отвечает на `/start`, сохраняет `chat_id` пользователя и, если `PUBLIC_URL` начинается с `https://`, показывает кнопку открытия приложения.
 
 Бэкенд проверяет подпись данных входа по токену бота и принимает данные не старше суток. Токен никому не передавайте. Если он утёк, выпустите новый через BotFather.
+
+## VK ID
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `VK_CLIENT_ID` | ID приложения из кабинета VK ID | для входа через VK | пусто | `backend/app/core/config.py`, `backend/app/services/vk_auth.py` |
+| `VK_REDIRECT_URI` | Адрес, на который VK возвращает пользователя после входа: `<PUBLIC_URL>/auth/vk`, например `https://lecturo.example/auth/vk`. Должен совпадать с Redirect URL приложения символ в символ | для входа через VK | пусто | `backend/app/core/config.py`, `backend/app/services/vk_auth.py` |
+
+Если одна из двух переменных пуста, вход и привязка VK отключены: страница входа и настройки аккаунта не показывают кнопки, а `POST /api/v1/auth/vk/start` отвечает 503. Фронтенд узнаёт о настройке у бэкенда (`GET /api/v1/auth/providers`), поэтому пересобирать его после изменения переменных не нужно, достаточно перезапустить `api`: `docker compose up -d api`.
+
+Используется авторизационный код с PKCE: бэкенд сам создаёт `state` и `code_verifier`, хранит их в Redis 10 минут и обменивает код на токен запросом `POST https://id.vk.com/oauth2/auth`. Секрет приложения для этого обмена не нужен, поэтому отдельной переменной для него нет.
+
+Как получить ID приложения:
+
+1. Откройте [id.vk.com/about/business/go](https://id.vk.com/about/business/go) и войдите под аккаунтом VK, которому будет принадлежать приложение.
+2. Создайте приложение с платформой «Web».
+3. В настройках приложения укажите базовый домен сайта и доверенный Redirect URL, равный значению `VK_REDIRECT_URI`. Названия пунктов в кабинете могут отличаться, сверяйтесь с [документацией VK ID](https://id.vk.com/about/business/go/docs).
+4. Скопируйте ID приложения в `VK_CLIENT_ID`, а `VK_REDIRECT_URI` впишите в `.env`.
+5. Примените настройки: `docker compose up -d api`.
+
+Новому пользователю при первом входе через VK нужно принять пользовательское соглашение и согласие на обработку персональных данных, как и при входе через Telegram. Без обоих согласий аккаунт не создаётся.
+
+## Яндекс ID (вход через Яндекс)
+
+Это OAuth-приложение на oauth.yandex.ru, оно не связано с `YANDEX_SPEECHKIT_API_KEY`, `YANDEX_FOLDER_ID` и ключами Object Storage из раздела про распознавание речи: там Yandex Cloud, здесь Яндекс ID.
+
+| Переменная | Описание | Обязательна | По умолчанию | Где используется |
+|---|---|---|---|---|
+| `YANDEX_OAUTH_CLIENT_ID` | ID приложения (ClientID) из кабинета oauth.yandex.ru | для входа через Яндекс | пусто | `backend/app/core/config.py`, `backend/app/services/yandex_auth.py` |
+| `YANDEX_OAUTH_REDIRECT_URI` | Адрес, на который Яндекс возвращает пользователя после входа: `<PUBLIC_URL>/auth/yandex`, например `https://lecturo.example/auth/yandex`. Должен совпадать с Callback URI приложения символ в символ | для входа через Яндекс | пусто | `backend/app/core/config.py`, `backend/app/services/yandex_auth.py` |
+| `YANDEX_OAUTH_CLIENT_SECRET` | Пароль приложения (Client secret). Если задан, отправляется при обмене кода на токен вместе с PKCE | нет | пусто | `backend/app/core/config.py`, `backend/app/services/yandex_auth.py` |
+
+Если `YANDEX_OAUTH_CLIENT_ID` или `YANDEX_OAUTH_REDIRECT_URI` пуста, вход и привязка Яндекса отключены: страница входа и настройки аккаунта не показывают кнопки, а `POST /api/v1/auth/yandex/start` отвечает 503. Фронтенд узнаёт о настройке у бэкенда (`GET /api/v1/auth/providers`), поэтому пересобирать его после изменения переменных не нужно, достаточно перезапустить `api`: `docker compose up -d api`.
+
+Используется авторизационный код с PKCE: бэкенд сам создаёт `state` и `code_verifier`, хранит их в Redis 10 минут, отправляет пользователя на `https://oauth.yandex.ru/authorize`, обменивает код на токен запросом `POST https://oauth.yandex.ru/token` и читает профиль с `https://login.yandex.ru/info`. Секрет приложения для обмена с PKCE не нужен, но если вы его укажете, он будет отправлен.
+
+Как получить ID и секрет приложения:
+
+1. Откройте [oauth.yandex.ru](https://oauth.yandex.ru) и войдите под аккаунтом Яндекса, которому будет принадлежать приложение.
+2. Создайте новое приложение, платформа «Веб-сервисы».
+3. В поле Callback URI укажите значение `YANDEX_OAUTH_REDIRECT_URI`.
+4. В доступах приложения выберите право на доступ к логину, имени и фамилии пользователя (право `login:info`). Названия пунктов в кабинете могут отличаться, сверяйтесь с [документацией Яндекс ID](https://yandex.ru/dev/id/doc/ru/).
+5. Сохраните приложение. На его странице будут ID (ClientID) и пароль (Client secret). ID впишите в `YANDEX_OAUTH_CLIENT_ID`, а `YANDEX_OAUTH_REDIRECT_URI` в `.env`. Пароль нужен только если хотите передавать его при обмене кода, тогда он идёт в `YANDEX_OAUTH_CLIENT_SECRET`. Пароль никому не передавайте.
+6. Примените настройки: `docker compose up -d api`.
+
+Новому пользователю при первом входе через Яндекс нужно принять пользовательское соглашение и согласие на обработку персональных данных, как и при входе через Telegram и VK. Без обоих согласий аккаунт не создаётся.
+
+Поток проверен только на замоканных ответах Яндекса.
 
 ## Оплата (ЮKassa)
 

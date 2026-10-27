@@ -1,11 +1,25 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 
 import pytest
+from redis.asyncio import Redis
+from sqlalchemy import func, select
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
-from app.models import Chapter, Lecture, LectureStatus, SourceType, Summary, TranscriptSegment, User
+from app.models import (
+    Chapter,
+    Complaint,
+    Lecture,
+    LectureStatus,
+    SourceType,
+    Summary,
+    TranscriptSegment,
+    User,
+)
+from app.services import rate_limit
 
 
 @pytest.fixture
@@ -212,3 +226,121 @@ async def test_public_lecture_hidden_after_leaving_ready(client, verified_user, 
         lecture.status = LectureStatus.processing
         await session.commit()
     assert (await client.get(f"/api/v1/public/{share['token']}")).status_code == 404
+
+
+@pytest.fixture
+async def complaint_share(client, verified_user, auth_headers, reset_complaint_limit):
+    lecture_id = await create_lecture(verified_user.id)
+    share = (await create_share(client, auth_headers, lecture_id=str(lecture_id))).json()
+    return share
+
+
+@pytest.fixture
+async def reset_complaint_limit():
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete("rate:complaints:ip:127.0.0.1")
+    yield
+    await redis.delete("rate:complaints:ip:127.0.0.1")
+    await redis.aclose()
+
+
+async def test_complaint_saved_and_logged(client, complaint_share, verified_user, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.api.shares"):
+        response = await client.post(
+            f"/api/v1/public/{complaint_share['token']}/complaints",
+            json={"reason": "  Нарушение прав  "},
+        )
+    assert response.status_code == 204
+    assert response.content == b""
+    async with SessionLocal() as session:
+        complaint = await session.scalar(
+            select(Complaint).where(Complaint.lecture_id == complaint_share["lecture_id"])
+        )
+        assert complaint.reason == "Нарушение прав"
+        assert complaint.reporter_id is None
+        assert str(complaint.id) in caplog.text
+    assert str(verified_user.id) in caplog.text
+    assert complaint_share["token"] not in caplog.text
+    assert "Нарушение прав" not in caplog.text
+
+
+async def test_complaint_limit_ignores_forwarded_headers(client, complaint_share, monkeypatch):
+    monkeypatch.setattr(get_settings(), "complaints_rate_limit", 2)
+    url = f"/api/v1/public/{complaint_share['token']}/complaints"
+    for index in range(2):
+        response = await client.post(
+            url,
+            json={"reason": "Нарушение"},
+            headers={"X-Forwarded-For": f"192.0.2.{index}", "X-Real-IP": f"192.0.2.{index}"},
+        )
+        assert response.status_code == 204
+    assert (await client.post(url, json={"reason": "Нарушение"})).status_code == 429
+    assert (
+        await client.post("/api/v1/public/unknown/complaints", json={"reason": "Нарушение"})
+    ).status_code == 429
+
+
+async def test_complaint_redis_failure_is_closed(client, complaint_share, monkeypatch):
+    async def unavailable(*args):
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(rate_limit, "is_rate_limited", unavailable)
+    response = await client.post(
+        f"/api/v1/public/{complaint_share['token']}/complaints", json={"reason": "Нарушение"}
+    )
+    assert response.status_code == 503
+    async with SessionLocal() as session:
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(Complaint)
+                .where(Complaint.lecture_id == complaint_share["lecture_id"])
+            )
+            == 0
+        )
+
+
+@pytest.mark.parametrize("reason", ["", "   ", "я" * 5001])
+async def test_complaint_reason_validation(client, complaint_share, reason):
+    response = await client.post(
+        f"/api/v1/public/{complaint_share['token']}/complaints", json={"reason": reason}
+    )
+    assert response.status_code == 422
+
+
+async def test_complaint_unknown_and_revoked(client, complaint_share, auth_headers):
+    assert (
+        await client.post("/api/v1/public/unknown/complaints", json={"reason": "Нарушение"})
+    ).status_code == 404
+    await client.delete(f"/api/v1/shares/{complaint_share['token']}", headers=auth_headers)
+    assert (
+        await client.post(
+            f"/api/v1/public/{complaint_share['token']}/complaints", json={"reason": "Нарушение"}
+        )
+    ).status_code == 404
+
+
+async def test_complaint_unready_lecture(client, complaint_share):
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, uuid.UUID(complaint_share["lecture_id"]))
+        lecture.status = LectureStatus.failed
+        await session.commit()
+    assert (
+        await client.post(
+            f"/api/v1/public/{complaint_share['token']}/complaints", json={"reason": "Нарушение"}
+        )
+    ).status_code == 404
+
+
+async def test_complaint_course_requires_lecture(
+    client, verified_user, auth_headers, reset_complaint_limit
+):
+    course = (
+        await client.post("/api/v1/courses", json={"title": "Матан"}, headers=auth_headers)
+    ).json()
+    share = (await create_share(client, auth_headers, course_id=course["id"])).json()
+    assert (
+        await client.post(
+            f"/api/v1/public/{share['token']}/complaints", json={"reason": "Нарушение"}
+        )
+    ).status_code == 422

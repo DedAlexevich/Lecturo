@@ -33,10 +33,14 @@ export function useToken() {
   return useSyncExternalStore(subscribe, tokenStorage.get);
 }
 
+const localAuthErrors = ["/api/v1/me/identities/telegram", "/api/v1/me/identities/vk", "/api/v1/me/identities/yandex", "/api/v1/me/delete"];
+
 api.use({
   onResponse({ request, response }) {
     const token = tokenStorage.get();
-    if (response.status === 401 && token !== null && request.headers.get("Authorization") === `Bearer ${token}`) signOut();
+    if (response.status !== 401 || token === null) return response;
+    if (localAuthErrors.includes(new URL(request.url).pathname)) return response;
+    if (request.headers.get("Authorization") === `Bearer ${token}`) signOut();
     return response;
   },
 });

@@ -1,4 +1,6 @@
+import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useLocation } from "react-router";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
@@ -9,9 +11,15 @@ import { SectionError, SectionLoading } from "./SectionState";
 export function PurchaseSection() {
   const titleId = useId();
   const { data: products, isPending, isError, refetch } = useProducts();
+  const { hash } = useLocation();
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (hash === "#purchase" && !isPending) sectionRef.current?.scrollIntoView({ block: "start" });
+  }, [hash, isPending]);
 
   return (
-    <section className={styles.panel} aria-labelledby={titleId}>
+    <section ref={sectionRef} id="purchase" className={styles.panel} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
         <h2 id={titleId} className={styles.sectionTitle}>
           Подписка и пакеты часов
@@ -59,6 +67,10 @@ function PurchaseForm({ products }: { products: Product[] }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (getWebApp() && createPayment.data?.confirmation_url) {
+      openExternalLink(createPayment.data.confirmation_url);
+      return;
+    }
     if (!accepted) {
       setShowConsentError(true);
       return;
@@ -68,13 +80,13 @@ function PurchaseForm({ products }: { products: Product[] }) {
       {
         onSuccess: (payment) => {
           idempotenceKey.current = crypto.randomUUID();
-          if (payment.confirmation_url) window.location.assign(payment.confirmation_url);
+          if (payment.confirmation_url && !getWebApp()) openExternalLink(payment.confirmation_url);
         },
       },
     );
   };
 
-  const redirecting = createPayment.isSuccess && Boolean(createPayment.data.confirmation_url);
+  const redirecting = !getWebApp() && createPayment.isSuccess && Boolean(createPayment.data.confirmation_url);
   const failure = createPayment.isError
     ? errorMessage(createPayment.error, "Не удалось создать платёж. Попробуйте ещё раз.")
     : createPayment.isSuccess && !createPayment.data.confirmation_url
@@ -139,9 +151,15 @@ function PurchaseForm({ products }: { products: Product[] }) {
         </p>
       )}
       <div>
-        <Button type="submit" loading={createPayment.isPending || redirecting}>
-          Оплатить {formatRubles(selected.price_rub)}
-        </Button>
+        {getWebApp() && createPayment.data?.confirmation_url ? (
+          <Button type="button" onClick={() => openExternalLink(createPayment.data.confirmation_url!)}>
+            Открыть оплату в браузере
+          </Button>
+        ) : (
+          <Button type="submit" loading={createPayment.isPending || redirecting}>
+            Оплатить {formatRubles(selected.price_rub)}
+          </Button>
+        )}
       </div>
     </form>
   );

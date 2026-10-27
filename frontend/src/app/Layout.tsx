@@ -1,3 +1,4 @@
+import { TelegramBridge } from "../telegram/TelegramBridge";
 import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
@@ -7,6 +8,8 @@ import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
 import { CookieNotice } from "../features/consent/CookieNotice";
 import { AddLectureDialog } from "../features/upload/AddLectureDialog";
+import { QuotaDialog } from "../features/quota-dialog/QuotaDialog";
+import { WaitingNotice } from "../features/quota-dialog/WaitingNotice";
 import { Logo } from "../ui/Logo";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
@@ -104,12 +107,15 @@ export function Layout() {
           )}
         </header>
         <main className={styles.main}>
+          <TelegramBridge />
+          {signedIn && <WaitingNotice />}
           <Outlet />
         </main>
         <LegalFooter />
       </div>
       {signedIn && <Navigation className={styles.bottomNav} />}
       {signedIn && <AddLectureDialog />}
+      {signedIn && <QuotaDialog />}
       <CookieNotice />
     </div>
   );

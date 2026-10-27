@@ -18,7 +18,7 @@ from app.models import (
 )
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.lecture import LectureOut, LocalResultIn
-from app.services.consent import require_ai_transfer_consent
+from app.services.consents import require_ai_transfer_consent
 from app.services.local_validation import LocalResultInvalid, validate_local_result
 from app.services.rate_limit import enforce_rate_limit
 

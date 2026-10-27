@@ -1,9 +1,10 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from fastapi.exceptions import RequestValidationError
 from sqlalchemy import delete, select, update
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
@@ -12,32 +13,44 @@ from app.schemas.user import (
     EmailIn,
     LoginIn,
     PasswordResetIn,
+    ProvidersOut,
     RegisterIn,
-    TelegramLoginIn,
+    TelegramSignupIn,
     TokenIn,
     TokenOut,
+    VkCallbackIn,
+    VkStartIn,
+    VkStartOut,
+    YandexCallbackIn,
+    YandexStartIn,
+    YandexStartOut,
 )
+from app.services import yandex_auth
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import consume_token, issue_token
+from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
-from app.services.rate_limit import enforce_mail_rate_limit
-from app.services.telegram_auth import get_or_create_telegram_user, verify_login_widget
+from app.services.rate_limit import enforce_mail_rate_limit, enforce_rate_limit
+from app.services.telegram_auth import (
+    TELEGRAM_PROFILE_FIELDS,
+    get_or_create_telegram_user,
+    verify_login_widget,
+)
+from app.services.vk_auth import (
+    VkClientDep,
+    complete_flow,
+    get_or_create_vk_user,
+    start_flow,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
-    if not body.accept_terms:
-        raise RequestValidationError(
-            [
-                {
-                    "loc": ("body", "accept_terms"),
-                    "msg": "Нужно принять условия использования",
-                    "type": "value_error",
-                }
-            ]
-        )
+    require_signup_consents(body.accept_terms, body.accept_personal_data)
     user = await register_user(session, body.email, body.password, body.display_name)
     return TokenOut(access_token=create_access_token(user.id))
 
@@ -48,15 +61,125 @@ async def login(body: LoginIn, session: SessionDep) -> TokenOut:
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/telegram")
-async def login_telegram(body: TelegramLoginIn, session: SessionDep) -> TokenOut:
+@router.post(
+    "/telegram",
+    responses={
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"}
+    },
+)
+async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOut:
     verify_login_widget(body)
-    profile = body.model_dump(exclude={"id", "auth_date", "hash"}, exclude_none=True)
-    user = await get_or_create_telegram_user(session, body.id, profile)
+    profile = body.model_dump(include=TELEGRAM_PROFILE_FIELDS, exclude_none=True)
+    user = await get_or_create_telegram_user(
+        session, body.id, profile, body.accept_terms, body.accept_personal_data
+    )
     return TokenOut(access_token=create_access_token(user.id))
 
 
-@router.post("/verify-email/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.get("/providers")
+async def providers() -> ProvidersOut:
+    settings = get_settings()
+    return ProvidersOut(vk=settings.vk_enabled, yandex=settings.yandex_oauth_enabled)
+
+
+@router.post(
+    "/vk/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
+)
+async def start_vk_login(body: VkStartIn, request: Request) -> VkStartOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:vk-start:{ip}",
+        settings.vk_start_rate_limit,
+        settings.vk_start_rate_window_seconds,
+    )
+    url, nonce = await start_flow(
+        settings,
+        accept_terms=body.accept_terms,
+        accept_personal_data=body.accept_personal_data,
+    )
+    return VkStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/vk/callback",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия входа не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "VK отклонил вход"},
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "VK недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
+)
+async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep) -> TokenOut:
+    vk_id, profile, flow = await complete_flow(
+        get_settings(), client, body.code, body.state, body.device_id, body.nonce
+    )
+    user = await get_or_create_vk_user(
+        session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
+    )
+    return TokenOut(access_token=create_access_token(user.id))
+
+
+@router.post(
+    "/yandex/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def start_yandex_login(body: YandexStartIn, request: Request) -> YandexStartOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-start:{ip}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
+    url, nonce = await yandex_auth.start_flow(
+        settings,
+        accept_terms=body.accept_terms,
+        accept_personal_data=body.accept_personal_data,
+    )
+    return YandexStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/yandex/callback",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия входа не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def login_yandex(
+    body: YandexCallbackIn, session: SessionDep, client: yandex_auth.YandexClientDep
+) -> TokenOut:
+    yandex_id, profile, flow = await yandex_auth.complete_flow(
+        get_settings(), client, body.code, body.state, body.nonce
+    )
+    user = await yandex_auth.get_or_create_yandex_user(
+        session, yandex_id, profile, flow["accept_terms"], flow["accept_personal_data"]
+    )
+    return TokenOut(access_token=create_access_token(user.id))
+
+
+@router.post(
+    "/verify-email/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_email_verification(
     user: CurrentUser, session: SessionDep, background: BackgroundTasks, request: Request
 ) -> None:
@@ -80,22 +203,32 @@ async def confirm_email(body: TokenIn, session: SessionDep) -> None:
     await session.commit()
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много запросов писем"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Хранилище лимитов недоступно"},
+    },
+)
 async def request_password_reset(
     body: EmailIn, background: BackgroundTasks, request: Request
 ) -> None:
     email = normalize_email(body.email)
-    await enforce_mail_rate_limit(request, f"reset:{email}")
+    await enforce_mail_rate_limit(request, f"reset:{email}", per_ip=True)
     background.add_task(issue_and_send_password_reset, email)
 
 
 async def issue_and_send_password_reset(email: str) -> None:
-    async with SessionLocal() as session:
-        user = await session.scalar(select(User).where(User.email == email))
-        if user is None or user.email is None:
-            return
-        token = await issue_token(session, user.id, AuthTokenKind.reset_password)
-    await send_password_reset_mail(user.email, token)
+    try:
+        async with SessionLocal() as session:
+            user = await session.scalar(select(User).where(User.email == email))
+            if user is None or user.email is None:
+                return
+            token = await issue_token(session, user.id, AuthTokenKind.reset_password)
+        await send_password_reset_mail(user.email, token)
+    except Exception:
+        logger.exception("Не удалось выдать и отправить ссылку сброса пароля")
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
