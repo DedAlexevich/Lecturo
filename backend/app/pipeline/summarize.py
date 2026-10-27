@@ -256,7 +256,20 @@ def continuation_title(
     ]
     if topics:
         return min(topics, key=lambda topic: abs(topic.start - point)).title[:TITLE_MAX_LENGTH]
-    return f"{chapter.title} (продолжение)"[:TITLE_MAX_LENGTH]
+    base = chapter.title[: TITLE_MAX_LENGTH - 20]
+    title = f"{base} (продолжение)"
+    number = 2
+    while title in used:
+        title = f"{base} (продолжение {number})"
+        number += 1
+    return title
+
+
+def summary_at(point: float, digests: list[PartDigest]) -> str:
+    for digest in digests:
+        if digest.start <= point <= digest.end:
+            return digest.summary
+    return ""
 
 
 def split_oversized(
@@ -288,7 +301,7 @@ def split_oversized(
         title = continuation_title(chapter, point, digests, {c.title for c in result})
         result[index : index + 1] = [
             ChapterDraft(chapter.title, chapter.start, point, chapter.summary),
-            ChapterDraft(title, point, chapter.end, ""),
+            ChapterDraft(title, point, chapter.end, summary_at(point, digests)),
         ]
         unsplittable = {i if i < index else i + 1 for i in unsplittable}
 

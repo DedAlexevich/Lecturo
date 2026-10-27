@@ -365,3 +365,15 @@ async def test_long_lecture_keeps_part_size_and_hourly_range(user, monkeypatch):
 
     assert len([s for s in llm.systems if "фрагмент расшифровки" in s]) == 4
     assert "от 4 до 12 глав" in next(s for s in llm.systems if "Главы" in s)
+
+
+def test_repeated_split_keeps_titles_unique_and_fills_summary():
+    segments = make_segments([(m * 30.0, m * 30.0 + 29.0) for m in range(24)])
+    digests = [PartDigest(0, 719, "Описание части.", [])]
+    chapters = [ChapterDraft("Тема", 0, 719, "Своё.")]
+
+    result = split_oversized(chapters, segments, digests, plan_chapters(719))
+
+    assert len(result) >= 3
+    assert len({c.title for c in result}) == len(result)
+    assert all(c.summary for c in result)
