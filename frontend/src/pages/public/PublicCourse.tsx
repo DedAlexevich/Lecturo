@@ -3,6 +3,7 @@ import type { components } from "../../api/schema";
 import { lecturesCount } from "../home/format";
 import { formatDuration } from "../lecture/time";
 import { LocalBadge } from "./LocalBadge";
+import { SaveCopyButton } from "./SaveCopyButton";
 
 type Course = components["schemas"]["PublicCourseOut"];
 
@@ -16,6 +17,14 @@ export function PublicCourse({ token, course }: { token: string; course: Course 
           <span>{lecturesCount(course.lectures.length)}</span>
           <span>Только чтение</span>
         </div>
+        {course.lectures.length > 0 && (
+          <SaveCopyButton
+            token={token}
+            lectureId={null}
+            course
+            note="Сохранятся все готовые лекции курса. Видео загруженных файлов не копируется: останутся конспект, главы и расшифровка."
+          />
+        )}
       </header>
       {course.lectures.length === 0 ? (
         <p className="public-course__empty">В курсе пока нет готовых лекций.</p>
