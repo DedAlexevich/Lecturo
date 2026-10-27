@@ -36,6 +36,8 @@ cp .env.example .env
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
 | `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
+| `LOG_MAX_MB` | Размер лог-файла в `data/logs`, при котором он ротируется. См. [logs.md](logs.md) | нет | `10` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
+| `LOG_BACKUP_COUNT` | Сколько прежних копий лог-файла хранить | нет | `5` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
 | `BACKUP_DIR` | Папка на хосте для бэкапов базы. Путь абсолютный или относительный к корню репозитория. См. [deploy.md](deploy.md#бэкапы-базы) | нет | `./backups` | `infra/backup` |
 | `BACKUP_KEEP` | Сколько последних бэкапов хранить, целое число от 1 | нет | `7` | `infra/backup/backup.sh` |
 | `BACKUP_DB_SERVICE` | Сервис compose с Postgres, к которому подключаются скрипты бэкапа | нет | `db` | `infra/backup` |

@@ -1,5 +1,6 @@
 import asyncio
 import ipaddress
+import logging
 import re
 import socket
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from app.core.config import get_settings
 from app.models import Lecture
 from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
 from app.pipeline.runner import Report
+
+logger = logging.getLogger(__name__)
 
 PROGRESS_INTERVAL_SEC = 2.0
 
@@ -173,6 +176,7 @@ async def inspect_link(url: str) -> LinkInfo:
         try:
             info = await asyncio.to_thread(extract_info, url)
         except YoutubeDLError as error:
+            logger.warning("yt-dlp не смог получить видео (%s): %s", urlparse(url).hostname, error)
             raise LinkError("Не удалось получить видео по ссылке") from error
         if info.get("_type") == "playlist":
             raise LinkError("Нужна ссылка на одно видео, а не на плейлист")

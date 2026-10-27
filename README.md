@@ -17,6 +17,8 @@ docker compose up --build
 
 Данные (база, файлы лекций) хранятся в папке `data/` рядом с проектом и переживают `docker compose down -v`. Подробности и перенос из старых томов: [docs/data.md](docs/data.md).
 
+Логи сервисов лежат в `data/logs` с ротацией, описание в [docs/logs.md](docs/logs.md).
+
 Для HTTPS на сервере укажите домен в `SITE_ADDRESS`, Caddy сам получит сертификат. Деплой и автодеплой описаны в [docs/deploy.md](docs/deploy.md).
 
 ## Структура
