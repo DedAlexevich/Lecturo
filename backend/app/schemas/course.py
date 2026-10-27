@@ -1,14 +1,17 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from app.schemas.common import Schema
 
+CourseTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
 
 class CourseIn(Schema):
-    title: str = Field(min_length=1, max_length=200)
-    description: str = ""
+    title: CourseTitle
+    description: str = Field(default="", max_length=2000)
 
 
 class CourseOut(Schema):
@@ -24,5 +27,5 @@ class CourseLectureIn(Schema):
 
 
 class CourseUpdate(Schema):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
+    title: CourseTitle | None = None
+    description: str | None = Field(default=None, max_length=2000)
