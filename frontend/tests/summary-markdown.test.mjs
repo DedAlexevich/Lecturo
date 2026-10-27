@@ -34,3 +34,12 @@ test("двойные доллары внутри абзаца остаются �
   assert.match(html, /\$\$x\^2\$\$/);
   assert.doesNotMatch(html, /class=\"katex/);
 });
+
+test("шпаргалка памятки показывает формулы и блоки вместо разметки", () => {
+  const html = renderSummary("## Механика\n\n:::formula\n$E = mc^2$ и $a * b * c$\n:::\n\n- Сила: $F = m \\cdot a$");
+  assert.match(html, /summary-callout--formula/);
+  assert.match(html, /class="katex"/);
+  assert.doesNotMatch(html, /:::/);
+  assert.doesNotMatch(html, /\$E = mc\^2\$/);
+  assert.doesNotMatch(html, /<em>/);
+});
