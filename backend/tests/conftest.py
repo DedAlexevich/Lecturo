@@ -45,7 +45,7 @@ async def user() -> AsyncIterator[User]:
         await session.commit()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 async def reset_auth_rate_limits() -> AsyncIterator[None]:
     keys = ("rate:login:ip:127.0.0.1", "rate:register:127.0.0.1")
     redis = Redis.from_url(get_settings().redis_url)

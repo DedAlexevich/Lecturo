@@ -11,6 +11,8 @@ from app.core.db import SessionLocal
 from app.models import User
 from app.services.legal import read_document
 
+pytestmark = pytest.mark.usefixtures("reset_auth_rate_limits")
+
 
 @pytest.fixture
 async def email() -> AsyncIterator[str]:

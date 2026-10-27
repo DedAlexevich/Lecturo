@@ -15,6 +15,9 @@ from app.main import app
 from app.models import AuthIdentity, AuthProvider, User
 from app.services.vk_auth import VkClient, code_challenge, get_vk_client
 
+pytestmark = pytest.mark.usefixtures("reset_auth_rate_limits")
+
+
 CLIENT_ID = "54321"
 REDIRECT_URI = "https://lecturo.test/auth/vk"
 TOKEN_URL = "https://id.vk.test/oauth2/auth"
@@ -401,9 +404,11 @@ async def test_start_is_rate_limited(client, monkeypatch):
 async def test_link_start_is_rate_limited(client, cleanup, monkeypatch):
     monkeypatch.setattr(get_settings(), "vk_start_rate_limit", 1)
     user = await create_user(cleanup, [(AuthProvider.email, "vk-rate@example.test")])
-    first = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
-    second = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
-    assert [first.status_code, second.status_code] == [200, 429]
     redis = Redis.from_url(get_settings().redis_url)
-    await redis.delete(f"rate:vk-link-start:{user.id}")
-    await redis.aclose()
+    try:
+        first = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
+        second = await client.post("/api/v1/me/identities/vk/start", headers=headers(user))
+    finally:
+        await redis.delete(f"rate:vk-link-start:{user.id}")
+        await redis.aclose()
+    assert [first.status_code, second.status_code] == [200, 429]
