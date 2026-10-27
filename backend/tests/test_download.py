@@ -483,7 +483,7 @@ def test_other_sources_skip_proxy(youtube_proxy, url):
 
 
 def test_no_proxy_without_setting(monkeypatch):
-    monkeypatch.delenv("YOUTUBE_PROXY", raising=False)
+    monkeypatch.setenv("YOUTUBE_PROXY", "")
     download.get_settings.cache_clear()
     try:
         assert download.ydl_options("https://youtu.be/dQw4w9WgXcQ") == download.BASE_OPTIONS
