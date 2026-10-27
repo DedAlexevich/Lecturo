@@ -157,7 +157,7 @@ export function QuizPage() {
   const rebuildError = step?.status === "failed" ? (step.error ?? "Новые вопросы не получилось составить.") : null;
 
   let body;
-  if (lecture.isPending || (ready && quiz.isPending)) {
+  if (lecture.isPending || (ready && (quiz.isPending || stepQuery.isPending))) {
     body = <QuizSkeleton />;
   } else if (!ready) {
     body = (
@@ -171,6 +171,8 @@ export function QuizPage() {
     body = <SubscriptionOffer />;
   } else if (quiz.isError) {
     body = <QuizFailure onRetry={() => void quiz.refetch()} retrying={quiz.isFetching} />;
+  } else if (stepQuery.isError && !quiz.data) {
+    body = <QuizFailure onRetry={() => void stepQuery.refetch()} retrying={stepQuery.isFetching} />;
   } else if (building && step) {
     body = <QuizBuilding step={step} />;
   } else if (quiz.data && quiz.data.questions.length > 0) {
