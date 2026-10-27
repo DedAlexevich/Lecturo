@@ -91,7 +91,8 @@ async def test_share_lecture_lifecycle(client, verified_user, auth_headers):
     assert public.json()["course"] is None
     assert lecture["title"] == "Пределы"
     assert lecture["processed_locally"] is True
-    assert lecture["video_url"] == f"/media/{lecture_id}.mp4"
+    assert lecture["video_url"].startswith(f"/media/{lecture_id}.mp4?")
+    assert f"share={share['token']}" in lecture["video_url"]
     assert lecture["segments"][0]["text"] == "Привет"
     assert lecture["chapters"][0]["title"] == "Введение"
     assert lecture["summary"]["content_md"] == "Конспект"

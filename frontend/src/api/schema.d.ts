@@ -557,6 +557,23 @@ export interface paths {
         patch: operations["update_lecture_api_v1_lectures__lecture_id__patch"];
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/video-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Video Access */
+        get: operations["video_access_api_v1_lectures__lecture_id__video_access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/link": {
         parameters: {
             query?: never;
@@ -3091,6 +3108,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LectureOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    video_access_api_v1_lectures__lecture_id__video_access_get: {
+        parameters: {
+            query?: {
+                expires?: string;
+                signature?: string;
+                share?: string | null;
+            };
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

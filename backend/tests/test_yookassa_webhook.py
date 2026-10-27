@@ -13,9 +13,11 @@ from app.core.db import SessionLocal
 from app.main import app
 from app.models import (
     HourPackage,
+    Lecture,
     Payment,
     PaymentKind,
     PaymentStatus,
+    SourceType,
     Subscription,
     User,
 )
@@ -255,6 +257,31 @@ async def test_subscription_starts_now_and_raises_weekly_limit(client, user, aut
     quota = (await client.get("/api/v1/billing/quota", headers=auth_headers)).json()
     assert quota["weekly_limit_sec"] == get_settings().subscription_weekly_seconds
     assert quota["subscription_until"] is not None
+
+
+async def test_subscription_extends_uploaded_video_retention(client, user, fake):
+    async with SessionLocal() as session:
+        lecture = Lecture(
+            owner_id=user.id,
+            title="Лекция",
+            source_type=SourceType.upload,
+            video_path="/tmp/lecture.mp4",
+            video_expires_at=datetime.now(UTC) + timedelta(days=3),
+        )
+        session.add(lecture)
+        await session.commit()
+    payment = await make_payment(user, "subscription")
+    fake.set_remote(payment, "succeeded")
+
+    before = datetime.now(UTC)
+
+    response = await client.post(WEBHOOK, json=notification(payment))
+
+    assert response.status_code == 200
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture.id)
+    days = timedelta(days=get_settings().subscription_video_retention_days)
+    assert before + days <= lecture.video_expires_at <= datetime.now(UTC) + days
 
 
 async def test_subscription_extends_active_one(client, user, fake):
