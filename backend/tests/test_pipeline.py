@@ -295,7 +295,7 @@ async def test_ready_lecture_job_only_finishes_video(user, sample_video, monkeyp
     monkeypatch.setattr(tasks, "publish_status", cancelled_on_ready)
     with pytest.raises(asyncio.CancelledError):
         await tasks.process_lecture({}, str(lecture.id))
-    assert StepName.video not in steps_by_name(await load(lecture.id))
+    assert steps_by_name(await load(lecture.id))[StepName.video].status == StepStatus.pending
 
     monkeypatch.setattr(tasks, "publish_status", publish)
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
@@ -942,3 +942,15 @@ async def test_interrupted_regeneration_is_left_to_its_job(user, sample_audio, a
     assert await Job(job_id, arq_redis).status() == JobStatus.queued
     assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).info() is None
     assert (await load(lecture.id)).status == LectureStatus.processing
+
+
+async def test_ready_lecture_with_pending_video_is_resumed(user, sample_video, arq_redis):
+    lecture = await create_lecture(user, sample_video)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.status = LectureStatus.ready
+        session.add(ProcessingStep(lecture_id=lecture.id, step=StepName.video, attempts=0))
+        await session.commit()
+
+    assert await tasks.resume_interrupted_lectures(arq_redis) == 1
+    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued

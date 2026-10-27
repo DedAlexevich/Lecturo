@@ -44,6 +44,8 @@ PLANS: dict[SourceType, list[StepName]] = {
 
 AFTER_READY: dict[SourceType, list[StepName]] = {SourceType.upload: [StepName.video]}
 
+AFTER_READY_STEPS = sorted({name for names in AFTER_READY.values() for name in names})
+
 LECTURE_STEPS = [name for name in StepName if name != StepName.quiz]
 
 
@@ -166,6 +168,8 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
             for name in PLANS[lecture.source_type]:
                 await run_step(session, lecture, name, HANDLERS[name])
+            for name in AFTER_READY.get(lecture.source_type, []):
+                await get_step(session, lecture.id, name)
             lecture.status = LectureStatus.ready
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
@@ -206,11 +210,15 @@ async def resume_interrupted_lectures(redis: ArqRedis) -> int:
         running = select(ProcessingStep.lecture_id).where(
             ProcessingStep.step.in_(LECTURE_STEPS), ProcessingStep.status == StepStatus.running
         )
+        after_ready = select(ProcessingStep.lecture_id).where(
+            ProcessingStep.step.in_(AFTER_READY_STEPS), ProcessingStep.status == StepStatus.pending
+        )
         candidates = await session.scalars(
             select(Lecture.id).where(
                 or_(
                     Lecture.status.in_([LectureStatus.queued, LectureStatus.processing]),
                     Lecture.id.in_(running),
+                    (Lecture.status == LectureStatus.ready) & Lecture.id.in_(after_ready),
                 )
             )
         )
