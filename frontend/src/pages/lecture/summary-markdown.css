@@ -1,0 +1,37 @@
+.summary__content > * {
+  margin: 0;
+}
+
+.summary__content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.summary-callout {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-sunken);
+}
+
+.summary-callout--definition { border-color: #3880a0; background: color-mix(in srgb, #3880a0 12%, var(--color-surface)); }
+.summary-callout--theorem { border-color: #5b69a2; background: color-mix(in srgb, #5b69a2 12%, var(--color-surface)); }
+.summary-callout--formula { border-color: #a37826; background: color-mix(in srgb, #a37826 12%, var(--color-surface)); }
+.summary-callout--example { border-color: #43875c; background: color-mix(in srgb, #43875c 12%, var(--color-surface)); }
+.summary-callout--important { border-color: #ad5b52; background: color-mix(in srgb, #ad5b52 12%, var(--color-surface)); }
+
+.summary-callout__title {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+}
+
+.summary-callout > :last-child {
+  margin-bottom: 0;
+}
+
+.summary__content .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
