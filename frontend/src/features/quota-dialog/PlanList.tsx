@@ -1,7 +1,10 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { Checkbox } from "../../ui/Checkbox";
 import { formatMinutes } from "./format";
 import type { WaitingLecture } from "./queries";
+
+const scrollEdge = 40;
+const scrollStep = 8;
 
 type PlanListProps = {
   lectures: WaitingLecture[];
@@ -15,6 +18,8 @@ export function PlanList({ lectures, selected, disabled, onToggle, onMove }: Pla
   const listRef = useRef<HTMLOListElement>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const pointerY = useRef<number | null>(null);
+  const reorderRef = useRef<(clientY: number) => void>(() => undefined);
 
   const indexAt = (clientY: number, id: string) => {
     const rows = Array.from(listRef.current?.children ?? []).filter(
@@ -30,16 +35,50 @@ export function PlanList({ lectures, selected, disabled, onToggle, onMove }: Pla
     if (disabled || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    pointerY.current = event.clientY;
     setDragging(id);
   };
 
-  const drag = (event: PointerEvent<HTMLButtonElement>, id: string) => {
-    if (dragging !== id) return;
-    const target = indexAt(event.clientY, id);
-    if (target !== lectures.findIndex((lecture) => lecture.id === id)) onMove(id, target);
+  const reorder = (clientY: number) => {
+    if (dragging === null) return;
+    const target = indexAt(clientY, dragging);
+    if (target !== lectures.findIndex((lecture) => lecture.id === dragging)) onMove(dragging, target);
   };
 
-  const stopDrag = () => setDragging(null);
+  useEffect(() => {
+    reorderRef.current = reorder;
+  });
+
+  useEffect(() => {
+    if (dragging === null) return;
+    let frame = 0;
+    const tick = () => {
+      const list = listRef.current;
+      const y = pointerY.current;
+      if (list && y !== null) {
+        const rect = list.getBoundingClientRect();
+        const step = y < rect.top + scrollEdge ? -scrollStep : y > rect.bottom - scrollEdge ? scrollStep : 0;
+        if (step !== 0) {
+          list.scrollTop += step;
+          reorderRef.current(y);
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [dragging]);
+
+  const drag = (event: PointerEvent<HTMLButtonElement>, id: string) => {
+    if (dragging !== id) return;
+    pointerY.current = event.clientY;
+    reorder(event.clientY);
+  };
+
+  const stopDrag = () => {
+    pointerY.current = null;
+    setDragging(null);
+  };
 
   const moveByKey = (event: KeyboardEvent<HTMLButtonElement>, lecture: WaitingLecture, index: number) => {
     const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
