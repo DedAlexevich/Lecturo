@@ -41,7 +41,11 @@ async def get_exam_sheet(
     sheet = await session.scalar(select(ExamSheet).where(ExamSheet.course_id == course_id))
     if sheet is not None:
         return ExamSheetOut(course_id=course_id, **sheet.content)
-    if await exam_sheet_in_progress(course_id):
+    try:
+        processing = await exam_sheet_in_progress(course_id)
+    except (OSError, RedisError) as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
+    if processing:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             {"code": "exam_sheet_processing", "message": "Памятка ещё готовится"},

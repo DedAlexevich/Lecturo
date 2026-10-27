@@ -3,6 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import insert, select, update
 
 from app.api import exam as exam_api
@@ -291,3 +292,19 @@ async def test_broken_map_answer_falls_back_to_outline():
 
     assert (digest.tickets, digest.definitions) == ([], [])
     assert digest.cheatsheet_md == "- Ряды\n- Признаки"
+
+
+async def test_queue_down_returns_503(client, user, auth_headers, monkeypatch):
+    await subscribe(user)
+    course_id = await create_course(user)
+
+    async def queue_down(course_id: uuid.UUID) -> None:
+        raise RedisConnectionError("нет связи")
+
+    monkeypatch.setattr(exam_api, "enqueue_exam_sheet", queue_down)
+    monkeypatch.setattr(exam_api, "exam_sheet_in_progress", queue_down)
+    url = f"/api/v1/courses/{course_id}/exam-sheet"
+
+    for method in ("post", "get"):
+        response = await getattr(client, method)(url, headers=auth_headers)
+        assert response.status_code == 503
