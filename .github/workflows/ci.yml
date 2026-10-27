@@ -99,6 +99,22 @@ jobs:
           npm run gen:api
           git diff --exit-code src/api/schema.d.ts
       - run: npm run build
+      - id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - name: Telegram Mini App tests
+        run: |
+          npx vite preview --host 127.0.0.1 --port 5186 --strictPort &
+          timeout 30 bash -c 'until curl -fsS http://127.0.0.1:5186/ >/dev/null; do sleep 1; done'
+          npm run test:telegram
 
   compose:
     runs-on: ubuntu-latest
