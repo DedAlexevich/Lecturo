@@ -116,6 +116,11 @@ class Settings(BaseSettings):
     account_delete_rate_window_seconds: int = 3600
     password_change_rate_limit: int = 10
     password_change_rate_window_seconds: int = 3600
+    login_rate_limit: int = 10
+    login_ip_rate_limit: int = 50
+    login_rate_window_seconds: int = 900
+    register_rate_limit: int = 10
+    register_rate_window_seconds: int = 3600
 
     @property
     def yandex_oauth_enabled(self) -> bool:
