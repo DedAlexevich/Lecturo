@@ -13,7 +13,7 @@ import { definitionsCount, ticketsCount } from "./format";
 import { createErrorText, definitionsOf, errorCode, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
 import "./exam-sheet.css";
 
-const sheetStates = ["subscription_required", "exam_sheet_processing", "exam_sheet_not_found"];
+const sheetStates = ["subscription_required", "exam_sheet_processing", "exam_sheet_not_found", "exam_sheet_failed"];
 
 function SheetSkeleton() {
   return (
@@ -78,7 +78,8 @@ export function ExamSheetPage() {
   const [sawProcessing, setSawProcessing] = useState(false);
 
   if (code === "exam_sheet_processing" && !sawProcessing) setSawProcessing(true);
-  const buildFailed = sawProcessing && code === "exam_sheet_not_found" && !create.isPending;
+  const buildFailed =
+    (code === "exam_sheet_failed" || (sawProcessing && code === "exam_sheet_not_found")) && !create.isPending;
 
   const startCreate = () =>
     requireConsent(() => {
@@ -123,7 +124,7 @@ export function ExamSheetPage() {
 
       {code === "exam_sheet_processing" && <Processing />}
 
-      {code === "exam_sheet_not_found" && (
+      {(code === "exam_sheet_not_found" || code === "exam_sheet_failed") && (
         <EmptyState
           title="Памятки пока нет"
           description="Соберём билеты, определения и шпаргалку из конспектов всех лекций курса. Потом её можно распечатать."
