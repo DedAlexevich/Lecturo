@@ -15,7 +15,7 @@ from yt_dlp.utils import YoutubeDLError
 
 from app.core.config import get_settings
 from app.models import Lecture
-from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
+from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC, make_mono
 from app.pipeline.runner import Report
 
 logger = logging.getLogger(__name__)
@@ -296,4 +296,6 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     while not fetching.done():
         await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
         await report(progress["fraction"])
-    lecture.audio_path = str(fetching.result())
+    audio_path = fetching.result()
+    await make_mono(audio_path, lecture.duration_sec, report)
+    lecture.audio_path = str(audio_path)

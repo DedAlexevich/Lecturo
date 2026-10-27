@@ -189,25 +189,40 @@ async def encode(
         await asyncio.to_thread(partial.unlink, missing_ok=True)
 
 
+def speech_audio_args(source: Path) -> list[str]:
+    return [
+        "-i",
+        str(source),
+        "-map",
+        "0:a:0",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "32k",
+        "-f",
+        "opus",
+    ]
+
+
+async def audio_channels(path: Path) -> int:
+    info = await probe(path, "stream=codec_type,channels")
+    audio = first_stream(info.get("streams") or [], "audio")
+    return int((audio or {}).get("channels") or 1)
+
+
+async def make_mono(path: Path, duration: float | None, report: Report) -> None:
+    if await audio_channels(path) > 1:
+        await encode(speech_audio_args(path), path, duration, report, "Не удалось подготовить звук")
+
+
 async def extract_audio(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     target = get_settings().storage_dir / "audio" / f"{lecture.id}.opus"
     await encode(
-        [
-            "-i",
-            str(original_path(lecture.id)),
-            "-map",
-            "0:a:0",
-            "-ac",
-            "1",
-            "-ar",
-            "16000",
-            "-c:a",
-            "libopus",
-            "-b:a",
-            "32k",
-            "-f",
-            "opus",
-        ],
+        speech_audio_args(original_path(lecture.id)),
         target,
         lecture.duration_sec,
         report,

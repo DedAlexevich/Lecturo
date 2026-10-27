@@ -384,6 +384,55 @@ async def test_broken_original_fails_audio_step(user, storage, tmp_path):
     assert not list((storage / "tmp").iterdir())
 
 
+async def test_downloaded_stereo_audio_becomes_mono(storage):
+    stereo = storage / "audio" / "lecture.opus"
+    stereo.parent.mkdir()
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=660",
+            "-filter_complex",
+            "[0][1]amerge=inputs=2",
+            "-t",
+            "2",
+            "-c:a",
+            "libopus",
+            str(stereo),
+        ],
+        check=True,
+    )
+    assert await media.audio_channels(stereo) == 2
+
+    async def report(progress):
+        pass
+
+    await media.make_mono(stereo, 2.0, report)
+
+    assert await media.audio_channels(stereo) == 1
+    assert await media.probe_duration(stereo) == pytest.approx(2.0, abs=0.1)
+
+
+async def test_mono_audio_is_left_as_is(storage, sample_audio):
+    calls = []
+
+    async def report(progress):
+        calls.append(progress)
+
+    await media.make_mono(sample_audio, 2.0, report)
+
+    assert await media.audio_channels(sample_audio) == 1
+    assert calls == []
+
+
 async def test_ffmpeg_progress_is_reported(sample_video, tmp_path, monkeypatch):
     monkeypatch.setattr(media, "PROGRESS_INTERVAL_SEC", 0.0)
     reported = []
