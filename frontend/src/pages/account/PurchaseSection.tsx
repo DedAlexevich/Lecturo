@@ -55,7 +55,7 @@ export function PurchaseSection() {
 }
 
 function productNote(product: Product) {
-  if (product.kind === "subscription") return "Больше часов в неделю, квиз, памятка к экзамену и долгое хранение видео";
+  if (product.kind === "subscription") return "Больше часов в неделю, квиз, памятка к экзамену, чат по лекции и долгое хранение видео";
   if (!product.seconds) return "Не сгорает";
   const perHour = Math.round((product.price_rub / (product.seconds / 3600)) * 100) / 100;
   return `Не сгорает, ${formatRubles(perHour)} за час`;
