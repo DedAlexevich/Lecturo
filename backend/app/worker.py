@@ -45,6 +45,7 @@ class WorkerSettings:
     functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
     on_startup = startup
     job_timeout = LECTURE_TIMEOUT_SEC + 600
+    max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
     cron_jobs = [cron(delete_expired_videos, minute=0)]
