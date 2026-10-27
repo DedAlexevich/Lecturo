@@ -41,6 +41,8 @@ class StepOut(Schema):
     status: StepStatus
     progress: float
     error: str | None
+    stage: str | None = None
+    expected_sec: int | None = None
 
 
 class LectureOut(Schema):
@@ -64,6 +66,7 @@ class LectureDetail(LectureOut):
     video_url: str | None = None
     audio_only: bool = False
     audio_url: str | None = None
+    eta_sec: int | None = None
     steps: list[StepOut]
     segments: list[SegmentOut]
     chapters: list[ChapterOut]
@@ -108,4 +111,6 @@ class LectureStatusOut(Schema):
     id: uuid.UUID
     status: LectureStatus
     queue_position: int | None
+    duration_sec: float | None = None
+    eta_sec: int | None = None
     steps: list[StepOut]

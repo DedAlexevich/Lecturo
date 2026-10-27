@@ -85,12 +85,60 @@ async def test_lecture_status(client, user, auth_headers):
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json() == {
-        "id": str(lecture.id),
-        "status": "processing",
-        "queue_position": None,
-        "steps": [{"step": "audio", "status": "running", "progress": 0.4, "error": None}],
+    body = response.json()
+    assert body["id"] == str(lecture.id)
+    assert body["status"] == "processing"
+    assert body["queue_position"] is None
+    assert body["eta_sec"] is None
+    assert [step["step"] for step in body["steps"]] == [
+        "audio",
+        "transcribe",
+        "summarize",
+        "embed",
+    ]
+    assert body["steps"][0] == {
+        "step": "audio",
+        "status": "running",
+        "progress": 0.4,
+        "error": None,
+        "stage": None,
+        "expected_sec": None,
     }
+    assert {step["status"] for step in body["steps"][1:]} == {"pending"}
+
+
+async def test_status_shows_plan_estimate_and_queue_position(client, user, auth_headers):
+    async with SessionLocal() as session:
+        earlier = Lecture(
+            owner_id=user.id,
+            title="Раньше",
+            source_type=SourceType.upload,
+            status=LectureStatus.queued,
+        )
+        session.add(earlier)
+        await session.commit()
+        later = Lecture(
+            owner_id=user.id,
+            title="Позже",
+            source_type=SourceType.upload,
+            duration_sec=1500.0,
+            status=LectureStatus.queued,
+        )
+        session.add(later)
+        await session.commit()
+
+    response = await client.get(f"/api/v1/lectures/{later.id}/status", headers=auth_headers)
+    body = response.json()
+    assert body["queue_position"] >= 1
+    assert body["duration_sec"] == 1500.0
+    assert [step["status"] for step in body["steps"]] == ["pending"] * 4
+    transcribe = next(step for step in body["steps"] if step["step"] == "transcribe")
+    assert transcribe["expected_sec"] == 450
+    assert body["eta_sec"] == 15 + 450 + 75 + 15
+
+    detail = await client.get(f"/api/v1/lectures/{later.id}", headers=auth_headers)
+    assert detail.json()["eta_sec"] == body["eta_sec"]
+    assert len(detail.json()["steps"]) == 4
 
 
 @pytest.fixture
