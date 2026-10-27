@@ -1,8 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { signIn } from "../../app/session";
+import { meQueryKey } from "../../app/useMe";
 
 export type TelegramUser = components["schemas"]["TelegramLoginIn"];
 
@@ -48,8 +49,10 @@ export function useConfirmPasswordReset() {
 }
 
 export function useConfirmEmail() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (token: string) => unwrap(await api.POST("/api/v1/auth/verify-email/confirm", { body: { token } })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: meQueryKey }),
   });
 }
 

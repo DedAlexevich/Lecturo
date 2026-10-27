@@ -15,7 +15,7 @@ export function AccountPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <h1>Кабинет</h1>
-        {me && <p className={styles.muted}>{me.email ? `${me.display_name}, ${me.email}` : me.display_name}</p>}
+        {me && <p className={styles.muted}>{[me.display_name.trim(), me.email].filter(Boolean).join(", ")}</p>}
       </header>
       {checkingPayment && (
         <p className={styles.notice} role="status">

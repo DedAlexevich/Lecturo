@@ -1,4 +1,4 @@
-import { LECTURES_STORE, openDb, requestResult, transactionDone } from "./db";
+import { LECTURES_STORE, MEDIA_STORE, openDb, requestResult, transactionDone } from "./db";
 import type { LocalLecture, LocalLectureSummary, LocalResultPayload, NewLocalLecture } from "./types";
 
 function createId() {
@@ -49,8 +49,9 @@ export async function listLocalLectures(): Promise<LocalLectureSummary[]> {
 
 export async function deleteLocalLecture(id: string): Promise<void> {
   const db = await openDb();
-  const transaction = db.transaction(LECTURES_STORE, "readwrite");
+  const transaction = db.transaction([LECTURES_STORE, MEDIA_STORE], "readwrite");
   transaction.objectStore(LECTURES_STORE).delete(id);
+  transaction.objectStore(MEDIA_STORE).delete(id);
   await transactionDone(transaction);
 }
 
