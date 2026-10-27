@@ -5,18 +5,21 @@ import { nextClipIndex, parseStoredIndex, parseStoredMode } from "./rotation";
 const modeKey = "lecturo-zoomer";
 const clipKey = "lecturo-zoomer-clip";
 
-function readStorage(key: string): string | null {
+const missingKey = "lecturo-zoomer-missing";
+
+function readStorage(key: string, session = false): string | null {
   try {
-    return localStorage.getItem(key);
+    return (session ? sessionStorage : localStorage).getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeStorage(key: string, value: string | null) {
+function writeStorage(key: string, value: string | null, session = false) {
   try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
+    const storage = session ? sessionStorage : localStorage;
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
   } catch {
     return;
   }
@@ -34,11 +37,18 @@ function pickClip(clips: string[]): string | null {
 }
 
 export function useZoomerMode() {
-  const [enabled, setEnabled] = useState(() => parseStoredMode(readStorage(modeKey)));
+  const [missing, setMissing] = useState(() => readStorage(missingKey, true) !== null);
+  const [enabled, setEnabled] = useState(() => !missing && parseStoredMode(readStorage(modeKey)));
   const [clips, setClips] = useState<string[] | null>(null);
   const [clip, setClip] = useState<string | null>(null);
   const [autoplay, setAutoplay] = useState(() => !prefersReducedMotion());
   const [confirming, setConfirming] = useState(false);
+
+  const disable = useCallback(() => {
+    setEnabled(false);
+    setClip(null);
+    writeStorage(modeKey, null);
+  }, []);
 
   useEffect(() => {
     if (!enabled || clips !== null) return;
@@ -52,20 +62,21 @@ export function useZoomerMode() {
   }, [enabled, clips]);
 
   useEffect(() => {
-    if (enabled && clips !== null && clip === null) setClip(pickClip(clips));
-  }, [enabled, clips, clip]);
+    if (!enabled || clips === null) return;
+    if (clips.length === 0) {
+      writeStorage(missingKey, "1", true);
+      setMissing(true);
+      disable();
+      return;
+    }
+    writeStorage(modeKey, "on");
+    if (clip === null) setClip(pickClip(clips));
+  }, [enabled, clips, clip, disable]);
 
   const enable = useCallback(() => {
     setConfirming(false);
     setAutoplay(true);
     setEnabled(true);
-    writeStorage(modeKey, "on");
-  }, []);
-
-  const disable = useCallback(() => {
-    setEnabled(false);
-    setClip(null);
-    writeStorage(modeKey, null);
   }, []);
 
   const toggle = useCallback(() => {
@@ -77,7 +88,7 @@ export function useZoomerMode() {
   const cancel = useCallback(() => setConfirming(false), []);
 
   return {
-    available: clips === null || clips.length > 0,
+    available: !missing,
     enabled,
     clip: enabled ? clip : null,
     autoplay,
