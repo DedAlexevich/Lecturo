@@ -5,10 +5,10 @@ import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
 import { buildMatcher, highlight } from "./highlight";
-import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch, type SearchScope } from "./queries";
+import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
 
-function fragmentsCount(count: number) {
+export function fragmentsCount(count: number) {
   const tens = count % 100;
   const ones = count % 10;
   if (tens >= 11 && tens <= 14) return `${count} фрагментов`;
@@ -18,7 +18,7 @@ function fragmentsCount(count: number) {
 }
 
 type SearchPanelProps = {
-  scope: SearchScope;
+  scope: { lectureId: string } | { courseId: string };
   children?: ReactNode;
   onActiveChange?: (active: boolean) => void;
 };
@@ -81,8 +81,8 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
             <ol className={search.isPlaceholderData ? "search__hits search__hits--stale" : "search__hits"}>
               {hits.map((hit) => (
                 <li key={`${hit.lecture_id}-${hit.start}`}>
-                  <Link className="search__hit" to={`/lectures/${hit.lecture_id}?t=${Math.floor(hit.start)}`}>
-                    <span className="search__time">{formatTimecode(hit.start)}</span>
+                  <Link className="search__hit" to={`/lectures/${hit.lecture_id}?t=${Math.floor(hit.start ?? 0)}`}>
+                    <span className="search__time">{formatTimecode(hit.start ?? 0)}</span>
                     <span className="search__content">
                       {inCourse && <span className="search__lecture">{hit.lecture_title}</span>}
                       <span className="search__text">{highlight(hit.text, matcher)}</span>
