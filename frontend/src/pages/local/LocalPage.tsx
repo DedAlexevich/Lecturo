@@ -136,7 +136,7 @@ export function LocalPage() {
     <div className="local-page">
       <header className="local-page__header">
         <h1>Обработка на устройстве</h1>
-        <p>Расшифруйте запись в браузере. Файл и текст остаются на устройстве, пока вы не сохраните результат в аккаунт.</p>
+        <p>Расшифруйте запись в браузере. Файл остаётся на устройстве. Текст можно сохранить в аккаунт.</p>
       </header>
       <div className="local-page__layout">
         <section className="local-setup" aria-labelledby="local-setup-title">
