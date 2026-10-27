@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -12,18 +13,20 @@ from aiogram.exceptions import (
 from aiogram.methods import SendMessage
 
 from app.notifications import (
+    CLAIM_LECTURE_NOTICES,
     CLOSE_LECTURE_NOTICE,
     DROP_LEGAL_NOTICE,
     EXPIRE_LECTURE_NOTICES,
     LECTURE_NOTICE_BATCH,
+    LECTURE_NOTICE_LEASE_SECONDS,
     LEGAL_NOTICE_ATTEMPTS,
     MARK_BOT_BLOCKED,
     MARK_LECTURE_NOTICE_SENT,
     MARK_LEGAL_NOTICE_FAILED,
     MARK_LEGAL_NOTICE_SENT,
-    PENDING_LECTURE_NOTICES,
     PENDING_LEGAL_NOTICES,
     POSTPONE_LECTURE_NOTICE,
+    RELEASE_LECTURE_NOTICES,
     check_quotas,
     deliver_lecture_notices,
     deliver_legal_notices,
@@ -167,20 +170,10 @@ async def test_legal_notices_stop_on_retry_after():
     pool.execute.assert_not_awaited()
 
 
-class FakeConnection:
+class FakeLecturePool:
     def __init__(self, rows):
         self.rows = rows
         self.calls = []
-        self.committed = False
-
-    def transaction(self):
-        return self
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc):
-        self.committed = exc[0] is None
 
     async def fetch(self, query, *args):
         self.calls.append((query, *args))
@@ -188,14 +181,6 @@ class FakeConnection:
 
     async def execute(self, query, *args):
         self.calls.append((query, *args))
-
-
-class FakeLecturePool:
-    def __init__(self, rows):
-        self.connection = FakeConnection(rows)
-
-    def acquire(self):
-        return self.connection
 
 
 def lecture_row(chat, kind="lecture", outcome="ready", started=True, attempts=0):
@@ -233,11 +218,9 @@ async def test_lecture_notices_are_sent_and_closed():
     bot.send_message.side_effect = send
     assert await deliver_lecture_notices(pool, bot, "https://lecturo.test") == 0
 
-    connection = pool.connection
-    assert connection.committed
-    assert connection.calls == [
+    assert pool.calls == [
         (EXPIRE_LECTURE_NOTICES,),
-        (PENDING_LECTURE_NOTICES, LECTURE_NOTICE_BATCH),
+        (CLAIM_LECTURE_NOTICES, LECTURE_NOTICE_BATCH, LECTURE_NOTICE_LEASE_SECONDS),
         (MARK_LECTURE_NOTICE_SENT, rows[0]["id"]),
         (MARK_LECTURE_NOTICE_SENT, rows[1]["id"]),
         (POSTPONE_LECTURE_NOTICE, rows[2]["id"], 240),
@@ -290,8 +273,18 @@ async def test_lecture_notices_wait_on_retry_after_and_close_bad_requests():
 
     bot.send_message.side_effect = send
     assert await deliver_lecture_notices(pool, bot, "https://lecturo.test") == 30
-    assert pool.connection.calls[2:] == [
+    assert pool.calls[2:] == [
         (CLOSE_LECTURE_NOTICE, rows[0]["id"]),
         (POSTPONE_LECTURE_NOTICE, rows[1]["id"], 30),
+        (RELEASE_LECTURE_NOTICES, [rows[2]["id"]], 30),
     ]
     assert bot.send_message.await_count == 2
+
+
+async def test_sent_notice_is_marked_before_next_send():
+    rows = [lecture_row(11), lecture_row(22)]
+    pool, bot = FakeLecturePool(rows), AsyncMock()
+    bot.send_message.side_effect = [None, asyncio.CancelledError()]
+    with pytest.raises(asyncio.CancelledError):
+        await deliver_lecture_notices(pool, bot, "https://lecturo.test")
+    assert pool.calls[2:] == [(MARK_LECTURE_NOTICE_SENT, rows[0]["id"])]

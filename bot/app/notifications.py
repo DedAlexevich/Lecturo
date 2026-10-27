@@ -67,19 +67,31 @@ UPDATE notification_events SET expired_at = now()
 WHERE sent_at IS NULL AND expired_at IS NULL AND created_at < now() - interval '7 days'
 """
 
-PENDING_LECTURE_NOTICES = """
-SELECT e.id, e.lecture_id, e.kind, e.outcome, e.attempts, l.title, u.telegram_chat_id,
-       i.id AS identity_id,
-       i.bot_started_at IS NOT NULL
-           AND (i.bot_blocked_at IS NULL OR i.bot_blocked_at <= i.bot_started_at) AS started
-FROM notification_events e
-JOIN lectures l ON l.id = e.lecture_id
-JOIN users u ON u.id = e.user_id
-LEFT JOIN auth_identities i ON i.user_id = e.user_id AND i.provider = 'telegram'
-WHERE e.sent_at IS NULL AND e.expired_at IS NULL AND e.next_attempt_at <= now()
-ORDER BY e.next_attempt_at, e.created_at
-LIMIT $1
-FOR UPDATE OF e SKIP LOCKED
+LECTURE_NOTICE_LEASE_SECONDS = 300
+
+CLAIM_LECTURE_NOTICES = """
+WITH claimed AS (
+    SELECT id, lecture_id, user_id FROM notification_events
+    WHERE sent_at IS NULL AND expired_at IS NULL AND next_attempt_at <= now()
+    ORDER BY next_attempt_at, created_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+UPDATE notification_events e SET next_attempt_at = now() + make_interval(secs => $2)
+FROM claimed c
+JOIN lectures l ON l.id = c.lecture_id
+JOIN users u ON u.id = c.user_id
+LEFT JOIN auth_identities i ON i.user_id = c.user_id AND i.provider = 'telegram'
+WHERE e.id = c.id
+RETURNING e.id, e.lecture_id, e.kind, e.outcome, e.attempts, l.title, u.telegram_chat_id,
+          i.id AS identity_id,
+          i.bot_started_at IS NOT NULL
+              AND (i.bot_blocked_at IS NULL OR i.bot_blocked_at <= i.bot_started_at) AS started
+"""
+
+RELEASE_LECTURE_NOTICES = """
+UPDATE notification_events SET next_attempt_at = now() + make_interval(secs => $2)
+WHERE id = ANY($1::uuid[]) AND sent_at IS NULL AND expired_at IS NULL
 """
 
 MARK_LECTURE_NOTICE_SENT = "UPDATE notification_events SET sent_at = now() WHERE id = $1"
@@ -150,34 +162,37 @@ def retry_delay(attempts: int) -> int:
 
 
 async def deliver_lecture_notices(pool: asyncpg.Pool, bot: Bot, public_url: str) -> int:
-    async with pool.acquire() as connection, connection.transaction():
-        await connection.execute(EXPIRE_LECTURE_NOTICES)
-        for row in await connection.fetch(PENDING_LECTURE_NOTICES, LECTURE_NOTICE_BATCH):
-            if not row["started"] or row["telegram_chat_id"] is None:
-                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
-                continue
-            text, markup = lecture_notice(row, public_url)
-            try:
-                await bot.send_message(row["telegram_chat_id"], text, reply_markup=markup)
-            except TelegramRetryAfter as error:
-                await connection.execute(POSTPONE_LECTURE_NOTICE, row["id"], error.retry_after)
-                return error.retry_after
-            except TelegramForbiddenError:
-                await connection.execute(MARK_BOT_BLOCKED, row["identity_id"])
-                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
-                continue
-            except TelegramBadRequest:
-                logger.warning("Telegram отклонил уведомление %s", row["id"])
-                await connection.execute(CLOSE_LECTURE_NOTICE, row["id"])
-                continue
-            except Exception:
-                logger.exception("Не удалось отправить уведомление %s", row["id"])
-                await connection.execute(
-                    POSTPONE_LECTURE_NOTICE, row["id"], retry_delay(row["attempts"])
-                )
-                continue
-            await connection.execute(MARK_LECTURE_NOTICE_SENT, row["id"])
-            await asyncio.sleep(LECTURE_NOTICE_PAUSE_SECONDS)
+    await pool.execute(EXPIRE_LECTURE_NOTICES)
+    rows = await pool.fetch(
+        CLAIM_LECTURE_NOTICES, LECTURE_NOTICE_BATCH, LECTURE_NOTICE_LEASE_SECONDS
+    )
+    for index, row in enumerate(rows):
+        if not row["started"] or row["telegram_chat_id"] is None:
+            await pool.execute(CLOSE_LECTURE_NOTICE, row["id"])
+            continue
+        text, markup = lecture_notice(row, public_url)
+        try:
+            await bot.send_message(row["telegram_chat_id"], text, reply_markup=markup)
+        except TelegramRetryAfter as error:
+            await pool.execute(POSTPONE_LECTURE_NOTICE, row["id"], error.retry_after)
+            rest = [later["id"] for later in rows[index + 1 :]]
+            if rest:
+                await pool.execute(RELEASE_LECTURE_NOTICES, rest, error.retry_after)
+            return error.retry_after
+        except TelegramForbiddenError:
+            await pool.execute(MARK_BOT_BLOCKED, row["identity_id"])
+            await pool.execute(CLOSE_LECTURE_NOTICE, row["id"])
+            continue
+        except TelegramBadRequest:
+            logger.warning("Telegram отклонил уведомление %s", row["id"])
+            await pool.execute(CLOSE_LECTURE_NOTICE, row["id"])
+            continue
+        except Exception:
+            logger.exception("Не удалось отправить уведомление %s", row["id"])
+            await pool.execute(POSTPONE_LECTURE_NOTICE, row["id"], retry_delay(row["attempts"]))
+            continue
+        await pool.execute(MARK_LECTURE_NOTICE_SENT, row["id"])
+        await asyncio.sleep(LECTURE_NOTICE_PAUSE_SECONDS)
     return 0
 
 
