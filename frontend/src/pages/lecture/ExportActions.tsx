@@ -1,19 +1,19 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../../api/client";
 import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useToast } from "../../ui/Toast";
 import { Button } from "../../ui/Button";
 import { nextLinkStep } from "./exportLink";
 
-type Format = "pdf" | "srt" | "vtt";
+export type ExportFormat = "pdf" | "md" | "srt" | "vtt";
+export type LinkResult = { url: string; expires_at: string } | number;
+export type LinkRequester = (format: ExportFormat) => Promise<LinkResult>;
 
-const formats: { format: Format; label: string; needs: "ready" | "segments" }[] = [
-  { format: "pdf", label: "PDF", needs: "ready" },
-  { format: "srt", label: "SRT", needs: "segments" },
-  { format: "vtt", label: "VTT", needs: "segments" },
-];
+type Format = ExportFormat;
 
-async function requestLink(lectureId: string, format: Format) {
+const labels: Record<Format, string> = { pdf: "PDF", md: "Markdown", srt: "SRT", vtt: "VTT" };
+
+async function requestLink(lectureId: string, format: "pdf" | "srt" | "vtt") {
   const { data, response } = await api.POST("/api/v1/lectures/{lecture_id}/exports/{export_format}/link", {
     params: { path: { lecture_id: lectureId, export_format: format } },
   });
@@ -34,8 +34,9 @@ async function checkLink(url: string) {
 
 function failureMessage(status: number) {
   if (status === 409) return "Файл ещё не готов, попробуйте позже.";
-  if (status === 404) return "Лекция не найдена.";
-  if (status === 401) return "Войдите снова, чтобы скачать файл.";
+  if (status === 404) return "Лекция не найдена или ссылка больше не работает.";
+  if (status === 401) return "Ссылка на скачивание устарела, попробуйте ещё раз.";
+  if (status === 429) return "Слишком много запросов, попробуйте через несколько минут.";
   return "Не удалось скачать файл. Попробуйте ещё раз.";
 }
 
@@ -48,6 +49,17 @@ type ExportActionsProps = {
 };
 
 export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsProps) {
+  const available: Format[] = [...(ready ? (["pdf"] as const) : []), ...(hasSegments ? (["srt", "vtt"] as const) : [])];
+  const request = useCallback((format: Format) => requestLink(lectureId, format as "pdf" | "srt" | "vtt"), [lectureId]);
+  return <ExportButtons request={request} available={available} />;
+}
+
+type ExportButtonsProps = {
+  request: LinkRequester;
+  available: Format[];
+};
+
+export function ExportButtons({ request, available }: ExportButtonsProps) {
   const toast = useToast();
   const [busy, setBusy] = useState<Format | null>(null);
   const [prepared, setPrepared] = useState<{ format: Format; url: string; expiresAt: number } | null>(null);
@@ -68,7 +80,7 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
         return;
       }
       refreshed = true;
-      const result = await requestLink(lectureId, format);
+      const result = await request(format);
       if (typeof result === "number") {
         setFailed(null);
         toast.show(failureMessage(result), "error");
@@ -88,7 +100,7 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
     setPrepared(null);
     setBusy(format);
     try {
-      const result = await requestLink(lectureId, format);
+      const result = await request(format);
       if (typeof result === "number") {
         setFailed(null);
         toast.show(failureMessage(result), "error");
@@ -106,15 +118,14 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
     }
   };
 
-  const available = formats.filter(({ needs }) => (needs === "ready" ? ready : hasSegments));
   if (available.length === 0) return null;
-  const failedLabel = formats.find(({ format }) => format === failed)?.label;
+  const failedLabel = failed ? labels[failed] : undefined;
 
   return (
     <>
       <div className="lecture__export" role="group" aria-label="Скачать">
         <span className="lecture__export-label">Скачать</span>
-        {available.map(({ format, label }) => (
+        {available.map((format) => (
           <Button
             key={format}
             variant="secondary"
@@ -123,7 +134,7 @@ export function ExportActions({ lectureId, ready, hasSegments }: ExportActionsPr
             disabled={busy !== null && busy !== format}
             onClick={() => void run(format)}
           >
-            {prepared?.format === format ? `Открыть ${label}` : label}
+            {prepared?.format === format ? `Открыть ${labels[format]}` : labels[format]}
           </Button>
         ))}
       </div>
