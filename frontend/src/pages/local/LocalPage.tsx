@@ -9,7 +9,7 @@ import { generateNotes, markWebGPUUnsupported, NO_GPU_MESSAGE, NoGpuError, suppo
 import { getLocalMedia, saveLocalLecture, saveLocalMedia, updateLocalNotes } from "../../local/storage";
 import type { LocalLecture, LocalMedia } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
-import { Markdown } from "../legal/markdown";
+import { SummaryMarkdown } from "../lecture/SummaryMarkdown";
 import { Chapters } from "../lecture/Chapters";
 import { Transcript } from "../lecture/Transcript";
 import { fetchLecture, lectureQueryKey } from "../lecture/useLecture";
@@ -357,7 +357,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           )}
           {notesProgress && <Progress label={notesProgress.type === "loading" ? "Загрузка модели конспекта" : notesProgress.type === "saving" ? "Сохранение конспекта" : "Создание конспекта"} value={notesProgress.type === "saving" ? undefined : notesProgress.value * 100} />}
           {notesError && <p className="local-error" role="alert">Не удалось создать конспект: {notesError}</p>}
-          {saved?.summaryMd && <section><h2>Конспект</h2><div className="summary"><Markdown source={saved.summaryMd} /></div></section>}
+          {saved?.summaryMd && <section><h2>Конспект</h2><div className="summary"><SummaryMarkdown source={saved.summaryMd} /></div></section>}
           {saved && saved.chapters.length > 0 && <section><h2>Главы</h2><Chapters chapters={saved.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} /></section>}
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
           {stage === "done" && saved && !busy && (webgpu === true || segments.length === 0) && <SaveToAccount key={saved.id} lecture={saved} />}
