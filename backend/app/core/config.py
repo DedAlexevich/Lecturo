@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     salute_auth_key: str = ""
     salute_scope: str = "SALUTE_SPEECH_PERS"
     salute_ca_bundle: str = ""
+    stt_retry_attempts: int = 5
+    stt_retry_base_seconds: float = 2.0
+    stt_retry_factor: float = 3.0
+    stt_retry_max_seconds: float = 60.0
 
     llm_provider: str = "stub"
     llm_base_url: str = "https://api.deepseek.com"
