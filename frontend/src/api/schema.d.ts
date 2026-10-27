@@ -1827,6 +1827,10 @@ export interface components {
             section: number | null;
             /** Text */
             text: string;
+            /** Description */
+            description: string | null;
+            /** Chapter Title */
+            chapter_title: string | null;
             /** Score */
             score: number;
         };

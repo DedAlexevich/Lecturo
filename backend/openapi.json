@@ -5537,6 +5537,28 @@
             "type": "string",
             "title": "Text"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
           "score": {
             "type": "number",
             "title": "Score"
@@ -5551,6 +5573,8 @@
           "end",
           "section",
           "text",
+          "description",
+          "chapter_title",
           "score"
         ],
         "title": "SearchHit"

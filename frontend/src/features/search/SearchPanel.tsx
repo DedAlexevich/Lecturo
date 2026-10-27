@@ -4,7 +4,7 @@ import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { highlight } from "./highlight";
+import { HitSummary } from "./HitSummary";
 import { buildMatcher } from "./matcher";
 import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
@@ -86,7 +86,7 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
                     <span className="search__time">{formatTimecode(hit.start ?? 0)}</span>
                     <span className="search__content">
                       {inCourse && <span className="search__lecture">{hit.lecture_title}</span>}
-                      <span className="search__text">{highlight(hit.text, matcher)}</span>
+                      <HitSummary hit={hit} matcher={matcher} />
                     </span>
                   </Link>
                 </li>

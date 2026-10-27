@@ -4,7 +4,7 @@ import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { highlight } from "./highlight";
+import { HitSummary } from "./HitSummary";
 import { buildMatcher } from "./matcher";
 import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch, type SearchHit } from "./queries";
 import { momentsCount } from "./SearchPanel";
@@ -98,7 +98,7 @@ export function GlobalSearch({ children }: { children: ReactNode }) {
                       <li key={`${hit.kind}-${hit.start}-${hit.section}-${hit.text.slice(0, 24)}`}>
                         <Link className="search__hit search__hit--stacked" to={hitLink(hit)}>
                           <span className="search__place">{hitPlace(hit)}</span>
-                          <span className="search__text">{highlight(hit.text, matcher)}</span>
+                          <HitSummary hit={hit} matcher={matcher} />
                         </Link>
                       </li>
                     ))}
