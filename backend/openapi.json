@@ -3543,6 +3543,17 @@
             ],
             "title": "Audio Url"
           },
+          "eta_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Sec"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/StepOut"
@@ -3712,6 +3723,17 @@
               }
             ],
             "title": "Queue Position"
+          },
+          "eta_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta Sec"
           },
           "steps": {
             "items": {
@@ -4863,6 +4885,28 @@
               }
             ],
             "title": "Error"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "expected_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sec"
           }
         },
         "type": "object",

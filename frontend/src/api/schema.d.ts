@@ -1186,6 +1186,8 @@ export interface components {
             audio_only: boolean;
             /** Audio Url */
             audio_url?: string | null;
+            /** Eta Sec */
+            eta_sec?: number | null;
             /** Steps */
             steps: components["schemas"]["StepOut"][];
             /** Segments */
@@ -1236,6 +1238,8 @@ export interface components {
             status: components["schemas"]["LectureStatus"];
             /** Queue Position */
             queue_position: number | null;
+            /** Eta Sec */
+            eta_sec?: number | null;
             /** Steps */
             steps: components["schemas"]["StepOut"][];
         };
@@ -1642,6 +1646,10 @@ export interface components {
             progress: number;
             /** Error */
             error: string | null;
+            /** Stage */
+            stage?: string | null;
+            /** Expected Sec */
+            expected_sec?: number | null;
         };
         /**
          * StepStatus

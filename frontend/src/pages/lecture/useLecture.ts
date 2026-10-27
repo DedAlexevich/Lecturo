@@ -8,7 +8,7 @@ type LectureStatus = components["schemas"]["LectureStatus"];
 type Lecture = components["schemas"]["LectureDetail"];
 type Step = components["schemas"]["StepOut"];
 
-const STATUS_POLL_INTERVAL_MS = 3000;
+const STATUS_POLL_INTERVAL_MS = 2000;
 const STATUS_POLL_MAX_INTERVAL_MS = 30000;
 const STALLED_AFTER_FAILURES = 3;
 const pendingStatuses = new Set<LectureStatus>(["queued", "waiting_quota", "processing"]);

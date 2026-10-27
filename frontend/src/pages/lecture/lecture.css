@@ -163,14 +163,21 @@
 }
 
 .processing__note,
+.processing__eta,
+.processing__hint,
 .processing__error,
 .processing__reason {
   margin: 0;
   font-size: var(--text-sm);
 }
 
-.processing__note {
+.processing__note,
+.processing__hint {
   color: var(--color-text-muted);
+}
+
+.processing__eta {
+  font-variant-numeric: tabular-nums;
 }
 
 .processing__error,

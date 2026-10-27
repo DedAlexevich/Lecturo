@@ -28,8 +28,15 @@ async def require_ai_transfer(session: AsyncSession, lecture: Lecture) -> None:
 
 async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
+
+    async def on_progress(stage: str, fraction: float) -> None:
+        await report(fraction, stage)
+
     segments = await get_speech_to_text().transcribe(
-        Path(lecture.audio_path or ""), lecture.language
+        Path(lecture.audio_path or ""),
+        lecture.language,
+        duration=lecture.duration_sec,
+        on_progress=on_progress,
     )
     await session.execute(
         delete(TranscriptSegment).where(TranscriptSegment.lecture_id == lecture.id)
