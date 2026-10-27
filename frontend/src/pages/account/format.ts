@@ -39,3 +39,11 @@ export function formatRelative(value: string, now = Date.now()) {
 export function formatRubles(amount: number) {
   return rubles.format(amount);
 }
+
+const dayForms = new Intl.PluralRules("ru-RU");
+
+export function formatDays(count: number) {
+  const form = dayForms.select(count);
+  const word = form === "one" ? "день" : form === "few" ? "дня" : "дней";
+  return `${count} ${word}`;
+}
