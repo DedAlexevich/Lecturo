@@ -1534,6 +1534,9 @@
               }
             }
           },
+          "429": {
+            "description": "Памятка собиралась недавно"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1941,6 +1944,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много ссылок подряд"
           },
           "422": {
             "description": "Validation Error",

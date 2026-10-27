@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
+from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
 from app.pipeline.summarize import MAP_ATTEMPTS, load_prompt, parse_json
 from app.providers import LLM, get_llm
@@ -144,11 +145,16 @@ async def compose_exam_sheet(
     llm: LLM, course_title: str, notes: list[LectureNotes]
 ) -> ExamSheetDraft:
     digests = [await digest_lecture(llm, lecture) for lecture in notes]
-    data = parse_json(
-        await llm.complete(
-            load_prompt("exam_reduce"), exam_reduce_request(course_title, digests), json_mode=True
-        )
-    )
+    request = exam_reduce_request(course_title, digests)
+    data: dict[str, Any] = {}
+    for _ in range(MAP_ATTEMPTS):
+        try:
+            data = parse_json(
+                await llm.complete(load_prompt("exam_reduce"), request, json_mode=True)
+            )
+        except ValueError:
+            continue
+        break
     return merge_digests(data, digests)
 
 
@@ -189,12 +195,35 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         notes = await load_course_notes(session, course_uuid)
         if not notes:
             return "empty"
-        draft = await compose_exam_sheet(get_llm(), course_title, notes)
-        await save_exam_sheet(
-            session, course_uuid, draft, [lecture.lecture_id for lecture in notes]
-        )
-        await session.commit()
+        try:
+            draft = await compose_exam_sheet(get_llm(), course_title, notes)
+            await save_exam_sheet(
+                session, course_uuid, draft, [lecture.lecture_id for lecture in notes]
+            )
+            await session.commit()
+        except Exception:
+            await mark_exam_sheet_failed(course_uuid)
+            raise
         return "ready"
+
+
+def exam_sheet_failure_key(course_id: uuid.UUID) -> str:
+    return f"exam-sheet-failed:{course_id}"
+
+
+async def mark_exam_sheet_failed(course_id: uuid.UUID) -> None:
+    settings = get_settings()
+    await get_redis(settings.redis_url).set(
+        exam_sheet_failure_key(course_id), "1", ex=settings.exam_sheet_failure_ttl_seconds
+    )
+
+
+async def clear_exam_sheet_failure(course_id: uuid.UUID) -> None:
+    await get_redis(get_settings().redis_url).delete(exam_sheet_failure_key(course_id))
+
+
+async def exam_sheet_failed(course_id: uuid.UUID) -> bool:
+    return bool(await get_redis(get_settings().redis_url).exists(exam_sheet_failure_key(course_id)))
 
 
 def queue_settings() -> RedisSettings:
