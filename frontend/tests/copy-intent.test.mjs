@@ -32,3 +32,11 @@ test("без хранилища и с битыми данными намерен
   store.setItem("lecturo:save-copy", "{не json");
   assert.equal(takeIntent({ token: "abc", lectureId: null }, store), false);
 });
+
+test("просроченное намерение не срабатывает", () => {
+  const store = memoryStore();
+  rememberIntent({ token: "abc", lectureId: null }, store, 1000);
+  assert.equal(takeIntent({ token: "abc", lectureId: null }, store, 1000 + 11 * 60 * 1000), false);
+  rememberIntent({ token: "abc", lectureId: null }, store, 1000);
+  assert.equal(takeIntent({ token: "abc", lectureId: null }, store, 1000 + 5 * 60 * 1000), true);
+});
