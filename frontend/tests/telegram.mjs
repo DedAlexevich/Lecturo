@@ -101,6 +101,10 @@ try {
     await page.getByText("откроется в браузере. После оплаты вернитесь в Telegram").waitFor();
     await page.locator("label.checkbox").filter({ hasText: "Принимаю условия" }).locator(".checkbox__box").click();
     await page.getByRole("button", { name: "Оплатить 100" }).click();
+    await page.getByText("Введите адрес почты").waitFor();
+    assert.equal(payments.length, 0);
+    await page.getByLabel("Email для чека").fill(" student@mail.ru ");
+    await page.getByRole("button", { name: "Оплатить 100" }).click();
     await page.getByRole("button", { name: "Открыть оплату в браузере" }).click();
     await page.getByRole("button", { name: "Открыть оплату в браузере" }).click();
     assert.deepEqual(await page.evaluate(() => window.mock.links), ["https://yoomoney.ru/checkout/test", "https://yoomoney.ru/checkout/test"]);
@@ -115,6 +119,7 @@ try {
     assert.equal(await page.evaluate(() => window.mock.links.length), 2);
     assert.equal(await page.evaluate(() => window.mock.events.themeChanged.size), 1);
     assert.equal(payments.length, 1);
+    assert.equal(payments[0].receipt_email, "student@mail.ru");
     await page.evaluate(() => window.mock.events.activated.forEach((fn) => fn()));
     billing.status = "succeeded";
     await page.getByRole("button", { name: "Оплатить 100" }).waitFor();

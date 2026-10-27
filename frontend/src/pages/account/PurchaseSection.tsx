@@ -2,6 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
+import { useMe } from "../../app/useMe";
+import { validateEmail } from "../auth/validation";
+import { ReceiptEmailField } from "../../features/consent/ReceiptEmailField";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import styles from "./AccountPage.module.css";
@@ -21,6 +24,7 @@ import { pollInterval, pollLimit } from "./usePaymentReturn";
 export function PurchaseSection() {
   const titleId = useId();
   const { data: products, isPending, isError, refetch } = useProducts();
+  const { data: me } = useMe();
   const { hash } = useLocation();
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -43,7 +47,9 @@ export function PurchaseSection() {
       {isPending && <SectionLoading label="Загружаем тарифы" />}
       {isError && <SectionError message="Не удалось загрузить тарифы." onRetry={() => refetch()} />}
       {products && products.length === 0 && <p className={styles.muted}>Сейчас купить ничего нельзя.</p>}
-      {products && products.length > 0 && <PurchaseForm products={products} />}
+      {products && products.length > 0 && (
+        <PurchaseForm products={products} needsReceiptEmail={me ? !me.email : false} />
+      )}
     </section>
   );
 }
@@ -55,10 +61,12 @@ function productNote(product: Product) {
   return `Не сгорает, ${formatRubles(perHour)} за час`;
 }
 
-function PurchaseForm({ products }: { products: Product[] }) {
+function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; needsReceiptEmail: boolean }) {
   const [code, setCode] = useState(products[0].code);
   const [accepted, setAccepted] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
+  const [receiptEmail, setReceiptEmail] = useState("");
+  const [receiptEmailError, setReceiptEmailError] = useState<string>();
   const idempotenceKey = useRef(crypto.randomUUID());
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
@@ -117,12 +125,16 @@ function PurchaseForm({ products }: { products: Product[] }) {
       openExternalLink(createPayment.data.confirmation_url);
       return;
     }
-    if (!accepted) {
-      setShowConsentError(true);
-      return;
-    }
+    const emailError = needsReceiptEmail ? validateEmail(receiptEmail) : undefined;
+    setReceiptEmailError(emailError);
+    if (!accepted) setShowConsentError(true);
+    if (emailError || !accepted) return;
     createPayment.mutate(
-      { productCode: selected.code, idempotenceKey: idempotenceKey.current },
+      {
+        productCode: selected.code,
+        idempotenceKey: idempotenceKey.current,
+        receiptEmail: needsReceiptEmail ? receiptEmail.trim() : undefined,
+      },
       {
         onSuccess: (payment) => {
           idempotenceKey.current = crypto.randomUUID();
@@ -160,6 +172,20 @@ function PurchaseForm({ products }: { products: Product[] }) {
           </label>
         ))}
       </fieldset>
+      {needsReceiptEmail && (
+        <div className={styles.receiptEmail}>
+          <ReceiptEmailField
+            value={receiptEmail}
+            error={receiptEmailError}
+            onChange={(value) => {
+              setReceiptEmail(value);
+              setReceiptEmailError(undefined);
+              idempotenceKey.current = crypto.randomUUID();
+              createPayment.reset();
+            }}
+          />
+        </div>
+      )}
       <div className={styles.consent}>
         <Checkbox
           checked={accepted}

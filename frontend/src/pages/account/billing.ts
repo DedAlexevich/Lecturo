@@ -57,6 +57,7 @@ export function usePayments(refetchInterval?: number | false) {
 type CreatePayment = {
   productCode: string;
   idempotenceKey: string;
+  receiptEmail?: string;
 };
 
 export const paymentReturnParam = "payment";
@@ -81,12 +82,17 @@ export function rememberedPayment(returnKey: string) {
 
 export function useCreatePayment() {
   return useMutation({
-    mutationFn: async ({ productCode, idempotenceKey }: CreatePayment) => {
+    mutationFn: async ({ productCode, idempotenceKey, receiptEmail }: CreatePayment) => {
       const returnUrl = new URL("/account", window.location.origin);
       returnUrl.searchParams.set(paymentReturnParam, idempotenceKey);
       const { data, error, response } = await api.POST("/api/v1/billing/payments", {
         params: { header: { "Idempotence-Key": idempotenceKey } },
-        body: { product_code: productCode, accept_offer: true, return_url: returnUrl.toString() },
+        body: {
+          product_code: productCode,
+          accept_offer: true,
+          return_url: returnUrl.toString(),
+          receipt_email: receiptEmail,
+        },
       });
       if (data === undefined) throw new ApiError(response.status, error);
       rememberPayment(idempotenceKey, data.id);
