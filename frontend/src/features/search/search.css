@@ -158,3 +158,56 @@
 .search--course .search__hit {
   padding-inline: var(--space-2);
 }
+
+.search--global {
+  gap: var(--space-4);
+}
+
+.search--global .search__form {
+  max-width: 44rem;
+}
+
+.search--global .search__body {
+  gap: var(--space-4);
+}
+
+.search__groups {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 52rem;
+  transition: opacity var(--transition);
+}
+
+.search__group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.search__group-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  overflow-wrap: anywhere;
+}
+
+.search__group-title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.search__group-title a:hover {
+  color: var(--color-data);
+  text-decoration: underline;
+}
+
+.search__hit--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  padding-inline: var(--space-2);
+}
+
+.search__place {
+  color: var(--color-data);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
