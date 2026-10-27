@@ -111,12 +111,13 @@ async def absorb_empty_telegram_owner(
 
 
 async def link_telegram(session: AsyncSession, user: User, telegram_id: int, profile: dict) -> None:
-    existing = await find_identity(session, AuthProvider.telegram, str(telegram_id))
-    if existing is not None and existing.user_id != user.id:
-        await absorb_empty_telegram_owner(session, existing, telegram_id)
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     own = await user_identity(session, user, AuthProvider.telegram)
     if own is not None and own.provider_user_id != str(telegram_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "К аккаунту уже привязан другой Telegram")
+    existing = await find_identity(session, AuthProvider.telegram, str(telegram_id))
+    if existing is not None and existing.user_id != user.id:
+        await absorb_empty_telegram_owner(session, existing, telegram_id)
     if own is None:
         session.add(
             AuthIdentity(

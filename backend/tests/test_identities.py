@@ -410,3 +410,15 @@ async def test_link_email_taken_hints_to_relogin_for_telegram_account(client, cl
     )
     assert response.status_code == 409
     assert "войдите по этой почте" in response.json()["detail"]
+
+
+async def test_link_telegram_with_second_telegram_keeps_empty_account(client, cleanup, telegram_id):
+    other = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id + 1))])
+    user = await create_user(cleanup, providers=[(AuthProvider.telegram, str(telegram_id))])
+    response = await client.post(
+        "/api/v1/me/identities/telegram",
+        json={"telegram_init_data": webapp_init_data(telegram_id + 1)},
+        headers=headers(user),
+    )
+    assert response.status_code == 409
+    assert await identity_owner(telegram_id + 1) == other.id
