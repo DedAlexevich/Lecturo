@@ -38,11 +38,14 @@ def answer(questions: list[dict]) -> str:
     return json.dumps({"questions": questions}, ensure_ascii=False)
 
 
+SEGMENTS = [
+    TranscriptSegment(start=i * 10.0, end=i * 10.0 + 9, text=f"фраза {i}") for i in range(10)
+]
 VALID = answer([make_question(n) for n in range(8)])
 
 
 def test_parse_questions_accepts_valid_answer():
-    questions = parse_questions("```json\n" + VALID + "\n```", lecture_end=100)
+    questions = parse_questions("```json\n" + VALID + "\n```", SEGMENTS, lecture_end=100)
 
     assert len(questions) == 8
     assert questions[1] == {
@@ -75,18 +78,18 @@ def test_parse_questions_rejects_broken_question(broken):
     questions[3] = broken
 
     with pytest.raises(InvalidQuiz):
-        parse_questions(answer(questions), lecture_end=100)
+        parse_questions(answer(questions), SEGMENTS, lecture_end=100)
 
 
 @pytest.mark.parametrize("size", [7, 13])
 def test_parse_questions_checks_question_count(size):
     with pytest.raises(InvalidQuiz):
-        parse_questions(answer([make_question(n) for n in range(size)]), lecture_end=1000)
+        parse_questions(answer([make_question(n) for n in range(size)]), SEGMENTS, lecture_end=1000)
 
 
 def test_parse_questions_rejects_non_json():
     with pytest.raises(ValueError):
-        parse_questions("Вот ваш квиз", lecture_end=100)
+        parse_questions("Вот ваш квиз", SEGMENTS, lecture_end=100)
 
 
 def test_long_transcript_is_cut_evenly():
@@ -99,6 +102,158 @@ def test_long_transcript_is_cut_evenly():
     assert len(excerpt) <= 8000 + 100
     assert "[0] " in excerpt
     assert "[13500] " in excerpt
+
+
+LECTURE = [
+    (0.0, "Здравствуйте, сегодня говорим о производной."),
+    (
+        42.5,
+        "Производная функции в точке — это предел отношения приращения функции "
+        "к приращению аргумента.",
+    ),
+    (75.0, "Теперь про интегралы: интеграл — это площадь под графиком."),
+    (130.0, "Ещё раз напомню, что производная характеризует скорость изменения функции."),
+]
+
+
+def lecture_segments(lines=LECTURE) -> list[TranscriptSegment]:
+    return [TranscriptSegment(start=start, end=start + 10, text=text) for start, text in lines]
+
+
+def evidence_answer(*items: dict) -> str:
+    return answer([make_question(n, **items[n % len(items)]) for n in range(8)])
+
+
+def test_evidence_quote_sets_timestamp():
+    content = evidence_answer(
+        {"evidence": "предел отношения приращения функции к приращению аргумента", "timestamp": 0}
+    )
+
+    questions = parse_questions(content, lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {42.5}
+
+
+def test_evidence_quote_with_differences_sets_timestamp():
+    content = evidence_answer(
+        {
+            "evidence": "Производная — это предел отношения приращений функции и аргумента",
+            "timestamp": 0,
+        }
+    )
+
+    questions = parse_questions(content, lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {42.5}
+
+
+def test_evidence_ignores_case_punctuation_and_yo():
+    segments = lecture_segments([(5.0, "Ёлка, ПОЛНЫЙ порядок: всё будет «хорошо»!")])
+
+    content = evidence_answer({"evidence": "елка полный  порядок все будет хорошо", "timestamp": 0})
+
+    assert {q["timestamp"] for q in parse_questions(content, segments, lecture_end=20)} == {5.0}
+
+
+def test_evidence_across_two_replies_points_to_first():
+    segments = lecture_segments(
+        [(10.0, "Интеграл есть"), (20.0, "площадь под графиком"), (30.0, "всё")]
+    )
+
+    content = evidence_answer({"evidence": "интеграл есть площадь под графиком", "timestamp": 30})
+
+    assert {q["timestamp"] for q in parse_questions(content, segments, lecture_end=50)} == {10.0}
+
+
+def test_repeated_quote_uses_model_timestamp_as_tiebreak():
+    segments = lecture_segments(
+        [(0.0, "вступление"), (60.0, "Запомните это правило."), (900.0, "Запомните это правило.")]
+    )
+
+    content = evidence_answer({"evidence": "Запомните это правило", "timestamp": 905})
+
+    assert {q["timestamp"] for q in parse_questions(content, segments, lecture_end=1000)} == {900.0}
+
+
+def test_multi_part_lecture_finds_quote_in_later_part():
+    segments = lecture_segments(
+        [(0.0, "Вводная часть про организацию курса.")]
+        + [(float(m * 60), f"Минута {m} посвящена другому материалу.") for m in range(1, 40)]
+        + [(2400.0, "Матрица называется вырожденной, если её определитель равен нулю.")]
+    )
+
+    content = evidence_answer(
+        {
+            "evidence": "матрица называется вырожденной если её определитель равен нулю",
+            "timestamp": 0,
+        }
+    )
+
+    assert {q["timestamp"] for q in parse_questions(content, segments, lecture_end=2500)} == {
+        2400.0
+    }
+
+
+def test_missing_quote_falls_back_to_word_overlap():
+    items = {
+        "question": "Что характеризует производная?",
+        "explanation": "Производная характеризует скорость изменения функции.",
+        "evidence": "",
+        "timestamp": 0,
+    }
+
+    questions = parse_questions(evidence_answer(items), lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {130.0}
+
+
+def test_unrelated_quote_falls_back_to_word_overlap():
+    items = {
+        "question": "Чему равен интеграл?",
+        "explanation": "Интеграл — это площадь под графиком.",
+        "evidence": "цитата которой нет в лекции вообще",
+        "timestamp": 10,
+    }
+
+    questions = parse_questions(evidence_answer(items), lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {75.0}
+
+
+def test_model_timestamp_is_snapped_to_reply_start():
+    items = {"question": "Вопрос", "explanation": "Нет совпадений", "evidence": "", "timestamp": 80}
+
+    questions = parse_questions(evidence_answer(items), lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {75.0}
+
+
+def test_zero_timestamp_rejected_when_reply_does_not_start_at_zero():
+    segments = lecture_segments([(12.0, "Первая реплика"), (50.0, "Вторая реплика")])
+    items = {"question": "Вопрос", "explanation": "Нет совпадений", "evidence": "", "timestamp": 0}
+
+    with pytest.raises(InvalidQuiz):
+        parse_questions(evidence_answer(items), segments, lecture_end=100)
+
+
+def test_zero_timestamp_accepted_when_first_reply_starts_at_zero():
+    items = {"question": "Вопрос", "explanation": "Нет совпадений", "evidence": "", "timestamp": 0}
+
+    questions = parse_questions(evidence_answer(items), lecture_segments(), lecture_end=200)
+
+    assert {q["timestamp"] for q in questions} == {0.0}
+
+
+def test_no_quote_and_no_timestamp_is_rejected():
+    items = {
+        "question": "Вопрос",
+        "explanation": "Нет совпадений",
+        "evidence": "",
+        "timestamp": None,
+    }
+
+    with pytest.raises(InvalidQuiz):
+        parse_questions(evidence_answer(items), lecture_segments(), lecture_end=200)
 
 
 class ScriptedLLM:
