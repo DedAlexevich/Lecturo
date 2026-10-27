@@ -6,7 +6,9 @@ import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import { VkButton } from "../auth/VkButton";
+import { YandexButton } from "../auth/YandexButton";
 import { useVkEnabled } from "../auth/vk";
+import { useYandexEnabled } from "../auth/yandex";
 import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
 import styles from "./SettingsSection.module.css";
@@ -28,13 +30,18 @@ export function IdentitiesList({ me }: { me: Me }) {
   const { reset } = unlink;
   const linked = (provider: Provider) => me.identities.find((identity) => identity.provider === provider);
   const vkEnabled = useVkEnabled();
+  const yandexEnabled = useYandexEnabled();
   const providers: Provider[] = [
     "telegram",
     "email",
     ...(vkEnabled || linked("vk") ? (["vk"] as const) : []),
+    ...(yandexEnabled || linked("yandex") ? (["yandex"] as const) : []),
     ...me.identities
       .map((identity) => identity.provider)
-      .filter((provider) => provider !== "telegram" && provider !== "email" && provider !== "vk"),
+      .filter(
+        (provider) =>
+          provider !== "telegram" && provider !== "email" && provider !== "vk" && provider !== "yandex",
+      ),
   ];
   const onlyOne = me.identities.length <= 1;
 
@@ -75,6 +82,8 @@ export function IdentitiesList({ me }: { me: Me }) {
                 <LinkTelegram />
               ) : provider === "vk" ? (
                 <LinkVk />
+              ) : provider === "yandex" ? (
+                <LinkYandex />
               ) : (
                 <LinkEmail />
               )}
@@ -142,6 +151,20 @@ function LinkVk() {
   return (
     <div className={styles.identityAction}>
       <VkButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
+      {error !== undefined && (
+        <p className={styles.alert} role="alert">
+          {settingsError(error)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LinkYandex() {
+  const [error, setError] = useState<unknown>();
+  return (
+    <div className={styles.identityAction}>
+      <YandexButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
       {error !== undefined && (
         <p className={styles.alert} role="alert">
           {settingsError(error)}

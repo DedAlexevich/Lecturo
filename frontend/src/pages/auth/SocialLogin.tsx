@@ -7,10 +7,12 @@ import { useToast } from "../../ui/Toast";
 import { ConsentFields } from "./ConsentFields";
 import { TelegramButton, telegramEnabled } from "./TelegramButton";
 import { VkButton } from "./VkButton";
+import { YandexButton } from "./YandexButton";
 import { messageOf } from "./errors";
 import { redirectTarget } from "./redirect";
 import { useTelegramLogin, type TelegramUser } from "./useAuthRequests";
 import { useVkEnabled } from "./vk";
+import { useYandexEnabled } from "./yandex";
 
 type Consents = { accept_terms: boolean; accept_personal_data: boolean };
 
@@ -23,6 +25,7 @@ export function SocialLogin() {
   const [terms, setTerms] = useState(false);
   const [personalData, setPersonalData] = useState(false);
   const vkEnabled = useVkEnabled();
+  const yandexEnabled = useYandexEnabled();
   const { mutate } = login;
 
   const closeDialog = useCallback(() => {
@@ -55,7 +58,7 @@ export function SocialLogin() {
     [submit],
   );
 
-  if (!telegramEnabled && !vkEnabled) return null;
+  if (!telegramEnabled && !vkEnabled && !yandexEnabled) return null;
 
   return (
     <>
@@ -66,6 +69,14 @@ export function SocialLogin() {
           <VkButton
             flow={{ mode: "login", redirect: redirectTarget(location.state) }}
             label="Войти через VK"
+            fullWidth
+            onError={(error) => toast.show(messageOf(error), "error")}
+          />
+        )}
+        {yandexEnabled && (
+          <YandexButton
+            flow={{ mode: "login", redirect: redirectTarget(location.state) }}
+            label="Войти через Яндекс"
             fullWidth
             onError={(error) => toast.show(messageOf(error), "error")}
           />

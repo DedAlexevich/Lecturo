@@ -21,7 +21,11 @@ from app.schemas.user import (
     VkCallbackIn,
     VkStartIn,
     VkStartOut,
+    YandexCallbackIn,
+    YandexStartIn,
+    YandexStartOut,
 )
+from app.services import yandex_auth
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import consume_token, issue_token
 from app.services.consents import require_signup_consents
@@ -74,7 +78,8 @@ async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOu
 
 @router.get("/providers")
 async def providers() -> ProvidersOut:
-    return ProvidersOut(vk=get_settings().vk_enabled)
+    settings = get_settings()
+    return ProvidersOut(vk=settings.vk_enabled, yandex=settings.yandex_oauth_enabled)
 
 
 @router.post(
@@ -117,6 +122,52 @@ async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep)
     )
     user = await get_or_create_vk_user(
         session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
+    )
+    return TokenOut(access_token=create_access_token(user.id))
+
+
+@router.post(
+    "/yandex/start",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def start_yandex_login(body: YandexStartIn, request: Request) -> YandexStartOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-start:{ip}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
+    url, nonce = await yandex_auth.start_flow(
+        settings,
+        accept_terms=body.accept_terms,
+        accept_personal_data=body.accept_personal_data,
+    )
+    return YandexStartOut(url=url, nonce=nonce)
+
+
+@router.post(
+    "/yandex/callback",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Сессия входа не найдена или устарела"},
+        status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
+    },
+)
+async def login_yandex(
+    body: YandexCallbackIn, session: SessionDep, client: yandex_auth.YandexClientDep
+) -> TokenOut:
+    yandex_id, profile, flow = await yandex_auth.complete_flow(
+        get_settings(), client, body.code, body.state, body.nonce
+    )
+    user = await yandex_auth.get_or_create_yandex_user(
+        session, yandex_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
     return TokenOut(access_token=create_access_token(user.id))
 
