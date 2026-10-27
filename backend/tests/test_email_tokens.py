@@ -172,14 +172,27 @@ async def test_verify_token_does_not_reset_password(client, email, mails):
     assert response.status_code == 400
 
 
-async def test_mail_without_smtp_goes_to_log(caplog, monkeypatch):
+async def test_mail_without_smtp_hides_token_and_address_on_public_host(caplog, monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "")
     monkeypatch.setenv("PUBLIC_URL", "https://lecturo.test/")
     get_settings.cache_clear()
     with caplog.at_level("INFO", logger="app.services.mail"):
-        await send_verification_mail("a@example.org", "abc")
+        await send_verification_mail("alice@example.org", "secret-token")
     get_settings.cache_clear()
-    assert "https://lecturo.test/verify-email?token=abc" in caplog.text
+    assert "Подтверждение почты в Lecturo" in caplog.text
+    assert "a***@example.org" in caplog.text
+    assert "secret-token" not in caplog.text
+    assert "alice@example.org" not in caplog.text
+
+
+async def test_mail_without_smtp_shows_body_locally(caplog, monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("PUBLIC_URL", "http://localhost:5173")
+    get_settings.cache_clear()
+    with caplog.at_level("INFO", logger="app.services.mail"):
+        await send_verification_mail("alice@example.org", "abc")
+    get_settings.cache_clear()
+    assert "http://localhost:5173/verify-email?token=abc" in caplog.text
 
 
 @pytest.fixture(autouse=True)
@@ -281,11 +294,12 @@ async def test_mail_delivery_failure_is_logged(caplog, monkeypatch):
     monkeypatch.setattr("app.services.mail.deliver", broken)
     try:
         with caplog.at_level("ERROR", logger="app.services.mail"):
-            await send_verification_mail("a@example.org", "abc")
+            await send_verification_mail("alice@example.org", "abc")
     finally:
         get_settings.cache_clear()
 
     assert "Не удалось отправить письмо" in caplog.text
+    assert "alice@example.org" not in caplog.text
 
 
 async def test_reset_task_failure_is_logged(client, email, caplog, monkeypatch):
@@ -319,6 +333,7 @@ async def test_address_total_limit_caps_requests_from_many_ips(email, mails, mon
 
 async def test_mail_without_smtp_logged_at_info(caplog, monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("PUBLIC_URL", "http://localhost")
     get_settings.cache_clear()
     with caplog.at_level("INFO", logger="app"):
         await send_verification_mail("a@example.org", "abc")

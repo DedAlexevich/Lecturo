@@ -19,15 +19,37 @@ from app.handlers import open_app_markup
 logger = logging.getLogger(__name__)
 
 QUOTAS = """
-SELECT u.id, u.telegram_chat_id, u.created_at,
-       u.quota_week_start + floor(greatest(extract(epoch FROM ($1 - u.quota_week_start)), 0)
-                                  / 604800) * interval '7 days' AS week_start,
+WITH recipients AS (
+    SELECT u.id, u.telegram_chat_id, u.created_at,
+           u.quota_week_start
+               + floor(greatest(extract(epoch FROM ($1 - u.quota_week_start)), 0) / 604800)
+               * interval '7 days' AS week_start
+    FROM users u WHERE u.telegram_chat_id IS NOT NULL
+),
+usage AS (
+    SELECT r.id,
+           coalesce(sum(e.seconds) FILTER (
+               WHERE e.source = 'weekly' AND e.created_at >= r.week_start
+           ), 0) AS used,
+           bool_or(e.created_at < r.week_start) AS active_last_week
+    FROM recipients r
+    JOIN usage_entries e
+        ON e.user_id = r.id AND e.created_at >= r.week_start - interval '7 days'
+    GROUP BY r.id
+)
+SELECT r.id, r.telegram_chat_id, r.created_at, r.week_start,
+       coalesce(us.used, 0) AS used,
+       coalesce(us.active_last_week, false) AS active_last_week,
        (SELECT max(s.ends_at) FROM subscriptions s
-        WHERE s.user_id = u.id AND s.starts_at <= $1 AND s.ends_at > $1) AS subscription_until,
+        WHERE s.user_id = r.id AND s.starts_at <= $1 AND s.ends_at > $1) AS subscription_until,
        (SELECT coalesce(sum(p.seconds_left), 0) FROM hour_packages p
-        WHERE p.user_id = u.id) AS package_left
-FROM users u WHERE u.telegram_chat_id IS NOT NULL
+        WHERE p.user_id = r.id) AS package_left
+FROM recipients r LEFT JOIN usage us ON us.id = r.id
 """
+
+QUOTA_INTERVAL_SECONDS = 3600
+
+UNREACHABLE_CHAT_TTL = timedelta(days=7)
 
 LEGAL_NOTICE_ATTEMPTS = 5
 
@@ -50,7 +72,11 @@ MARK_LEGAL_NOTICE_FAILED = (
 
 DROP_LEGAL_NOTICE = "UPDATE legal_notices SET attempts = $2, attempted_at = now() WHERE id = $1"
 
-LEGAL_NOTICE_PAUSE_SECONDS = 0.05
+SEND_PAUSE_SECONDS = 0.05
+
+LEGAL_NOTICE_TTL = timedelta(days=30)
+
+QUOTA_NOTICE_TTL = timedelta(days=14)
 
 LECTURE_NOTICE_PAUSE_SECONDS = 0.05
 
@@ -117,13 +143,16 @@ LECTURE_NOTICE_TEXTS = {
     ("quiz", "failed"): "Не удалось создать квиз по лекции «{title}».",
 }
 
-WEEKLY_USAGE = """
-SELECT coalesce(sum(seconds), 0) FROM usage_entries
-WHERE user_id = $1 AND source = 'weekly' AND created_at >= $2
-"""
 
-
-async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, markup=None):
+async def send_once(
+    redis: Redis,
+    bot: Bot,
+    key: str,
+    chat_id: int,
+    text: str,
+    ttl: timedelta,
+    markup=None,
+):
     key = f"bot:notification:{key}"
     if await redis.get(key):
         return True
@@ -132,10 +161,10 @@ async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, m
     if not await redis.set(lock, token, nx=True, ex=120):
         return False
     try:
-        if not await redis.get(key):
-            await bot.send_message(chat_id, text, reply_markup=markup)
-            await redis.set(key, "sent")
-        return True
+        if await redis.get(key):
+            return True
+        await bot.send_message(chat_id, text, reply_markup=markup)
+        await redis.set(key, "sent", ex=ttl)
     finally:
         await redis.eval(
             "if redis.call('get', KEYS[1]) == ARGV[1] then "
@@ -144,6 +173,8 @@ async def send_once(redis: Redis, bot: Bot, key: str, chat_id: int, text: str, m
             lock,
             token,
         )
+    await asyncio.sleep(SEND_PAUSE_SECONDS)
+    return True
 
 
 def lecture_notice(row, public_url: str) -> tuple[str, InlineKeyboardMarkup | None]:
@@ -215,6 +246,7 @@ async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> i
                 f"legal:{row['id']}",
                 row["telegram_chat_id"],
                 row["text"],
+                LEGAL_NOTICE_TTL,
                 open_app_markup(row["link"]),
             )
         except TelegramRetryAfter as error:
@@ -228,7 +260,6 @@ async def deliver_legal_notices(pool: asyncpg.Pool, redis: Redis, bot: Bot) -> i
             continue
         if delivered:
             await pool.execute(MARK_LEGAL_NOTICE_SENT, row["id"])
-        await asyncio.sleep(LEGAL_NOTICE_PAUSE_SECONDS)
     return 0
 
 
@@ -249,16 +280,18 @@ async def check_quotas(
     free_limit: int,
     subscription_limit: int,
     now: datetime | None = None,
-):
+) -> int:
     now = now or datetime.now(UTC)
     for row in await pool.fetch(QUOTAS, now):
+        user_id = row["id"]
+        unreachable = f"bot:notification:unreachable:{user_id}"
         try:
-            user_id = row["id"]
+            if await redis.get(unreachable):
+                continue
             week_start = row["week_start"]
             until = row["subscription_until"]
-            used = await pool.fetchval(WEEKLY_USAGE, user_id, week_start)
             limit = subscription_limit if until else free_limit
-            remaining = max(limit - used, 0) + row["package_left"]
+            remaining = max(limit - row["used"], 0) + row["package_left"]
             if remaining < 15 * 60:
                 await send_once(
                     redis,
@@ -266,14 +299,16 @@ async def check_quotas(
                     f"quota-low:{user_id}:{week_start.isoformat()}",
                     row["telegram_chat_id"],
                     "Осталось меньше 15 минут обработки.",
+                    QUOTA_NOTICE_TTL,
                 )
-            if week_start > row["created_at"]:
+            if week_start > row["created_at"] and row["active_last_week"]:
                 await send_once(
                     redis,
                     bot,
                     f"quota-reset:{user_id}:{week_start.isoformat()}",
                     row["telegram_chat_id"],
                     "Недельный лимит обработки обновлён.",
+                    QUOTA_NOTICE_TTL,
                 )
             if until and now < until <= now + timedelta(days=3):
                 await send_once(
@@ -282,17 +317,24 @@ async def check_quotas(
                     f"subscription:{user_id}:{until.isoformat()}",
                     row["telegram_chat_id"],
                     "Подписка закончится в течение трёх дней.",
+                    until + timedelta(days=7) - now,
                 )
+        except TelegramRetryAfter as error:
+            return error.retry_after
+        except (TelegramForbiddenError, TelegramBadRequest):
+            await redis.set(unreachable, "1", ex=UNREACHABLE_CHAT_TTL)
         except Exception:
-            logger.exception("Не удалось проверить уведомления пользователя %s", row["id"])
+            logger.exception("Не удалось проверить уведомления пользователя %s", user_id)
+    return 0
 
 
 async def quota_loop(
     pool: asyncpg.Pool, redis: Redis, bot: Bot, free_limit: int, subscription_limit: int
 ):
     while True:
+        pause = 0
         try:
-            await check_quotas(pool, redis, bot, free_limit, subscription_limit)
+            pause = await check_quotas(pool, redis, bot, free_limit, subscription_limit)
         except (asyncpg.PostgresError, OSError, RedisError):
             logger.exception("Не удалось проверить лимиты")
-        await asyncio.sleep(3600)
+        await asyncio.sleep(pause or QUOTA_INTERVAL_SECONDS)
