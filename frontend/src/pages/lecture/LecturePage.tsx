@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
+import { cameFromQuiz } from "../../features/quiz/moment";
 import { QuizButton } from "../../features/quiz/QuizButton";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { ShareButton } from "../../features/share/ShareButton";
@@ -166,7 +167,7 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
 export function LecturePage() {
   const { id = "" } = useParams();
   const [searchParams] = useSearchParams();
-  const { key: locationKey } = useLocation();
+  const { key: locationKey, state: locationState } = useLocation();
   const startAt = parseStartTime(searchParams.get("t"));
   const lecture = useLecture(id);
   const status = useLectureStatus(id, lecture.data);
@@ -266,7 +267,13 @@ export function LecturePage() {
   return (
     <div className="lecture">
       <header className="lecture__header">
-        <BackLink />
+        {cameFromQuiz(locationState) ? (
+          <Link to={`/lectures/${data.id}/quiz`} className="lecture__back">
+            Вернуться к квизу
+          </Link>
+        ) : (
+          <BackLink />
+        )}
         <div className="lecture__title-row">
           <h1 className="lecture__title">{data.title}</h1>
           <div className="lecture__title-actions">
