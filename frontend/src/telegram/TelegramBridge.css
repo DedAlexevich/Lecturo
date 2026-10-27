@@ -1,0 +1,16 @@
+.telegram-login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.telegram-login__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.telegram-icon {
+  flex: none;
+}
