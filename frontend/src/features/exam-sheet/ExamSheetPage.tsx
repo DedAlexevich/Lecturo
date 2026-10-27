@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ApiError } from "../../app/queryClient";
 import { useCourse } from "../../pages/course/queries";
@@ -75,9 +76,16 @@ export function ExamSheetPage() {
   const courseMissing = sheet.error instanceof ApiError && sheet.error.status === 404 && !knownState;
   const data = sheet.data;
   const courseTitle = course.data?.title ?? "";
+  const [sawProcessing, setSawProcessing] = useState(false);
+
+  if (code === "exam_sheet_processing" && !sawProcessing) setSawProcessing(true);
+  const buildFailed = sawProcessing && code === "exam_sheet_not_found" && !create.isPending;
 
   const startCreate = () =>
-    requireConsent(() => create.mutate());
+    requireConsent(() => {
+      setSawProcessing(false);
+      create.mutate();
+    });
 
   return (
     <div className="exam-sheet">
@@ -128,6 +136,11 @@ export function ExamSheetPage() {
               {create.isError && (
                 <p className="exam-sheet__alert" role="alert">
                   {createErrorText(create.error)}
+                </p>
+              )}
+              {buildFailed && !create.isError && (
+                <p className="exam-sheet__alert" role="alert">
+                  Не получилось собрать памятку. Попробуйте ещё раз.
                 </p>
               )}
             </div>
