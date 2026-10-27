@@ -171,6 +171,13 @@ function PlanBody({ plan, waiting, pending, error, onChange, onLeave }: PlanBody
               Перейти к покупке
             </Link>
           </li>
+          <li>
+            <span className="quota-plan__option-title">Обработать на устройстве</span>
+            <span>Расшифровка в браузере, без лимита. Файл с записью выберете на следующем экране, на сервер он не уйдёт.</span>
+            <Link to="/local" onClick={onLeave}>
+              Открыть обработку на устройстве
+            </Link>
+          </li>
         </ul>
       </section>
     </>
