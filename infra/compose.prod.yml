@@ -1,43 +1,29 @@
-x-logging: &logging
-  driver: json-file
-  options:
-    max-size: 10m
-    max-file: "5"
-
 services:
   db:
     ports: !reset []
     restart: always
-    logging: *logging
 
   redis:
     ports: !reset []
     restart: always
-    logging: *logging
 
   bot-redis:
     restart: always
-    logging: *logging
 
   api:
     restart: always
-    logging: *logging
 
   worker:
     restart: always
-    logging: *logging
 
   tusd:
     restart: always
-    logging: *logging
 
   bot:
     restart: always
-    logging: *logging
 
   frontend:
     restart: always
-    logging: *logging
 
   caddy:
     ports: !override
@@ -45,4 +31,3 @@ services:
       - "443:443"
       - "443:443/udp"
     restart: always
-    logging: *logging
