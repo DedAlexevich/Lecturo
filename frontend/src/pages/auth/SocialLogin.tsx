@@ -6,9 +6,11 @@ import { Dialog } from "../../ui/Dialog";
 import { useToast } from "../../ui/Toast";
 import { ConsentFields } from "./ConsentFields";
 import { TelegramButton, telegramEnabled } from "./TelegramButton";
+import { VkButton } from "./VkButton";
 import { messageOf } from "./errors";
 import { redirectTarget } from "./redirect";
 import { useTelegramLogin, type TelegramUser } from "./useAuthRequests";
+import { useVkEnabled } from "./vk";
 
 type Consents = { accept_terms: boolean; accept_personal_data: boolean };
 
@@ -20,6 +22,7 @@ export function SocialLogin() {
   const [pending, setPending] = useState<TelegramUser>();
   const [terms, setTerms] = useState(false);
   const [personalData, setPersonalData] = useState(false);
+  const vkEnabled = useVkEnabled();
   const { mutate } = login;
 
   const closeDialog = useCallback(() => {
@@ -52,12 +55,22 @@ export function SocialLogin() {
     [submit],
   );
 
-  if (!telegramEnabled) return null;
+  if (!telegramEnabled && !vkEnabled) return null;
 
   return (
     <>
       <div className="auth__divider">или</div>
-      <TelegramButton onAuth={handleAuth} />
+      <div className="auth-social">
+        {telegramEnabled && <TelegramButton onAuth={handleAuth} />}
+        {vkEnabled && (
+          <VkButton
+            flow={{ mode: "login", redirect: redirectTarget(location.state) }}
+            label="Войти через VK"
+            fullWidth
+            onError={(error) => toast.show(messageOf(error), "error")}
+          />
+        )}
+      </div>
       <Dialog
         open={pending !== undefined}
         onClose={closeDialog}
