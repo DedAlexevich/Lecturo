@@ -3349,6 +3349,14 @@
           "cheatsheet_md": {
             "type": "string",
             "title": "Cheatsheet Md"
+          },
+          "outdated": {
+            "type": "boolean",
+            "title": "Outdated"
+          },
+          "processing": {
+            "type": "boolean",
+            "title": "Processing"
           }
         },
         "type": "object",
@@ -3356,7 +3364,9 @@
           "course_id",
           "tickets",
           "definitions",
-          "cheatsheet_md"
+          "cheatsheet_md",
+          "outdated",
+          "processing"
         ],
         "title": "ExamSheetOut"
       },
