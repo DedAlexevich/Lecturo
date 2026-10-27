@@ -73,6 +73,6 @@ export async function transcribe(
     signal?.addEventListener("abort", onAbort);
 
     const request: WorkerRequest = { id, audio, model, device, language };
-    target.postMessage(request);
+    target.postMessage(request, [audio.buffer]);
   });
 }

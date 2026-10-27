@@ -8,7 +8,7 @@ export type Notes = { chapters: LocalChapter[]; summaryMd: string };
 
 type Response = NotesProgress | ({ type: "done" } & Notes) | { type: "error"; message: string };
 
-export function generateNotes(segments: LocalSegment[], onProgress: (progress: NotesProgress) => void, signal: AbortSignal): Promise<Notes> {
+export function generateNotes(segments: LocalSegment[], language: string, onProgress: (progress: NotesProgress) => void, signal: AbortSignal): Promise<Notes> {
   signal.throwIfAborted();
   const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
   return new Promise((resolve, reject) => {
@@ -35,6 +35,6 @@ export function generateNotes(segments: LocalSegment[], onProgress: (progress: N
       cleanup();
       reject(notesError(event.message || "Не удалось запустить модель"));
     };
-    worker.postMessage({ segments });
+    worker.postMessage({ segments, language });
   });
 }
