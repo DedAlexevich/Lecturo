@@ -2172,6 +2172,64 @@
         }
       }
     },
+    "/api/v1/lectures/{lecture_id}/chat": {
+      "post": {
+        "tags": [
+          "lectures"
+        ],
+        "summary": "Chat About Lecture",
+        "operationId": "chat_about_lecture_api_v1_lectures__lecture_id__chat_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "lecture_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Lecture Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LectureChatIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LectureChatOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/lectures/{lecture_id}/exports/{export_format}/link": {
       "post": {
         "tags": [
@@ -3536,6 +3594,30 @@
         ],
         "title": "ChapterOut"
       },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage"
+      },
       "ChunkKind": {
         "type": "string",
         "enum": [
@@ -3916,6 +3998,104 @@
           "created_at"
         ],
         "title": "IdentityOut"
+      },
+      "LectureChatIn": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "History"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "LectureChatIn"
+      },
+      "LectureChatOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "not_found",
+              "off_topic"
+            ],
+            "title": "Status"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/LectureChatSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "answer",
+          "extra",
+          "sources"
+        ],
+        "title": "LectureChatOut"
+      },
+      "LectureChatSource": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transcript",
+              "chapter"
+            ],
+            "title": "Kind"
+          },
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "LectureChatSource"
       },
       "LectureDetail": {
         "properties": {

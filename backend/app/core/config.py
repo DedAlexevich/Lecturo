@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     public_copy_daily_limit: int = 20
     public_export_rate_limit: int = 30
     public_export_rate_window_seconds: int = 3600
+    lecture_chat_rate_limit: int = 40
+    lecture_chat_rate_window_seconds: int = 60
     auth_mail_rate_limit: int = 3
     auth_mail_ip_rate_limit: int = 20
     auth_mail_address_rate_limit: int = 10
