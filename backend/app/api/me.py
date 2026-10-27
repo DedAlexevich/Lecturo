@@ -87,10 +87,20 @@ async def link_telegram(body: TelegramLinkIn, user: CurrentUser, session: Sessio
 
 @router.post(
     "/identities/vk/start",
-    responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"}},
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток привязки"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
+    },
 )
 async def start_vk_link(user: CurrentUser) -> VkStartOut:
-    url, nonce = await start_flow(get_settings(), user_id=user.id)
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:vk-link-start:{user.id}",
+        settings.vk_start_rate_limit,
+        settings.vk_start_rate_window_seconds,
+    )
+    url, nonce = await start_flow(settings, user_id=user.id)
     return VkStartOut(url=url, nonce=nonce)
 
 
