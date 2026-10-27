@@ -15,6 +15,7 @@ from app.pipeline.summarize import (
     parse_start,
     split_into_parts,
 )
+from app.pipeline.timecodes import locate_timestamp
 from app.providers import LLM, get_llm
 from app.schemas.lecture import QuizQuestion
 
@@ -73,7 +74,9 @@ def quiz_request(
     )
 
 
-def parse_question(item: Any, lecture_end: float) -> dict[str, Any]:
+def parse_question(
+    item: Any, segments: list[TranscriptSegment], lecture_end: float
+) -> dict[str, Any]:
     if not isinstance(item, dict):
         raise InvalidQuiz("вопрос не в формате объекта")
     question = str(item.get("question") or "").strip()
@@ -92,33 +95,45 @@ def parse_question(item: Any, lecture_end: float) -> dict[str, Any]:
         or not 0 <= correct_index < len(options)
     ):
         raise InvalidQuiz("correct_index не указывает на вариант ответа")
-    timestamp = parse_start(item.get("timestamp"))
-    if timestamp is None or not 0 <= timestamp <= lecture_end:
-        raise InvalidQuiz("таймкод вопроса вне лекции")
+    explanation = str(item.get("explanation") or "").strip()
+    hint = parse_start(item.get("timestamp"))
+    if hint is not None and not 0 <= hint <= lecture_end:
+        hint = None
+    timestamp = locate_timestamp(
+        segments, str(item.get("evidence") or ""), question, explanation, hint
+    )
+    if timestamp is None:
+        raise InvalidQuiz("не удалось определить таймкод вопроса")
     return QuizQuestion(
         question=question,
         options=options,
         correct_index=correct_index,
-        explanation=str(item.get("explanation") or "").strip(),
+        explanation=explanation,
         timestamp=timestamp,
     ).model_dump()
 
 
-def parse_questions(content: str, lecture_end: float) -> list[dict[str, Any]]:
+def parse_questions(
+    content: str, segments: list[TranscriptSegment], lecture_end: float
+) -> list[dict[str, Any]]:
     items = parse_json(content).get("questions")
     if not isinstance(items, list) or not MIN_QUESTIONS <= len(items) <= MAX_QUESTIONS:
         raise InvalidQuiz(f"в квизе должно быть от {MIN_QUESTIONS} до {MAX_QUESTIONS} вопросов")
-    return [parse_question(item, lecture_end) for item in items]
+    return [parse_question(item, segments, lecture_end) for item in items]
 
 
 async def generate_questions(
-    llm: LLM, request: str, lecture_end: float, report: Report
+    llm: LLM,
+    request: str,
+    segments: list[TranscriptSegment],
+    lecture_end: float,
+    report: Report,
 ) -> list[dict[str, Any]]:
     reason = ""
     for attempt in range(1, QUIZ_ATTEMPTS + 1):
         content = await llm.complete(load_prompt("quiz"), request, json_mode=True)
         try:
-            return parse_questions(content, lecture_end)
+            return parse_questions(content, segments, lecture_end)
         except ValueError as error:
             reason = str(error)
         await report(attempt / QUIZ_ATTEMPTS)
@@ -135,7 +150,7 @@ async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) ->
     )
     lecture_end = lecture.duration_sec or segments[-1].end
     questions = await generate_questions(
-        get_llm(), quiz_request(lecture, list(chapters), segments), lecture_end, report
+        get_llm(), quiz_request(lecture, list(chapters), segments), segments, lecture_end, report
     )
     await session.execute(
         insert(Quiz)
