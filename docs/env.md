@@ -38,8 +38,9 @@ cp .env.example .env
 | `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
 | `LOG_MAX_MB` | Размер лог-файла в `data/logs`, при котором он ротируется. См. [logs.md](logs.md) | нет | `10` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
 | `LOG_BACKUP_COUNT` | Сколько прежних копий лог-файла хранить | нет | `5` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
-| `BACKUP_DIR` | Папка на хосте для бэкапов базы. Путь абсолютный или относительный к корню репозитория. См. [deploy.md](deploy.md#бэкапы-базы) | нет | `./backups` | `infra/backup` |
-| `BACKUP_KEEP` | Сколько последних бэкапов хранить, целое число от 1 | нет | `7` | `infra/backup/backup.sh` |
+| `BACKUP_DIR` | Папка на хосте для бэкапов базы. Путь абсолютный или относительный к корню репозитория. Если не задана, `infra/backup` использует `./backups`, а контейнер `db-backup` и `scripts/backup-db.sh` с `scripts/restore-db.sh` берут `${DATA_DIR}/backups`. См. [backups.md](backups.md) и [deploy.md](deploy.md#бэкапы-базы) | нет | `./backups` на сервере, `./data/backups` локально | `docker-compose.yml` (db-backup), `infra/backup`, `scripts` |
+| `BACKUP_KEEP` | Сколько последних бэкапов хранить, целое число от 1 | нет | `7` | `docker-compose.yml` (db-backup), `infra/backup` |
+| `BACKUP_INTERVAL_HOURS` | Как часто контейнер `db-backup` делает дамп, в часах. Расписание сохраняется между перезапусками: если свежий дамп уже есть, следующий делается через оставшееся время | нет | `24` | `docker-compose.yml` (db-backup), `infra/backup/schedule.sh` |
 | `BACKUP_DB_SERVICE` | Сервис compose с Postgres, к которому подключаются скрипты бэкапа | нет | `db` | `infra/backup` |
 | `BACKUP_DB_CONTAINER` | Имя контейнера с Postgres. Если задано, скрипты бэкапа идут через `docker exec` в него, а не через compose | нет | пусто | `infra/backup` |
 | `BACKUP_CHECK_CONTAINER` | Имя временного контейнера Postgres, в котором `check.sh` проверяет восстановление бэкапа | нет | `lecturo-backup-check` | `infra/backup/check.sh` |
