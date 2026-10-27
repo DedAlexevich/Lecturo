@@ -213,6 +213,52 @@ async def test_active_subscription_raises_limit(user):
     assert result.subscription_until == until
 
 
+async def add_subscriptions(user, *periods) -> None:
+    async with SessionLocal() as session:
+        for starts_at, ends_at in periods:
+            session.add(Subscription(user_id=user.id, starts_at=starts_at, ends_at=ends_at))
+        await session.commit()
+
+
+async def test_subscription_until_covers_paid_renewals(user):
+    await prepare(user)
+    current_end = NOW + timedelta(days=5)
+    final_end = current_end + timedelta(days=60)
+    await add_subscriptions(
+        user,
+        (NOW - timedelta(days=25), current_end),
+        (current_end, current_end + timedelta(days=30)),
+        (current_end + timedelta(days=30), final_end),
+    )
+
+    result = await read_quota(user)
+
+    assert result.weekly_limit_sec == 5 * 3600
+    assert result.subscription_until == final_end
+
+
+async def test_subscription_until_stops_at_gap(user):
+    await prepare(user)
+    current_end = NOW + timedelta(days=5)
+    await add_subscriptions(
+        user,
+        (NOW - timedelta(days=25), current_end),
+        (current_end + timedelta(days=1), current_end + timedelta(days=31)),
+    )
+
+    assert (await read_quota(user)).subscription_until == current_end
+
+
+async def test_future_subscription_alone_is_not_active(user):
+    await prepare(user)
+    await add_subscriptions(user, (NOW + timedelta(days=1), NOW + timedelta(days=31)))
+
+    result = await read_quota(user)
+
+    assert result.subscription_until is None
+    assert result.weekly_limit_sec == 3600
+
+
 async def test_expired_subscription_gives_free_limit(user):
     await prepare(user, subscription=(NOW - timedelta(days=30), NOW))
     lecture = await new_lecture(user)

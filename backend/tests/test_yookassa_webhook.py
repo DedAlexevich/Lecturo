@@ -284,7 +284,7 @@ async def test_subscription_extends_uploaded_video_retention(client, user, fake)
     assert before + days <= lecture.video_expires_at <= datetime.now(UTC) + days
 
 
-async def test_subscription_extends_active_one(client, user, fake):
+async def test_subscription_extends_active_one(client, user, auth_headers, fake):
     current_end = datetime.now(UTC) + timedelta(days=5)
     async with SessionLocal() as session:
         session.add(
@@ -309,6 +309,8 @@ async def test_subscription_extends_active_one(client, user, fake):
     assert extended.ends_at == current_end + timedelta(days=30)
     assert next_one.payment_id == second.id
     assert next_one.starts_at == extended.ends_at
+    quota = (await client.get("/api/v1/billing/quota", headers=auth_headers)).json()
+    assert datetime.fromisoformat(quota["subscription_until"]) == next_one.ends_at
 
 
 async def test_yookassa_unavailable_asks_for_retry(client, user, fake):

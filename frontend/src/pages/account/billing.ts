@@ -7,6 +7,8 @@ export type Quota = components["schemas"]["QuotaOut"];
 export type Product = components["schemas"]["ProductOut"];
 export type Payment = components["schemas"]["PaymentOut"];
 
+export const subscriptionDays = 30;
+
 export const quotaQueryKey = ["billing", "quota"] as const;
 export const productsQueryKey = ["billing", "products"] as const;
 export const paymentsQueryKey = ["billing", "payments"] as const;
