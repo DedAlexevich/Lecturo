@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 from app.models import EMBEDDING_DIM
@@ -24,8 +25,29 @@ class StubSpeechToText:
         ]
 
 
+STUB_QUIZ_SIZE = 8
+STUB_OPTIONS = ["Первый вариант", "Второй вариант", "Третий вариант", "Четвёртый вариант"]
+
+
+def stub_quiz(user: str) -> str:
+    timestamps = [int(value) for value in re.findall(r"\[(\d+)\]", user)] or [0]
+    questions = [
+        {
+            "question": f"Вопрос {number + 1} по лекции",
+            "options": STUB_OPTIONS,
+            "correct_index": number % len(STUB_OPTIONS),
+            "explanation": "Ответ есть в лекции на этом таймкоде.",
+            "timestamp": timestamps[number % len(timestamps)],
+        }
+        for number in range(STUB_QUIZ_SIZE)
+    ]
+    return json.dumps({"questions": questions}, ensure_ascii=False)
+
+
 class StubLLM:
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        if json_mode and '"questions"' in system:
+            return stub_quiz(user)
         if json_mode:
             return json.dumps({"text": user[:200]}, ensure_ascii=False)
         return f"Кратко: {user[:200]}"

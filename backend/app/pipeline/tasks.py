@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
-from app.pipeline import download, embed, media, stages, summarize
+from app.pipeline import download, embed, media, quiz, stages, summarize
 from app.pipeline.events import publish_status
 from app.pipeline.runner import StepFailed, StepHandler, run_step
 from app.services import quota
@@ -25,6 +25,8 @@ HANDLERS: dict[StepName, StepHandler] = {
     StepName.summarize: summarize.summarize,
     StepName.embed: embed.embed,
 }
+
+ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
 PLANS: dict[SourceType, list[StepName]] = {
     SourceType.upload: [
@@ -53,6 +55,18 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
         raise
     finally:
         await purge_if_deleted(lecture_uuid)
+
+
+async def process_quiz(ctx: dict, lecture_id: str) -> str:
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, uuid.UUID(lecture_id))
+        if lecture is None:
+            return "missing"
+        try:
+            await run_step(session, lecture, StepName.quiz, quiz.build_quiz, fails_lecture=False)
+        except StepFailed:
+            return StepStatus.failed
+        return StepStatus.done
 
 
 async def purge_if_deleted(lecture_id: uuid.UUID) -> None:
@@ -121,13 +135,33 @@ async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
         await redis.aclose()
 
 
+def quiz_job_id(lecture_id: uuid.UUID) -> str:
+    return f"quiz:{lecture_id}"
+
+
+async def enqueue_quiz(lecture_id: uuid.UUID) -> None:
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        await redis.enqueue_job("process_quiz", str(lecture_id), _job_id=quiz_job_id(lecture_id))
+    finally:
+        await redis.aclose()
+
+
+async def quiz_job_active(lecture_id: uuid.UUID) -> bool:
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        return await Job(quiz_job_id(lecture_id), redis).status() in ACTIVE_JOB_STATUSES
+    finally:
+        await redis.aclose()
+
+
 async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     redis_settings.conn_retries = 0
     redis = await create_pool(redis_settings)
     try:
         job = Job(lecture_job_id(lecture_id), redis)
-        if await job.status() not in (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress):
+        if await job.status() not in ACTIVE_JOB_STATUSES:
             return False
         await redis.zadd(abort_jobs_ss, {job.job_id: timestamp_ms()})
         return True

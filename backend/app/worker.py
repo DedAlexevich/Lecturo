@@ -6,7 +6,7 @@ from arq.connections import RedisSettings
 
 from app.core.config import Settings, get_settings
 from app.pipeline.retention import delete_expired_videos
-from app.pipeline.tasks import process_lecture
+from app.pipeline.tasks import process_lecture, process_quiz
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings
 
@@ -30,7 +30,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    functions = [process_lecture]
+    functions = [process_lecture, process_quiz]
     on_startup = startup
     job_timeout = 4 * 3600
     keep_result = 0
