@@ -337,6 +337,7 @@ export function LecturePage() {
         <Processing
           status={progress?.status ?? data.status}
           queuePosition={progress?.queue_position ?? null}
+          etaSec={progress ? (progress.eta_sec ?? null) : (data.eta_sec ?? null)}
           steps={progress?.steps ?? data.steps}
           onRetry={() => retry.mutate()}
           retrying={retry.isPending}

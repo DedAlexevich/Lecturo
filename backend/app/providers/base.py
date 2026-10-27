@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -10,8 +11,18 @@ class Segment:
     text: str
 
 
+RecognitionProgress = Callable[[str, float], Awaitable[None]]
+
+
 class SpeechToText(Protocol):
-    async def transcribe(self, audio_path: Path, language: str = "ru") -> list[Segment]: ...
+    async def transcribe(
+        self,
+        audio_path: Path,
+        language: str = "ru",
+        *,
+        duration: float | None = None,
+        on_progress: RecognitionProgress | None = None,
+    ) -> list[Segment]: ...
 
 
 class LLM(Protocol):
