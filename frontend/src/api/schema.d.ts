@@ -2130,6 +2130,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Слишком много попыток регистрации */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     login_api_v1_auth_login_post: {
@@ -2162,6 +2169,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Слишком много попыток входа */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2759,6 +2773,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["VkStartOut"];
                 };
+            };
+            /** @description Слишком много попыток привязки */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Вход через VK не настроен */
             503: {
