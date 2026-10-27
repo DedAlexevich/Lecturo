@@ -13,7 +13,7 @@ from app.core.db import SessionLocal
 from app.models import Lecture, LectureStatus, ProcessingStep, SourceType, StepName, StepStatus
 from app.pipeline import download, embed, media, quiz, stages, summarize
 from app.pipeline.events import publish_status
-from app.pipeline.runner import StepFailed, StepHandler, run_step
+from app.pipeline.runner import StepFailed, StepHandler, get_step, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 
@@ -25,6 +25,8 @@ HANDLERS: dict[StepName, StepHandler] = {
     StepName.summarize: summarize.summarize,
     StepName.embed: embed.embed,
 }
+
+REGENERATION_STEPS = [StepName.summarize, StepName.embed]
 
 ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
@@ -55,6 +57,75 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
         raise
     finally:
         await purge_if_deleted(lecture_uuid)
+
+
+async def process_regeneration(ctx: dict, lecture_id: str) -> str:
+    lecture_uuid = uuid.UUID(lecture_id)
+    try:
+        return await run_regeneration(lecture_uuid)
+    except BaseException as error:
+        await restore_ready(lecture_uuid, str(error) or type(error).__name__)
+        raise
+
+
+async def run_regeneration(lecture_id: uuid.UUID) -> str:
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        if lecture is None:
+            return "missing"
+        outcome = StepStatus.done
+        error: str | None = None
+        try:
+            for name in REGENERATION_STEPS:
+                await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
+        except StepFailed:
+            outcome = StepStatus.failed
+            failed = await get_step(session, lecture.id, StepName.summarize)
+            error = failed.error
+            await session.execute(
+                update(ProcessingStep)
+                .where(
+                    ProcessingStep.lecture_id == lecture_id,
+                    ProcessingStep.step.in_(REGENERATION_STEPS),
+                    ProcessingStep.status == StepStatus.pending,
+                )
+                .values(status=StepStatus.done, progress=1.0)
+            )
+        lecture.status = LectureStatus.ready
+        await session.commit()
+        await publish_status(lecture.id, lecture.owner_id, lecture.status, error)
+        return outcome
+
+
+async def restore_ready(lecture_id: uuid.UUID, error: str) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+                ProcessingStep.status == StepStatus.running,
+            )
+            .values(status=StepStatus.failed, error=error)
+        )
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+                ProcessingStep.status == StepStatus.pending,
+            )
+            .values(status=StepStatus.done, progress=1.0)
+        )
+        owner_id = await session.scalar(
+            update(Lecture)
+            .where(Lecture.id == lecture_id, Lecture.status == LectureStatus.processing)
+            .values(status=LectureStatus.ready)
+            .returning(Lecture.owner_id)
+        )
+        await session.commit()
+    if owner_id is not None:
+        await publish_status(lecture_id, owner_id, LectureStatus.ready, error)
 
 
 async def process_quiz(ctx: dict, lecture_id: str) -> str:
@@ -135,6 +206,20 @@ async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
         await redis.aclose()
 
 
+def regeneration_job_id(lecture_id: uuid.UUID) -> str:
+    return f"regenerate:{lecture_id}"
+
+
+async def enqueue_regeneration(lecture_id: uuid.UUID) -> None:
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        await redis.enqueue_job(
+            "process_regeneration", str(lecture_id), _job_id=regeneration_job_id(lecture_id)
+        )
+    finally:
+        await redis.aclose()
+
+
 def quiz_job_id(lecture_id: uuid.UUID) -> str:
     return f"quiz:{lecture_id}"
 
@@ -161,6 +246,10 @@ async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
 
 async def cancel_quiz_job(lecture_id: uuid.UUID) -> bool:
     return await abort_job(quiz_job_id(lecture_id))
+
+
+async def cancel_regeneration_job(lecture_id: uuid.UUID) -> bool:
+    return await abort_job(regeneration_job_id(lecture_id))
 
 
 async def abort_job(job_id: str) -> bool:
