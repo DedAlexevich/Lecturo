@@ -228,9 +228,8 @@ async def test_upload_requires_consent(client, user, auth_headers):
     assert "ChangeFileInfo" not in body
 
 
-async def test_local_result_requires_consent(client, user, auth_headers, no_server_work):
-    await revoke_consent(user)
-    response = await client.post(
+async def post_local_result(client, auth_headers):
+    return await client.post(
         "/api/v1/local-results",
         json={
             "title": "Матанализ",
@@ -241,6 +240,26 @@ async def test_local_result_requires_consent(client, user, auth_headers, no_serv
         headers=auth_headers,
     )
 
+
+async def test_local_result_requires_consent(client, user, auth_headers, no_server_work):
+    await revoke_consent(user)
+    response = await post_local_result(client, auth_headers)
+
     assert response.status_code == 403
     assert response.json()["detail"] == consents.AI_TRANSFER_REQUIRED
+    assert await lecture_count(user) == 0
+
+
+async def test_outdated_revision_blocks_lecture_creation(
+    client, user, auth_headers, no_server_work
+):
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User).where(User.id == user.id).values(ai_transfer_revision=date(2020, 1, 1))
+        )
+        await session.commit()
+
+    response = await post_local_result(client, auth_headers)
+
+    assert response.status_code == 403
     assert await lecture_count(user) == 0
