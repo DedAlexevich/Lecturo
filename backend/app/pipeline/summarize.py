@@ -1,13 +1,20 @@
+import hashlib
 import json
+import logging
 import math
-from dataclasses import dataclass
+import re
+import uuid
+from dataclasses import asdict, dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
 
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import Chapter, Lecture, Summary, TranscriptSegment
 from app.pipeline.runner import Report
 from app.pipeline.stages import load_segments, require_ai_transfer
@@ -21,6 +28,12 @@ SHORT_CHAPTER_MAX_SECONDS = 5 * 60.0
 CHAPTERS_REQUIRED_FROM_SECONDS = 3 * 60.0
 TITLE_MAX_LENGTH = 300
 MAP_ATTEMPTS = 2
+REDUCE_ATTEMPTS = 2
+RAW_PART_CHAR_LIMIT = 6000
+DIGEST_CACHE_TTL_SECONDS = 3 * 24 * 3600
+LATEX_BACKSLASH = re.compile(r"\\\\|\\(?!u[0-9a-fA-F]{4})(?![nrt][A-Z])(?=[A-Za-z]{2})")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -123,8 +136,12 @@ def format_part(part: list[TranscriptSegment]) -> str:
     return "\n".join(f"[{int(segment.start)}] {segment.text}" for segment in part)
 
 
+def escape_latex(text: str) -> str:
+    return LATEX_BACKSLASH.sub(r"\\\\", text)
+
+
 def parse_json(content: str) -> dict[str, Any]:
-    text = content[content.find("{") : content.rfind("}") + 1]
+    text = escape_latex(content[content.find("{") : content.rfind("}") + 1])
     try:
         data = json.loads(text)
     except ValueError as error:
@@ -164,21 +181,112 @@ def map_prompt(part: list[TranscriptSegment], short: bool) -> str:
     )
 
 
-async def digest_part(llm: LLM, part: list[TranscriptSegment], short: bool = False) -> PartDigest:
-    data: dict[str, Any] = {}
+def raw_part_summary(part: list[TranscriptSegment]) -> str:
+    text = " ".join(segment.text.strip() for segment in part)
+    if len(text) <= RAW_PART_CHAR_LIMIT:
+        return text
+    return text[:RAW_PART_CHAR_LIMIT].rsplit(" ", 1)[0] + " …"
+
+
+async def request_digest(
+    llm: LLM, part: list[TranscriptSegment], short: bool = False
+) -> PartDigest | None:
     system = map_prompt(part, short)
     for _ in range(MAP_ATTEMPTS):
         try:
             data = parse_json(await llm.complete(system, format_part(part), json_mode=True))
         except ValueError:
             continue
-        break
-    return PartDigest(
-        start=part[0].start,
-        end=part[-1].end,
-        summary=str(data.get("summary") or "").strip(),
-        topics=parse_topics(data.get("topics")),
+        summary = str(data.get("summary") or "").strip()
+        if summary:
+            return PartDigest(
+                start=part[0].start,
+                end=part[-1].end,
+                summary=summary,
+                topics=parse_topics(data.get("topics")),
+            )
+    return None
+
+
+def raw_digest(part: list[TranscriptSegment]) -> PartDigest:
+    logger.warning(
+        "Содержание части %s–%s с не получено после %s попыток, взят текст расшифровки",
+        int(part[0].start),
+        int(part[-1].end),
+        MAP_ATTEMPTS,
     )
+    return PartDigest(
+        start=part[0].start, end=part[-1].end, summary=raw_part_summary(part), topics=[]
+    )
+
+
+def digest_field(system: str, part: list[TranscriptSegment]) -> str:
+    return hashlib.sha256(f"{system}\n{format_part(part)}".encode()).hexdigest()
+
+
+def load_digest(raw: bytes | None) -> PartDigest | None:
+    if raw is None:
+        return None
+    data = json.loads(raw)
+    return PartDigest(
+        start=data["start"],
+        end=data["end"],
+        summary=data["summary"],
+        topics=[Topic(**topic) for topic in data["topics"]],
+    )
+
+
+class DigestCache:
+    def __init__(self, lecture_id: uuid.UUID) -> None:
+        self.key = f"summarize:digests:{lecture_id}"
+        self.redis = Redis.from_url(
+            get_settings().redis_url, socket_connect_timeout=2, socket_timeout=2
+        )
+
+    async def get(self, field: str) -> PartDigest | None:
+        try:
+            return load_digest(await self.redis.hget(self.key, field))
+        except (OSError, RedisError):
+            logger.warning("Не удалось прочитать содержание части из кеша", exc_info=True)
+            return None
+
+    async def put(self, field: str, digest: PartDigest) -> None:
+        try:
+            await self.redis.hset(self.key, field, json.dumps(asdict(digest), ensure_ascii=False))
+            await self.redis.expire(self.key, DIGEST_CACHE_TTL_SECONDS)
+        except (OSError, RedisError):
+            logger.warning("Не удалось сохранить содержание части в кеш", exc_info=True)
+
+    async def clear(self) -> None:
+        try:
+            await self.redis.delete(self.key)
+        except (OSError, RedisError):
+            logger.warning("Не удалось очистить кеш содержания частей", exc_info=True)
+
+    async def close(self) -> None:
+        await self.redis.aclose()
+
+
+async def digest_parts(
+    llm: LLM,
+    parts: list[list[TranscriptSegment]],
+    short: bool,
+    cache: DigestCache,
+    report: Report,
+) -> list[PartDigest]:
+    digests = []
+    for done, part in enumerate(parts, start=1):
+        field = digest_field(map_prompt(part, short), part)
+        digest = await cache.get(field)
+        if digest is None:
+            digest = await request_digest(llm, part, short)
+            if digest is None:
+                digest = raw_digest(part)
+            else:
+                await cache.put(field, digest)
+        digests.append(digest)
+        await report(done / (len(parts) + 1))
+    return digests
 
 
 def reduce_prompt(duration: float, plan: ChapterPlan) -> str:
@@ -202,6 +310,19 @@ def reduce_request(title: str, digests: list[PartDigest]) -> str:
         for digest in digests
     ]
     return json.dumps({"title": title, "parts": parts}, ensure_ascii=False)
+
+
+async def reduce_parts(
+    llm: LLM, title: str, duration: float, plan: ChapterPlan, digests: list[PartDigest]
+) -> dict[str, Any]:
+    system = reduce_prompt(duration, plan)
+    request = reduce_request(title, digests)
+    for _ in range(REDUCE_ATTEMPTS - 1):
+        try:
+            return parse_json(await llm.complete(system, request, json_mode=True))
+        except ValueError:
+            logger.warning("Ответ LLM с главами не разобран, запрос повторяется")
+    return parse_json(await llm.complete(system, request, json_mode=True))
 
 
 def snap_to_segment(start: float, segment_starts: list[float]) -> float:
@@ -328,18 +449,13 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
     plan = plan_chapters(duration)
     short = duration <= SHORT_LECTURE_SECONDS
     parts = split_into_parts(segments, part_seconds_for(duration))
-    digests = []
-    for done, part in enumerate(parts, start=1):
-        digests.append(await digest_part(llm, part, short))
-        await report(done / (len(parts) + 1))
-
-    data = parse_json(
-        await llm.complete(
-            reduce_prompt(duration, plan),
-            reduce_request(lecture.title, digests),
-            json_mode=True,
-        )
-    )
+    cache = DigestCache(lecture.id)
+    try:
+        digests = await digest_parts(llm, parts, short, cache, report)
+        data = await reduce_parts(llm, lecture.title, duration, plan, digests)
+        await cache.clear()
+    finally:
+        await cache.close()
     chapters = split_oversized(
         build_chapters(data.get("chapters"), segments, digests), segments, digests, plan
     )
