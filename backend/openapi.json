@@ -2987,6 +2987,31 @@
         }
       }
     },
+    "/api/v1/legal/updates": {
+      "get": {
+        "tags": [
+          "legal"
+        ],
+        "summary": "List Updates",
+        "operationId": "list_updates_api_v1_legal_updates_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LegalUpdateOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Updates Api V1 Legal Updates Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/legal/{slug}": {
       "get": {
         "tags": [
@@ -3349,6 +3374,14 @@
           "cheatsheet_md": {
             "type": "string",
             "title": "Cheatsheet Md"
+          },
+          "outdated": {
+            "type": "boolean",
+            "title": "Outdated"
+          },
+          "processing": {
+            "type": "boolean",
+            "title": "Processing"
           }
         },
         "type": "object",
@@ -3356,7 +3389,9 @@
           "course_id",
           "tickets",
           "definitions",
-          "cheatsheet_md"
+          "cheatsheet_md",
+          "outdated",
+          "processing"
         ],
         "title": "ExamSheetOut"
       },
@@ -3720,22 +3755,40 @@
             "type": "string",
             "title": "Title"
           },
-          "content_md": {
-            "type": "string",
-            "title": "Content Md"
-          },
           "revision_date": {
             "type": "string",
             "format": "date",
             "title": "Revision Date"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changes"
+          },
+          "content_md": {
+            "type": "string",
+            "title": "Content Md"
           }
         },
         "type": "object",
         "required": [
           "slug",
           "title",
-          "content_md",
-          "revision_date"
+          "revision_date",
+          "effective_date",
+          "changes",
+          "content_md"
         ],
         "title": "LegalDocOut"
       },
@@ -3756,6 +3809,48 @@
           "title"
         ],
         "title": "LegalDocSummary"
+      },
+      "LegalUpdateOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "revision_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Revision Date"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "changes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "title",
+          "revision_date",
+          "effective_date",
+          "changes"
+        ],
+        "title": "LegalUpdateOut"
       },
       "LinkIn": {
         "properties": {
@@ -4957,6 +5052,16 @@
         ],
         "title": "TelegramLoginIn"
       },
+      "TelegramNotifications": {
+        "type": "string",
+        "enum": [
+          "not_linked",
+          "start_required",
+          "ready",
+          "blocked"
+        ],
+        "title": "TelegramNotifications"
+      },
       "TelegramSignupIn": {
         "properties": {
           "id": {
@@ -5126,6 +5231,9 @@
             },
             "type": "array",
             "title": "Identities"
+          },
+          "telegram_notifications": {
+            "$ref": "#/components/schemas/TelegramNotifications"
           }
         },
         "type": "object",
@@ -5135,7 +5243,8 @@
           "email_verified",
           "display_name",
           "ai_transfer_accepted_at",
-          "identities"
+          "identities",
+          "telegram_notifications"
         ],
         "title": "UserOut"
       },

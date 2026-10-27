@@ -7,7 +7,13 @@ from sqlalchemy import select
 from app.api.courses import get_own_course
 from app.core.deps import RequireSubscription, SessionDep
 from app.models import ExamSheet
-from app.pipeline.exam import enqueue_exam_sheet, exam_sheet_in_progress, load_course_notes
+from app.pipeline.exam import (
+    course_note_ids,
+    enqueue_exam_sheet,
+    exam_sheet_in_progress,
+    is_outdated,
+    load_course_notes,
+)
 from app.schemas.lecture import ExamSheetOut
 from app.services.consents import require_ai_transfer_consent
 
@@ -39,12 +45,19 @@ async def get_exam_sheet(
 ) -> ExamSheetOut:
     await get_own_course(session, course_id, user)
     sheet = await session.scalar(select(ExamSheet).where(ExamSheet.course_id == course_id))
-    if sheet is not None:
-        return ExamSheetOut(course_id=course_id, **sheet.content)
     try:
         processing = await exam_sheet_in_progress(course_id)
     except (OSError, RedisError) as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, QUEUE_UNAVAILABLE) from error
+    if sheet is not None:
+        return ExamSheetOut(
+            course_id=course_id,
+            tickets=sheet.content["tickets"],
+            definitions=sheet.content["definitions"],
+            cheatsheet_md=sheet.content["cheatsheet_md"],
+            outdated=is_outdated(sheet.content, await course_note_ids(session, course_id)),
+            processing=processing,
+        )
     if processing:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,

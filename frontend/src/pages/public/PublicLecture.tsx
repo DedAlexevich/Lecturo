@@ -10,7 +10,8 @@ import { VideoPlayer } from "../lecture/players/VideoPlayer";
 import { usePlayer, videoIdentity } from "../lecture/players/player";
 import { formatDuration } from "../lecture/time";
 import { Transcript } from "../lecture/Transcript";
-import { Markdown } from "../legal/markdown";
+import { localNotes } from "../lecture/localNotes";
+import { SummaryMarkdown } from "../lecture/SummaryMarkdown";
 import { ComplaintDialog } from "./ComplaintDialog";
 import { LocalBadge } from "./LocalBadge";
 import "../lecture/lecture.css";
@@ -42,7 +43,9 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
   const embed = lecture.video_url ? null : resolveEmbed(lecture.embed_url);
   const hasPlayer = lecture.video_url !== null || embed !== null;
   const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0 };
-  const note = (kind: PanelKind) => <p className="lecture__panel-note">{emptyNotes[kind]}</p>;
+  const note = (kind: PanelKind) => (
+    <p className="lecture__panel-note">{lecture.processed_locally ? localNotes[kind] : emptyNotes[kind]}</p>
+  );
 
   return (
     <article className="lecture">
@@ -86,8 +89,14 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
             />
           ) : (
             <div className="lecture__no-video">
-              <p className="lecture__no-video-title">Видео недоступно</p>
-              <p className="lecture__no-video-text">Конспект, главы и расшифровка остаются на странице.</p>
+              <p className="lecture__no-video-title">
+                {lecture.processed_locally ? "Видео осталось на устройстве автора" : "Видео недоступно"}
+              </p>
+              <p className="lecture__no-video-text">
+                {lecture.processed_locally
+                  ? "Лекцию обработали на устройстве, сюда попали только расшифровка и материалы."
+                  : "Конспект, главы и расшифровка остаются на странице."}
+              </p>
             </div>
           )}
         </div>
@@ -105,7 +114,7 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
                 label: "Конспект",
                 panel: summary ? (
                   <div className="lecture__scroll summary">
-                    <Markdown source={summary} />
+                    <SummaryMarkdown source={summary} />
                   </div>
                 ) : (
                   note("summary")

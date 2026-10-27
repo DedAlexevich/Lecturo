@@ -8,6 +8,11 @@ class LegalDocSummary(Schema):
     title: str
 
 
-class LegalDocOut(LegalDocSummary):
-    content_md: str
+class LegalUpdateOut(LegalDocSummary):
     revision_date: date
+    effective_date: date
+    changes: str | None
+
+
+class LegalDocOut(LegalUpdateOut):
+    content_md: str

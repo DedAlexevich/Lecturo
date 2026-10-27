@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime
 
@@ -30,6 +31,13 @@ class IdentityOut(Schema):
     created_at: datetime
 
 
+class TelegramNotifications(enum.StrEnum):
+    not_linked = "not_linked"
+    start_required = "start_required"
+    ready = "ready"
+    blocked = "blocked"
+
+
 class UserOut(Schema):
     id: uuid.UUID
     email: str | None
@@ -37,6 +45,7 @@ class UserOut(Schema):
     display_name: str
     ai_transfer_accepted_at: datetime | None
     identities: list[IdentityOut]
+    telegram_notifications: TelegramNotifications
 
 
 class TelegramLoginIn(Schema):

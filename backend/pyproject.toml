@@ -17,9 +17,11 @@ dependencies = [
     "arq>=0.26",
     "redis>=5.2",
     "httpx>=0.28",
-    "yt-dlp>=2024.11.18",
+    "yt-dlp[default,deno]>=2026.10.26",
     "weasyprint>=66",
     "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.6,<0.7",
+    "quickjs>=1.19.4,<2",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +41,7 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.pipeline" = ["prompts/*.md"]
 "app" = ["legal/docs/*.md"]
+"app.services" = ["katex/*.js", "katex/*.css", "katex/LICENSE", "katex/fonts/*"]
 
 [tool.ruff]
 line-length = 100

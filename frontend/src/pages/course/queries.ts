@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { ApiError } from "../../app/queryClient";
+import { examSheetQueryKey } from "../../features/exam-sheet/queries";
 
 export type CourseFields = {
   title: string;
@@ -73,6 +74,7 @@ function useRefreshCourse(courseId: string) {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: courseQueryKey(courseId) }),
       queryClient.invalidateQueries({ queryKey: ["courses"], exact: true }),
+      queryClient.invalidateQueries({ queryKey: examSheetQueryKey(courseId) }),
     ]);
 }
 

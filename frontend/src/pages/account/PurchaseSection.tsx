@@ -12,19 +12,23 @@ import {
   errorMessage,
   paymentsQueryKey,
   quotaQueryKey,
+  subscriptionDays,
   useCreatePayment,
   usePayments,
   useProducts,
+  useQuota,
   type Product,
 } from "./billing";
-import { formatRubles } from "./format";
+import { formatDate, formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
+import { SubscriptionBenefits } from "./SubscriptionBenefits";
 import { pollInterval, pollLimit } from "./usePaymentReturn";
 
 export function PurchaseSection() {
   const titleId = useId();
   const { data: products, isPending, isError, refetch } = useProducts();
   const { data: me } = useMe();
+  const { data: quota } = useQuota();
   const { hash } = useLocation();
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -48,20 +52,36 @@ export function PurchaseSection() {
       {isError && <SectionError message="Не удалось загрузить тарифы." onRetry={() => refetch()} />}
       {products && products.length === 0 && <p className={styles.muted}>Сейчас купить ничего нельзя.</p>}
       {products && products.length > 0 && (
-        <PurchaseForm products={products} needsReceiptEmail={me ? !me.email : false} />
+        <PurchaseForm
+          products={products}
+          needsReceiptEmail={me ? !me.email : false}
+          subscriptionUntil={quota?.subscription_until ?? null}
+        />
       )}
     </section>
   );
 }
 
 function productNote(product: Product) {
-  if (product.kind === "subscription") return "Больше часов в неделю, квиз, памятка к экзамену и долгое хранение видео";
+  if (product.kind === "subscription") return "Больше часов в неделю, квиз, памятка к экзамену, чат по лекции и долгое хранение видео";
   if (!product.seconds) return "Не сгорает";
   const perHour = Math.round((product.price_rub / (product.seconds / 3600)) * 100) / 100;
   return `Не сгорает, ${formatRubles(perHour)} за час`;
 }
 
-function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; needsReceiptEmail: boolean }) {
+function renewalEnd(subscriptionUntil: string) {
+  return new Date(new Date(subscriptionUntil).getTime() + subscriptionDays * 86_400_000).toISOString();
+}
+
+function PurchaseForm({
+  products,
+  needsReceiptEmail,
+  subscriptionUntil,
+}: {
+  products: Product[];
+  needsReceiptEmail: boolean;
+  subscriptionUntil: string | null;
+}) {
   const [code, setCode] = useState(products[0].code);
   const [accepted, setAccepted] = useState(false);
   const [showConsentError, setShowConsentError] = useState(false);
@@ -76,6 +96,7 @@ function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; ne
   const { data: payments } = usePayments(returnedAt && createdId ? pollInterval : false);
   const selected = products.find((product) => product.code === code) ?? products[0];
   const { reset } = createPayment;
+  const isRenewal = (product: Product) => product.kind === "subscription" && subscriptionUntil !== null;
   const settled = payments?.some((payment) => payment.id === createdId && payment.status !== "pending") ?? false;
 
   useEffect(() => {
@@ -165,13 +186,20 @@ function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; ne
               onChange={() => choose(product.code)}
             />
             <span className={styles.optionText}>
-              <span className={styles.optionTitle}>{product.title}</span>
-              <span className={styles.muted}>{productNote(product)}</span>
+              <span className={styles.optionTitle}>
+                {isRenewal(product) ? `Продлить подписку на ${subscriptionDays} дней` : product.title}
+              </span>
+              <span className={styles.muted}>
+                {isRenewal(product) && subscriptionUntil
+                  ? `Сейчас действует до ${formatDate(subscriptionUntil)}, продлится до ${formatDate(renewalEnd(subscriptionUntil))}`
+                  : productNote(product)}
+              </span>
             </span>
             <span className={styles.optionPrice}>{formatRubles(product.price_rub)}</span>
           </label>
         ))}
       </fieldset>
+      <SubscriptionBenefits products={products} onChoose={choose} />
       {needsReceiptEmail && (
         <div className={styles.receiptEmail}>
           <ReceiptEmailField
@@ -229,7 +257,7 @@ function PurchaseForm({ products, needsReceiptEmail }: { products: Product[]; ne
           </Button>
         ) : (
           <Button type="submit" loading={createPayment.isPending || redirecting}>
-            Оплатить {formatRubles(selected.price_rub)}
+            {isRenewal(selected) ? "Продлить за" : "Оплатить"} {formatRubles(selected.price_rub)}
           </Button>
         )}
       </div>

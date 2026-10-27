@@ -87,6 +87,26 @@ grep -E "status=|dkim" data/logs/mail.log | tail
 
 Строка `status=sent` значит, что сервер получателя принял письмо. При `status=deferred` или `status=bounced` в скобках будет ответ сервера получателя с причиной. В заголовках полученного письма («Показать оригинал» в Gmail) должны быть `spf=pass` и `dkim=pass`. Недоставленные письма Postfix повторяет сутки, затем удаляет. Очередь: `docker compose exec mail postqueue -p`.
 
+## Прокси для YouTube
+
+С сервера в РФ YouTube недоступен, поэтому аудио по ссылкам YouTube скачивается через SOCKS5-прокси на зарубежном сервере. Через прокси идут только запросы yt-dlp к YouTube, сайт, база и файлы пользователей остаются на основном сервере.
+
+На зарубежном сервере (Ubuntu) под root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DedAlexevich/Lecturo/main/infra/youtube-proxy-setup.sh | bash -s -- <ip основного сервера>
+```
+
+Скрипт ставит dante с входом по логину и паролю, включает ufw и открывает порт 1080 только для основного сервера. В конце он печатает строку `YOUTUBE_PROXY=...`, её нужно добавить в `/opt/lecturo/.env` на основном сервере и перезапустить `worker` и `api`. При повторном запуске пароль меняется, строку в `.env` тоже придётся обновить.
+
+Проверка с основного сервера:
+
+```sh
+docker exec lecturo-worker-1 sh -c 'python -m yt_dlp --proxy "$YOUTUBE_PROXY" -f bestaudio -o "/tmp/yt.%(ext)s" https://www.youtube.com/watch?v=jNQXAC9IVRw && rm /tmp/yt.*'
+```
+
+Если YouTube отвечает «Sign in to confirm you're not a bot», значит IP прокси попал под проверку YouTube и нужен другой зарубежный сервер.
+
 ## Мониторинг и логи
 
 Логи пишутся в файлы с ротацией, см. [logs.md](logs.md). Смотреть логи: `docker compose logs -f --tail 200 api worker`.
