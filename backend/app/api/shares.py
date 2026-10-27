@@ -1,16 +1,16 @@
+import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
-from app.core.errors import not_ready
-from app.models import Course, Lecture, LectureStatus, ShareLink, User, course_lectures
+from app.models import Complaint, Course, Lecture, LectureStatus, ShareLink, User, course_lectures
 from app.schemas.share import (
     ComplaintIn,
     PublicCourseOut,
@@ -20,7 +20,9 @@ from app.schemas.share import (
     ShareIn,
     ShareOut,
 )
+from app.services.rate_limit import enforce_rate_limit
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["shares"])
 
 SHARE_NOT_FOUND = "Ссылка не найдена"
@@ -186,5 +188,36 @@ async def get_public(token: str, session: SessionDep) -> PublicShareOut:
 
 
 @router.post("/public/{token}/complaints", status_code=status.HTTP_204_NO_CONTENT)
-async def complain(token: str, body: ComplaintIn) -> None:
-    not_ready()
+async def complain(token: str, body: ComplaintIn, request: Request, session: SessionDep) -> None:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:complaints:ip:{ip}",
+        settings.complaints_rate_limit,
+        settings.complaints_rate_window_seconds,
+    )
+    share = await get_active_share(session, token)
+    if share.lecture_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Выберите лекцию для жалобы")
+    lecture_id = await session.scalar(
+        select(Lecture.id).where(
+            Lecture.id == share.lecture_id, Lecture.status == LectureStatus.ready
+        )
+    )
+    if lecture_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_NOT_FOUND)
+    reason = body.reason.strip()
+    if not reason or len(reason) > 5000:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Укажите причину жалобы до 5000 символов"
+        )
+    complaint = Complaint(lecture_id=lecture_id, reason=reason)
+    session.add(complaint)
+    await session.commit()
+    logger.warning(
+        "Новая жалоба: complaint_id=%s lecture_id=%s owner_id=%s",
+        complaint.id,
+        lecture_id,
+        share.owner_id,
+    )
