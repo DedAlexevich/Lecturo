@@ -26,7 +26,6 @@ if ! flock -n 9; then
   echo "deploy in progress, skipping"
   exit 0
 fi
-flock -u 9
 
 state_dir=${STATE_DIRECTORY:-${XDG_STATE_HOME:-$HOME/.local/state}/lecturo}
 mkdir -p "$state_dir"
