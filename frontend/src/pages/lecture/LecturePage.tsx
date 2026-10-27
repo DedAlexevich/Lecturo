@@ -164,6 +164,7 @@ export function LecturePage() {
   const retry = useRetryProcessing(id);
   const [tab, setTab] = useState<PanelKind>("summary");
   const [searching, setSearching] = useState(false);
+  const [errorDismissed, setErrorDismissed] = useState(false);
   const { currentTime, seek, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
@@ -193,8 +194,8 @@ export function LecturePage() {
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
-  const regenerationError =
-    data.status === "ready" ? (data.steps.find((step) => step.step === "summarize" && step.status === "failed")?.error ?? null) : null;
+  const failedSummarize = data.steps.find((step) => step.step === "summarize" && step.status === "failed");
+  const regenerationError = data.status === "ready" && !errorDismissed ? (failedSummarize?.error ?? null) : null;
   const tabs = (
     <Tabs
       label="Материалы лекции"
@@ -270,7 +271,10 @@ export function LecturePage() {
       </header>
       {regenerationError !== null && (
         <p className="processing__error" role="alert">
-          Не удалось пересоздать главы и конспект, остались прежние. {regenerationError}
+          Не удалось пересоздать главы и конспект, остались прежние. {regenerationError}{" "}
+          <Button variant="ghost" size="sm" onClick={() => setErrorDismissed(true)}>
+            Скрыть
+          </Button>
         </p>
       )}
       {showProcessing && (
