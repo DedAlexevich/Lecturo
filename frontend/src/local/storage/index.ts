@@ -1,4 +1,4 @@
-export { deleteLocalLecture, getLocalLecture, listLocalLectures, markLocalLectureSynced, saveLocalLecture, toLocalResultPayload } from "./lectures";
+export { deleteLocalLecture, getLocalLecture, listLocalLectures, markLocalLectureSynced, saveLocalLecture, toLocalResultPayload, updateLocalNotes } from "./lectures";
 export type {
   LocalChapter,
   LocalLecture,

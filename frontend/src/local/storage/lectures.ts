@@ -77,3 +77,15 @@ export async function markLocalLectureSynced(id: string, userId: string, lecture
   };
   await transactionDone(transaction);
 }
+
+export async function updateLocalNotes(id: string, chapters: LocalLecture["chapters"], summaryMd: string): Promise<LocalLecture> {
+  const db = await openDb();
+  const transaction = db.transaction(LECTURES_STORE, "readwrite");
+  const store = transaction.objectStore(LECTURES_STORE);
+  const lecture = await requestResult<LocalLecture | undefined>(store.get(id));
+  if (!lecture) throw new Error("Запись не найдена в хранилище");
+  const updated = { ...lecture, chapters, summaryMd };
+  store.put(updated);
+  await transactionDone(transaction);
+  return updated;
+}

@@ -5,9 +5,12 @@ import { useToken } from "../../app/session";
 import { extractAudio } from "../../local/audio";
 import { pickedFileOf } from "../../local/pickedFiles";
 import { disposeWhisper, transcribe } from "../../local/whisper";
-import { saveLocalLecture } from "../../local/storage";
+import { generateNotes, supportsWebGPU } from "../../local/llm";
+import { saveLocalLecture, updateLocalNotes } from "../../local/storage";
 import type { LocalLecture } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
+import { Markdown } from "../legal/markdown";
+import { Chapters } from "../lecture/Chapters";
 import { Transcript } from "../lecture/Transcript";
 import { fetchLecture, lectureQueryKey } from "../lecture/useLecture";
 import { Button } from "../../ui/Button";
@@ -60,10 +63,20 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [saved, setSaved] = useState<LocalLecture | null>(null);
   const [saveError, setSaveError] = useState(false);
+  const [webgpu, setWebgpu] = useState(false);
+  const [notesProgress, setNotesProgress] = useState<{ type: "loading" | "generating"; value: number } | null>(null);
+  const [notesError, setNotesError] = useState("");
   const [libraryVersion, setLibraryVersion] = useState(0);
   const player = useRef<HTMLMediaElement | null>(null);
   const controller = useRef<AbortController | null>(null);
-  const busy = stage === "extracting" || stage === "loading" || stage === "transcribing";
+  const transcriptionBusy = stage === "extracting" || stage === "loading" || stage === "transcribing";
+  const busy = transcriptionBusy || notesProgress !== null;
+
+  useEffect(() => {
+    let active = true;
+    void supportsWebGPU().then((supported) => { if (active) setWebgpu(supported); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!file) return;
@@ -120,10 +133,32 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     }
   }
 
+  async function makeNotes() {
+    if (!saved || busy) return;
+    const abort = new AbortController();
+    controller.current = abort;
+    setNotesError("");
+    setNotesProgress({ type: "loading", value: 0 });
+    try {
+      const result = await generateNotes(saved.segments, setNotesProgress, abort.signal);
+      const updated = await updateLocalNotes(saved.id, result.chapters, result.summaryMd);
+      if (abort.signal.aborted) return;
+      setSaved(updated);
+      setLibraryVersion((value) => value + 1);
+    } catch (reason) {
+      if (!abort.signal.aborted) setNotesError(reason instanceof Error ? reason.message : "Не удалось построить конспект");
+    } finally {
+      if (controller.current === abort) controller.current = null;
+      if (!abort.signal.aborted) setNotesProgress(null);
+    }
+  }
+
   function cancel() {
     controller.current?.abort();
     controller.current = null;
     disposeWhisper();
+    setNotesProgress(null);
+    if (notesProgress) return;
     setStage("idle");
     setProgress(undefined);
   }
@@ -134,6 +169,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setSegments([]);
     setSaved(null);
     setSaveError(false);
+    setNotesError("");
     setError("");
     setCurrentTime(0);
   }
@@ -144,6 +180,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setUrl("");
     setSaved(lecture);
     setSaveError(false);
+    setNotesError("");
     setSegments(lecture.segments);
     setError("");
     setCurrentTime(0);
@@ -226,9 +263,9 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           <p className="local-note">{selectedModel.label}: {selectedModel.size}. При первом запуске модель загружается из интернета и сохраняется в браузере. Для повторной обработки интернет не нужен, пока данные браузера не удалены.</p>
           <div className="local-actions">
             <Button disabled={!file || busy} onClick={() => void start()}>Распознать</Button>
-            {busy && <Button variant="secondary" onClick={cancel}>Отменить</Button>}
+            {transcriptionBusy && <Button variant="secondary" onClick={cancel}>Отменить</Button>}
           </div>
-          {busy && <div className="local-status" aria-live="polite"><Progress label={stageLabel} value={progress} /></div>}
+          {transcriptionBusy && <div className="local-status" aria-live="polite"><Progress label={stageLabel} value={progress} /></div>}
           {stage === "error" && <p className="local-error" role="alert">Не удалось обработать запись: {error}</p>}
         </section>
         <section className="local-result" aria-labelledby="local-result-title">
@@ -241,6 +278,15 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {stage === "done" && segments.length > 0 ? (
             <Transcript segments={segments} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
           ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
+          {stage === "done" && saved && segments.length > 0 && webgpu && <div className="local-actions">
+            <Button disabled={busy} onClick={() => void makeNotes()}>{saved.summaryMd ? "Обновить конспект и главы" : "Создать конспект и главы"}</Button>
+            {notesProgress && <Button variant="secondary" onClick={cancel}>Отменить</Button>}
+          </div>}
+          {stage === "done" && saved && segments.length > 0 && webgpu && !saved.summaryMd && <p className="local-note">При первом запуске модель конспекта загружается из интернета. Для работы ей требуется около 2 ГБ видеопамяти. Текст обрабатывается на устройстве.</p>}
+          {notesProgress && <Progress label={notesProgress.type === "loading" ? "Загрузка модели конспекта" : "Создание конспекта"} value={notesProgress.value * 100} />}
+          {notesError && <p className="local-error" role="alert">Не удалось создать конспект: {notesError}</p>}
+          {saved?.summaryMd && <section><h2>Конспект</h2><div className="summary"><Markdown source={saved.summaryMd} /></div></section>}
+          {saved && saved.chapters.length > 0 && <section><h2>Главы</h2><Chapters chapters={saved.chapters} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} /></section>}
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
           {stage === "done" && saved && <SaveToAccount key={saved.id} lecture={saved} />}
           {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
@@ -250,7 +296,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
           {stage === "done" && saveError && <p className="local-error" role="alert">Не удалось сохранить результат в браузере. Он доступен только до закрытия страницы.</p>}
         </section>
       </div>
-      <LocalLibrary version={libraryVersion} activeId={saved?.id} onOpen={openSaved} onRemoved={removed} />
+      <LocalLibrary disabled={busy} version={libraryVersion} activeId={saved?.id} onOpen={openSaved} onRemoved={removed} />
     </div>
   );
 }

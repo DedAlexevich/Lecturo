@@ -15,13 +15,14 @@ const formats: { id: ExportFormat; label: string }[] = [
 const dateFormat = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 
 type LocalLibraryProps = {
+  disabled: boolean;
   version: number;
   activeId?: string;
   onOpen: (lecture: LocalLecture) => void;
   onRemoved: (id: string) => void;
 };
 
-export function LocalLibrary({ version, activeId, onOpen, onRemoved }: LocalLibraryProps) {
+export function LocalLibrary({ disabled, version, activeId, onOpen, onRemoved }: LocalLibraryProps) {
   const [items, setItems] = useState<LocalLectureSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -74,11 +75,11 @@ export function LocalLibrary({ version, activeId, onOpen, onRemoved }: LocalLibr
               <span>{dateFormat.format(item.createdAt)} · {formatTimecode(item.durationSec)}</span>
             </div>
             <div className="local-library__actions">
-              <Button size="sm" variant="secondary" onClick={() => void withLecture(item.id, onOpen)}>Открыть</Button>
+              <Button disabled={disabled} size="sm" variant="secondary" onClick={() => void withLecture(item.id, onOpen)}>Открыть</Button>
               {formats.map((format) => (
-                <Button key={format.id} size="sm" variant="ghost" aria-label={`Скачать «${item.title}» в формате ${format.label}`} onClick={() => void withLecture(item.id, (lecture) => downloadLecture(lecture, format.id))}>{format.label}</Button>
+                <Button key={format.id} disabled={disabled} size="sm" variant="ghost" aria-label={`Скачать «${item.title}» в формате ${format.label}`} onClick={() => void withLecture(item.id, (lecture) => downloadLecture(lecture, format.id))}>{format.label}</Button>
               ))}
-              <Button size="sm" variant="ghost" aria-label={`Удалить «${item.title}»`} onClick={() => void remove(item)}>Удалить</Button>
+              <Button disabled={disabled} size="sm" variant="ghost" aria-label={`Удалить «${item.title}»`} onClick={() => void remove(item)}>Удалить</Button>
             </div>
           </li>
         ))}
