@@ -13,11 +13,11 @@ from app.services.pdf import format_timecode, lecture_html, render_pdf, render_p
 
 
 def pdf_objects(content: bytes) -> bytes:
-    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", content, re.S)
+    streams = re.findall(rb"stream\r?\n(.*?)\nendstream", content, re.S)
     inflated = []
     for stream in streams:
         try:
-            inflated.append(zlib.decompress(stream))
+            inflated.append(zlib.decompressobj().decompress(stream))
         except zlib.error:
             continue
     return content + b"".join(inflated)
