@@ -117,7 +117,10 @@ export function RegisterPage() {
               name="password_repeat"
               autoComplete="new-password"
               value={repeat}
-              onChange={(event) => setRepeat(event.target.value)}
+              onChange={(event) => {
+                setRepeat(event.target.value);
+                setErrors((current) => ({ ...current, password_repeat: undefined }));
+              }}
             />
           )}
         </Field>

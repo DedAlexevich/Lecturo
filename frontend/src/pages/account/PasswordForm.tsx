@@ -68,6 +68,7 @@ export function PasswordForm() {
             onChange={(event) => {
               setNext(event.target.value);
               setNextError(undefined);
+              setRepeatError(undefined);
               change.reset();
             }}
           />
