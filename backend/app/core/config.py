@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     storage_dir: Path = Path("/data/storage")
 
+    log_dir: Path | None = None
+    log_service: str = "app"
+    log_max_mb: int = 10
+    log_backup_count: int = 5
+
     stt_provider: str = "stub"
     yandex_speechkit_api_key: str = ""
     yandex_folder_id: str = ""

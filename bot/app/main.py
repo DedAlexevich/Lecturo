@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 
 from app.config import load_settings
 from app.handlers import build_router
+from app.logs import configure_logging
 from app.notifications import delivery_loop, listen_events, quota_loop
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ async def run() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    configure_logging()
     asyncio.run(run())
 
 

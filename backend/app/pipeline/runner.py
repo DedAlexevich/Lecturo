@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Lecture, LectureStatus, ProcessingStep, StepName, StepStatus
 from app.pipeline.events import publish_status
 from app.services.quota import QuotaExceeded
+
+logger = logging.getLogger(__name__)
 
 Report = Callable[[float], Awaitable[None]]
 StepHandler = Callable[[AsyncSession, Lecture, Report], Awaitable[None]]
@@ -70,6 +73,7 @@ async def run_step(
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
             raise
+        logger.error("Шаг %s лекции %s завершился ошибкой", name.value, lecture.id, exc_info=error)
         step.status = StepStatus.failed
         step.error = str(error) or type(error).__name__
         step.finished_at = datetime.now(UTC)
