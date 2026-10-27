@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ApiError } from "../../app/queryClient";
-import { useExamSheet } from "../../features/exam-sheet/queries";
+import { useAiTransferConsent } from "../../features/consent/useAiTransferConsent";
+import { createErrorText, useCreateExamSheet, useExamSheet } from "../../features/exam-sheet/queries";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
@@ -49,6 +50,8 @@ export function CoursePage() {
   const course = useCourse(id);
   const lectures = useLectures(id);
   const examSheet = useExamSheet(id);
+  const rebuildSheet = useCreateExamSheet(id);
+  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
   const rename = useUpdateCourse(id);
   const remove = useDeleteCourse(id);
   const addLectures = useAddLectures(id);
@@ -103,11 +106,31 @@ export function CoursePage() {
             <h1 className="course__title">{data.title}</h1>
             {data.description && <p className="course__description">{data.description}</p>}
             <p className="course__summary">{lecturesCount(items?.length ?? data.lecture_count)}</p>
-            {examSheet.data?.outdated && !examSheet.data.processing && (
-              <p className="course__note">
-                Состав курса изменился, памятка к экзамену собрана по прежнему списку лекций.{" "}
-                <Link to={`/courses/${data.id}/exam-sheet`}>Обновить памятку</Link>
+            {examSheet.data?.processing ? (
+              <p className="course__note course__note--quiet" role="status">
+                Обновляем памятку к экзамену.{" "}
+                <Link to={`/courses/${data.id}/exam-sheet`}>Открыть памятку</Link>
               </p>
+            ) : (
+              examSheet.data?.outdated && (
+                <p className="course__note">
+                  Состав курса изменился, памятка к экзамену собрана по прежнему списку лекций.{" "}
+                  <button
+                    type="button"
+                    className="course__note-action"
+                    disabled={rebuildSheet.isPending}
+                    onClick={() =>
+                      requireConsent(() =>
+                        rebuildSheet.mutate(undefined, {
+                          onError: (error) => toast.show(createErrorText(error), "error"),
+                        }),
+                      )
+                    }
+                  >
+                    {rebuildSheet.isPending ? "Запускаем" : "Обновить памятку"}
+                  </button>
+                </p>
+              )
             )}
           </div>
           <div className="course__actions">
@@ -237,6 +260,7 @@ export function CoursePage() {
           )}
         </Dialog>
       )}
+      {consentDialog}
     </div>
   );
 }

@@ -10,20 +10,10 @@ import { useAiTransferConsent } from "../consent/useAiTransferConsent";
 import { Cheatsheet, DefinitionList, TicketList } from "./ExamSheetContent";
 import { ExamSheetPrint } from "./ExamSheetPrint";
 import { definitionsCount, ticketsCount } from "./format";
-import { definitionsOf, errorCode, errorMessage, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
+import { createErrorText, definitionsOf, errorCode, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
 import "./exam-sheet.css";
 
 const sheetStates = ["subscription_required", "exam_sheet_processing", "exam_sheet_not_found"];
-
-function createErrorText(error: Error | null) {
-  const code = errorCode(error);
-  if (code === "no_summaries") {
-    return "В курсе пока нет лекций с готовым конспектом. Памятку можно собрать, когда обработается хотя бы одна лекция.";
-  }
-  if (code === "subscription_required") return "Памятка доступна только с подпиской.";
-  if (error instanceof ApiError && error.status === 503) return "Очередь сейчас недоступна. Попробуйте через пару минут.";
-  return errorMessage(error) ?? "Не получилось запустить сборку памятки. Попробуйте ещё раз.";
-}
 
 function SheetSkeleton() {
   return (

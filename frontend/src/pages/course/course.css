@@ -54,9 +54,28 @@
   font-size: var(--text-sm);
 }
 
-.course__note a {
+.course__note--quiet {
+  color: var(--color-text-muted);
+}
+
+.course__note a,
+.course__note-action {
   color: inherit;
   font-weight: 600;
+}
+
+.course__note-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.course__note-action:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .course__actions {
