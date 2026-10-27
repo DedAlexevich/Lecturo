@@ -3,6 +3,7 @@ import { Link, useLocation, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
+import { SearchPanel } from "../../features/search/SearchPanel";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
@@ -69,6 +70,7 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
 }
 
 type PanelKind = "summary" | "chapters" | "transcript";
+type TabId = PanelKind | "search";
 
 const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: string }> = {
   summary: {
@@ -159,7 +161,7 @@ export function LecturePage() {
   const lecture = useLecture(id);
   const status = useLectureStatus(id, lecture.data);
   const retry = useRetryProcessing(id);
-  const [tab, setTab] = useState<PanelKind>("summary");
+  const [tab, setTab] = useState<TabId>("summary");
   const { currentTime, seek, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
@@ -189,7 +191,7 @@ export function LecturePage() {
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
-  const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0 };
+  const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0, search: true };
 
   return (
     <div className="lecture">
@@ -243,7 +245,7 @@ export function LecturePage() {
           <Tabs
             label="Материалы лекции"
             value={tab}
-            onChange={(next) => setTab(next as PanelKind)}
+            onChange={(next) => setTab(next as TabId)}
             items={[
               {
                 id: "summary",
@@ -285,6 +287,11 @@ export function LecturePage() {
                   ) : (
                     <PanelEmpty kind="transcript" status={data.status} />
                   ),
+              },
+              {
+                id: "search",
+                label: "Поиск",
+                panel: <SearchPanel scope={{ lectureId: data.id }} />,
               },
             ]}
           />
