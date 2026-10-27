@@ -138,7 +138,9 @@ async def send_email_notices(session: AsyncSession) -> int:
             try:
                 await deliver_mail(email, notice.subject, notice.text)
             except Exception:
-                logger.exception("Не удалось отправить уведомление о новой редакции для %s", email)
+                logger.exception(
+                    "Не удалось отправить уведомление о новой редакции для %s", notice.user_id
+                )
                 notice.attempts += 1
                 continue
             notice.sent_at = func.now()

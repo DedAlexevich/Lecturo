@@ -185,6 +185,19 @@ async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
     assert (await client.get("/api/v1/legal/updates")).json() == []
 
 
+async def test_failed_email_is_logged_without_address(people, monkeypatch, caplog):
+    async def broken(to: str, subject: str, body: str) -> None:
+        raise OSError("smtp down")
+
+    monkeypatch.setattr(legal_notices, "deliver_mail", broken)
+    with caplog.at_level("ERROR", logger="app.services.legal_notices"):
+        async with SessionLocal() as session:
+            await legal_notices.announce_revisions(session, BEFORE)
+            await legal_notices.send_email_notices(session)
+    assert str(people["previous"].id) in caplog.text
+    assert people["previous"].email not in caplog.text
+
+
 async def test_failed_email_is_retried_later_and_limited(people, monkeypatch):
     attempts: list[str] = []
 

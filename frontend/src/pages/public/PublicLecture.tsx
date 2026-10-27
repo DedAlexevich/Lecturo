@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
 import { Button } from "../../ui/Button";
@@ -12,7 +12,10 @@ import { formatDuration } from "../lecture/time";
 import { Transcript } from "../lecture/Transcript";
 import { localNotes } from "../lecture/localNotes";
 import { SummaryMarkdown } from "../lecture/SummaryMarkdown";
+import { ExportButtons, type ExportFormat } from "../lecture/ExportActions";
 import { ComplaintDialog } from "./ComplaintDialog";
+import { requestPublicLink } from "./copyRequests";
+import { SaveCopyButton } from "./SaveCopyButton";
 import { LocalBadge } from "./LocalBadge";
 import "../lecture/lecture.css";
 
@@ -43,6 +46,17 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
   const embed = lecture.video_url ? null : resolveEmbed(lecture.embed_url);
   const hasPlayer = lecture.video_url !== null || embed !== null;
   const tabHasContent = { summary: summary !== "", chapters: chapters.length > 0, transcript: segments.length > 0 };
+  const exportFormats: ExportFormat[] = [
+    ...(summary !== "" || chapters.length > 0 ? (["pdf"] as const) : []),
+    ...(summary !== "" ? (["md"] as const) : []),
+    ...(segments.length > 0 ? (["srt", "vtt"] as const) : []),
+  ];
+  const requestLink = useCallback((format: ExportFormat) => requestPublicLink(token, lecture.id, format), [token, lecture.id]);
+  const copyNote = lecture.video_url
+    ? "Видео загруженного файла не копируется: у вас останутся конспект, главы и расшифровка."
+    : embed
+      ? "Ссылка на видео сохранится вместе с лекцией."
+      : "Сохранятся конспект, главы и расшифровка.";
   const note = (kind: PanelKind) => (
     <p className="lecture__panel-note">{lecture.processed_locally ? localNotes[kind] : emptyNotes[kind]}</p>
   );
@@ -65,6 +79,10 @@ export function PublicLecture({ token, lecture, courseLink, refreshVideo }: Publ
           {lecture.duration_sec !== null && <span>{formatDuration(lecture.duration_sec)}</span>}
           <span>Только чтение</span>
           {lecture.processed_locally && <LocalBadge />}
+        </div>
+        <div className="public__actions">
+          <SaveCopyButton token={token} lectureId={lecture.id} note={copyNote} />
+          <ExportButtons request={requestLink} available={exportFormats} />
         </div>
       </header>
       <div className="lecture__body">
