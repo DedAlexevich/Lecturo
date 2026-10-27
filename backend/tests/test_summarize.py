@@ -338,6 +338,7 @@ def test_parse_json_finds_object_in_answer(content):
         r"\nabla f",
         r"\left( x \right)",
         r"\beta \rho \underline{x}",
+        r"\begin{pmatrix} 1 \end{pmatrix} \neq \textbf{v} \to \forall",
     ],
 )
 def test_parse_json_keeps_latex_commands(formula):
@@ -350,6 +351,16 @@ def test_parse_json_keeps_escaped_latex_and_json_escapes():
     content = r'{"summary": "$\\frac{1}{2}$\nПредел\n\nThe end\t\u00e9"}'
 
     assert summarize.parse_json(content) == {"summary": "$\\frac{1}{2}$\nПредел\n\nThe end\t\u00e9"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [r"\nfor x in xs", r"\r\nsome text", r"\tif", r"\nthe end", r"\bold", r"\frame"],
+)
+def test_parse_json_keeps_json_escapes_before_lowercase_words(text):
+    content = '{"summary": "' + text + '"}'
+
+    assert summarize.parse_json(content) == json.loads(content)
 
 
 @pytest.mark.parametrize("content", ["", "нет JSON", "[1, 2]", "} {"])

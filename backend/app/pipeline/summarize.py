@@ -31,7 +31,105 @@ MAP_ATTEMPTS = 2
 REDUCE_ATTEMPTS = 2
 RAW_PART_CHAR_LIMIT = 6000
 DIGEST_CACHE_TTL_SECONDS = 3 * 24 * 3600
-LATEX_BACKSLASH = re.compile(r"\\\\|\\(?!u[0-9a-fA-F]{4})(?![nrt][A-Z])(?=[A-Za-z]{2})")
+LATEX_BACKSLASH = re.compile(r"\\\\|\\(?=([A-Za-z]{2,}))")
+JSON_ESCAPE_LETTERS = "bfnrtu"
+LATEX_COMMANDS_LIKE_ESCAPES = frozenset(
+    {
+        "backslash",
+        "bar",
+        "bcancel",
+        "because",
+        "begin",
+        "beta",
+        "big",
+        "bigcap",
+        "bigcup",
+        "bigg",
+        "biggl",
+        "biggr",
+        "bigl",
+        "bigoplus",
+        "bigotimes",
+        "bigr",
+        "bigwedge",
+        "bigvee",
+        "binom",
+        "bm",
+        "bmatrix",
+        "bmod",
+        "boldsymbol",
+        "bot",
+        "bowtie",
+        "boxed",
+        "bullet",
+        "fbox",
+        "flat",
+        "forall",
+        "frac",
+        "frak",
+        "frown",
+        "nabla",
+        "natural",
+        "ne",
+        "nearrow",
+        "neg",
+        "neq",
+        "newline",
+        "nexists",
+        "ngeq",
+        "ni",
+        "nleq",
+        "nmid",
+        "not",
+        "notin",
+        "nparallel",
+        "nsubseteq",
+        "nu",
+        "nwarrow",
+        "rangle",
+        "rbrace",
+        "rbrack",
+        "rceil",
+        "rfloor",
+        "rho",
+        "right",
+        "rightarrow",
+        "rightharpoonup",
+        "rightleftharpoons",
+        "rm",
+        "rvert",
+        "rVert",
+        "tan",
+        "tanh",
+        "tau",
+        "tbinom",
+        "text",
+        "textbf",
+        "textit",
+        "textrm",
+        "texttt",
+        "tfrac",
+        "therefore",
+        "theta",
+        "thinspace",
+        "tilde",
+        "times",
+        "to",
+        "top",
+        "triangle",
+        "triangleleft",
+        "triangleq",
+        "triangleright",
+        "underbrace",
+        "underline",
+        "underset",
+        "uparrow",
+        "updownarrow",
+        "upharpoonright",
+        "uplus",
+        "upsilon",
+    }
+)
 
 logger = logging.getLogger(__name__)
 
@@ -136,8 +234,17 @@ def format_part(part: list[TranscriptSegment]) -> str:
     return "\n".join(f"[{int(segment.start)}] {segment.text}" for segment in part)
 
 
+def double_latex_backslash(match: re.Match[str]) -> str:
+    word = match.group(1)
+    if word is None:
+        return match.group()
+    if word[0] in JSON_ESCAPE_LETTERS and word not in LATEX_COMMANDS_LIKE_ESCAPES:
+        return match.group()
+    return "\\\\"
+
+
 def escape_latex(text: str) -> str:
-    return LATEX_BACKSLASH.sub(r"\\\\", text)
+    return LATEX_BACKSLASH.sub(double_latex_backslash, text)
 
 
 def parse_json(content: str) -> dict[str, Any]:
@@ -210,7 +317,7 @@ async def request_digest(
 
 def raw_digest(part: list[TranscriptSegment]) -> PartDigest:
     logger.warning(
-        "Содержание части %s–%s с не получено после %s попыток, взят текст расшифровки",
+        "Содержание части %s–%s (с) не получено после %s попыток, взят текст расшифровки",
         int(part[0].start),
         int(part[-1].end),
         MAP_ATTEMPTS,
@@ -246,7 +353,7 @@ class DigestCache:
     async def get(self, field: str) -> PartDigest | None:
         try:
             return load_digest(await self.redis.hget(self.key, field))
-        except (OSError, RedisError):
+        except (OSError, RedisError, ValueError, KeyError, TypeError):
             logger.warning("Не удалось прочитать содержание части из кеша", exc_info=True)
             return None
 
@@ -453,26 +560,27 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
     try:
         digests = await digest_parts(llm, parts, short, cache, report)
         data = await reduce_parts(llm, lecture.title, duration, plan, digests)
+        chapters = split_oversized(
+            build_chapters(data.get("chapters"), segments, digests), segments, digests, plan
+        )
+        content = str(data.get("summary_md") or "").strip() or "\n\n".join(
+            f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters
+        )
+
+        await clear_previous(session, lecture)
+        session.add(Summary(lecture_id=lecture.id, content_md=content))
+        session.add_all(
+            Chapter(
+                lecture_id=lecture.id,
+                idx=idx,
+                start=chapter.start,
+                end=chapter.end,
+                title=chapter.title,
+                summary=chapter.summary,
+            )
+            for idx, chapter in enumerate(chapters)
+        )
+        await session.flush()
         await cache.clear()
     finally:
         await cache.close()
-    chapters = split_oversized(
-        build_chapters(data.get("chapters"), segments, digests), segments, digests, plan
-    )
-    content = str(data.get("summary_md") or "").strip() or "\n\n".join(
-        f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters
-    )
-
-    await clear_previous(session, lecture)
-    session.add(Summary(lecture_id=lecture.id, content_md=content))
-    session.add_all(
-        Chapter(
-            lecture_id=lecture.id,
-            idx=idx,
-            start=chapter.start,
-            end=chapter.end,
-            title=chapter.title,
-            summary=chapter.summary,
-        )
-        for idx, chapter in enumerate(chapters)
-    )
