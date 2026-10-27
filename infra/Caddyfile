@@ -1,6 +1,14 @@
+{
+	log {
+		format console
+	}
+}
+
 {$SITE_ADDRESS}
 
 encode gzip
+
+log
 
 @tusd_hooks path /api/v1/uploads/hooks /api/v1/uploads/hooks/*
 handle @tusd_hooks {

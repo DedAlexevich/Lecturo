@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -13,12 +19,14 @@ services:
       test: ["CMD-SHELL", "pg_isready -U lecturo"]
       interval: 5s
       retries: 10
+    logging: *default-logging
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    logging: *default-logging
     restart: unless-stopped
 
   bot-redis:
@@ -26,6 +34,7 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
     volumes:
       - ${DATA_DIR:-./data}/bot-redis:/data
+    logging: *default-logging
     restart: unless-stopped
 
   api:
@@ -36,8 +45,11 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
       REDIS_URL: redis://redis:6379/0
+      LOG_DIR: /var/log/lecturo
+      LOG_SERVICE: api
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 5s
@@ -47,6 +59,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    logging: *default-logging
     restart: unless-stopped
 
   worker:
@@ -58,15 +71,23 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
       REDIS_URL: redis://redis:6379/0
+      LOG_DIR: /var/log/lecturo
+      LOG_SERVICE: worker
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
     depends_on:
       - api
+    logging: *default-logging
     restart: unless-stopped
 
   tusd:
     image: tusproject/tusd:v2.6.0
     user: "0:0"
+    entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/tusd.log", "tusd"]
+    environment:
+      LOG_MAX_MB: ${LOG_MAX_MB:-10}
+      LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
     command:
       - -upload-dir=/data/storage/uploads
       - -base-path=/files/
@@ -77,6 +98,9 @@ services:
       - -hooks-http-forward-headers=Authorization
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
+      - ./infra/log-to-file.sh:/log-to-file.sh:ro
+    logging: *default-logging
     restart: unless-stopped
 
   bot:
@@ -88,9 +112,14 @@ services:
       DATABASE_URL: postgresql://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
       REDIS_URL: redis://redis:6379/0
       BOT_REDIS_URL: redis://bot-redis:6379/0
+      LOG_DIR: /var/log/lecturo
+      LOG_SERVICE: bot
+    volumes:
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
     depends_on:
       db:
         condition: service_healthy
+    logging: *default-logging
     restart: unless-stopped
 
   frontend:
@@ -98,12 +127,17 @@ services:
       context: ./frontend
       args:
         VITE_TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+    logging: *default-logging
     restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
+    entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/caddy.log", "caddy"]
+    command: ["run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      LOG_MAX_MB: ${LOG_MAX_MB:-10}
+      LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -111,6 +145,8 @@ services:
       - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR:-./data}/storage:/srv/storage:ro
       - ${DATA_DIR:-./data}/caddy:/data
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
+      - ./infra/log-to-file.sh:/log-to-file.sh:ro
     depends_on:
       api:
         condition: service_healthy
@@ -118,4 +154,5 @@ services:
         condition: service_started
       tusd:
         condition: service_started
+    logging: *default-logging
     restart: unless-stopped
