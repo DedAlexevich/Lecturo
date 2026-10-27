@@ -1,4 +1,5 @@
 import json
+import math
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -14,6 +15,10 @@ from app.providers import LLM, get_llm
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 PART_SECONDS = 15 * 60.0
+SHORT_LECTURE_SECONDS = 20 * 60.0
+SHORT_PART_SECONDS = 3 * 60.0
+SHORT_CHAPTER_MAX_SECONDS = 5 * 60.0
+CHAPTERS_REQUIRED_FROM_SECONDS = 3 * 60.0
 TITLE_MAX_LENGTH = 300
 MAP_ATTEMPTS = 2
 
@@ -40,9 +45,60 @@ class ChapterDraft:
     summary: str
 
 
+@dataclass(frozen=True)
+class ChapterPlan:
+    min_count: int
+    max_count: int
+    max_seconds: float | None
+    length_hint: str
+
+
 @cache
 def load_prompt(name: str) -> str:
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+
+
+def render_prompt(name: str, **params: Any) -> str:
+    text = load_prompt(name)
+    for key, value in params.items():
+        text = text.replace("{{" + key + "}}", str(value))
+    return text
+
+
+def format_duration(seconds: float) -> str:
+    total = max(int(round(seconds)), 0)
+    minutes, rest = divmod(total, 60)
+    if minutes and rest:
+        return f"{minutes} мин {rest} с"
+    if minutes:
+        return f"{minutes} мин"
+    return f"{rest} с"
+
+
+def part_seconds_for(duration: float) -> float:
+    return SHORT_PART_SECONDS if duration <= SHORT_LECTURE_SECONDS else PART_SECONDS
+
+
+def topic_range(part_duration: float, short: bool) -> tuple[int, int]:
+    fastest, slowest = (60.0, 150.0) if short else (180.0, 450.0)
+    return max(1, math.ceil(part_duration / slowest)), max(1, math.ceil(part_duration / fastest))
+
+
+def plan_chapters(duration: float) -> ChapterPlan:
+    if duration <= SHORT_LECTURE_SECONDS:
+        if duration <= CHAPTERS_REQUIRED_FROM_SECONDS:
+            return ChapterPlan(1, max(1, math.ceil(duration / 60)), None, "не длиннее 5 минут")
+        min_count = max(3, math.ceil(duration / SHORT_CHAPTER_MAX_SECONDS))
+        max_count = max(min_count + 1, math.ceil(duration / 120))
+        return ChapterPlan(
+            min_count,
+            max_count,
+            SHORT_CHAPTER_MAX_SECONDS,
+            "в среднем 2–3 минуты, не длиннее 5 минут",
+        )
+    min_count = max(4, math.ceil(duration / 900))
+    max_count = max(min_count + 1, math.ceil(duration / 300))
+    return ChapterPlan(min_count, max_count, None, "обычно 5–15 минут")
 
 
 def split_into_parts(
@@ -97,13 +153,23 @@ def parse_topics(items: Any) -> list[Topic]:
     return topics
 
 
-async def digest_part(llm: LLM, part: list[TranscriptSegment]) -> PartDigest:
+def map_prompt(part: list[TranscriptSegment], short: bool) -> str:
+    duration = part[-1].end - part[0].start
+    min_topics, max_topics = topic_range(duration, short)
+    return render_prompt(
+        "map",
+        duration=format_duration(duration),
+        min_topics=min_topics,
+        max_topics=max_topics,
+    )
+
+
+async def digest_part(llm: LLM, part: list[TranscriptSegment], short: bool = False) -> PartDigest:
     data: dict[str, Any] = {}
+    system = map_prompt(part, short)
     for _ in range(MAP_ATTEMPTS):
         try:
-            data = parse_json(
-                await llm.complete(load_prompt("map"), format_part(part), json_mode=True)
-            )
+            data = parse_json(await llm.complete(system, format_part(part), json_mode=True))
         except ValueError:
             continue
         break
@@ -112,6 +178,16 @@ async def digest_part(llm: LLM, part: list[TranscriptSegment]) -> PartDigest:
         end=part[-1].end,
         summary=str(data.get("summary") or "").strip(),
         topics=parse_topics(data.get("topics")),
+    )
+
+
+def reduce_prompt(duration: float, plan: ChapterPlan) -> str:
+    return render_prompt(
+        "reduce",
+        duration=format_duration(duration),
+        min_chapters=plan.min_count,
+        max_chapters=plan.max_count,
+        length_hint=plan.length_hint,
     )
 
 
@@ -161,6 +237,62 @@ def build_chapters(
     ]
 
 
+def split_point(chapter: ChapterDraft, segment_starts: list[float]) -> float | None:
+    inside = [start for start in segment_starts if chapter.start < start < chapter.end]
+    if not inside:
+        return None
+    middle = (chapter.start + chapter.end) / 2
+    return min(inside, key=lambda start: abs(start - middle))
+
+
+def continuation_title(
+    chapter: ChapterDraft, point: float, digests: list[PartDigest], used: set[str]
+) -> str:
+    topics = [
+        topic
+        for digest in digests
+        for topic in digest.topics
+        if chapter.start < topic.start < chapter.end and topic.title[:TITLE_MAX_LENGTH] not in used
+    ]
+    if topics:
+        return min(topics, key=lambda topic: abs(topic.start - point)).title[:TITLE_MAX_LENGTH]
+    return f"{chapter.title} (продолжение)"[:TITLE_MAX_LENGTH]
+
+
+def split_oversized(
+    chapters: list[ChapterDraft],
+    segments: list[TranscriptSegment],
+    digests: list[PartDigest],
+    plan: ChapterPlan,
+) -> list[ChapterDraft]:
+    segment_starts = [segment.start for segment in segments]
+    result = list(chapters)
+    unsplittable: set[int] = set()
+    while True:
+        candidates = [
+            (chapter.end - chapter.start, index)
+            for index, chapter in enumerate(result)
+            if index not in unsplittable
+        ]
+        if not candidates:
+            return result
+        length, index = max(candidates)
+        too_long = plan.max_seconds is not None and length > plan.max_seconds
+        if not too_long and len(result) >= plan.min_count:
+            return result
+        chapter = result[index]
+        point = split_point(chapter, segment_starts)
+        if point is None:
+            unsplittable.add(index)
+            continue
+        title = continuation_title(chapter, point, digests, {c.title for c in result})
+        result[index : index + 1] = [
+            ChapterDraft(chapter.title, chapter.start, point, chapter.summary),
+            ChapterDraft(title, point, chapter.end, ""),
+        ]
+        unsplittable = {i if i < index else i + 1 for i in unsplittable}
+
+
 def fallback_title(digest: PartDigest, number: int) -> str:
     return (digest.topics[0].title if digest.topics else f"Часть {number}")[:TITLE_MAX_LENGTH]
 
@@ -179,18 +311,25 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
         return
 
     llm = get_llm()
-    parts = split_into_parts(segments)
+    duration = segments[-1].end
+    plan = plan_chapters(duration)
+    short = duration <= SHORT_LECTURE_SECONDS
+    parts = split_into_parts(segments, part_seconds_for(duration))
     digests = []
     for done, part in enumerate(parts, start=1):
-        digests.append(await digest_part(llm, part))
+        digests.append(await digest_part(llm, part, short))
         await report(done / (len(parts) + 1))
 
     data = parse_json(
         await llm.complete(
-            load_prompt("reduce"), reduce_request(lecture.title, digests), json_mode=True
+            reduce_prompt(duration, plan),
+            reduce_request(lecture.title, digests),
+            json_mode=True,
         )
     )
-    chapters = build_chapters(data.get("chapters"), segments, digests)
+    chapters = split_oversized(
+        build_chapters(data.get("chapters"), segments, digests), segments, digests, plan
+    )
     content = str(data.get("summary_md") or "").strip() or "\n\n".join(
         f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters
     )
