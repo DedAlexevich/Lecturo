@@ -71,6 +71,8 @@ cd ../frontend && npm run gen:api
 
 ## APK для Android
 
+Готовый подписанный APK лежит в `android/lecturo-1.0.0.apk`, его можно сразу ставить на телефон.
+
 APK — это Trusted Web Activity: приложение открывает https://lecturo.ru в Chrome без адресной строки. Проект собирается [Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap) из `android/twa-manifest.json`, остальное в `android/` генерируется и в репозиторий не попадает.
 
 Нужны Node.js 22. JDK 17 и Android SDK Bubblewrap при первом запуске предложит скачать сам, пути сохраняются в `~/.bubblewrap/config.json`.
