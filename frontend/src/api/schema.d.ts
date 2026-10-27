@@ -848,6 +848,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/{token}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Shared */
+        post: operations["copy_shared_api_v1_public__token__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}/exports/{export_format}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Public Export Link */
+        post: operations["public_export_link_api_v1_public__token__lectures__lecture_id__exports__export_format__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}/export.srt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Export Srt */
+        get: operations["public_export_srt_api_v1_public__token__lectures__lecture_id__export_srt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}/export.vtt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Export Vtt */
+        get: operations["public_export_vtt_api_v1_public__token__lectures__lecture_id__export_vtt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}/export.md": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Export Md */
+        get: operations["public_export_md_api_v1_public__token__lectures__lecture_id__export_md_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}/export.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Export Pdf */
+        get: operations["public_export_pdf_api_v1_public__token__lectures__lecture_id__export_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/quota": {
         parameters: {
             query?: never;
@@ -1041,6 +1143,35 @@ export interface components {
             reason: string;
             /** Lecture Id */
             lecture_id?: string | null;
+        };
+        /** CopyConflictDetail */
+        CopyConflictDetail: {
+            /** Message */
+            message: string;
+            /** Lecture Id */
+            lecture_id?: string | null;
+            /** Course Id */
+            course_id?: string | null;
+        };
+        /** CopyConflictOut */
+        CopyConflictOut: {
+            detail: components["schemas"]["CopyConflictDetail"];
+        };
+        /** CopyIn */
+        CopyIn: {
+            /** Lecture Id */
+            lecture_id?: string | null;
+        };
+        /** CopyOut */
+        CopyOut: {
+            /** Lecture Id */
+            lecture_id: string | null;
+            /** Course Id */
+            course_id: string | null;
+            /** Lecture Ids */
+            lecture_ids: string[];
+            /** Created */
+            created: boolean;
         };
         /** CourseIn */
         CourseIn: {
@@ -3898,6 +4029,211 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_shared_api_v1_public__token__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CopyIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopyOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopyConflictOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_export_link_api_v1_public__token__lectures__lecture_id__exports__export_format__link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+                export_format: "pdf" | "md" | "srt" | "vtt";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_export_srt_api_v1_public__token__lectures__lecture_id__export_srt_get: {
+        parameters: {
+            query: {
+                grant: string;
+            };
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_export_vtt_api_v1_public__token__lectures__lecture_id__export_vtt_get: {
+        parameters: {
+            query: {
+                grant: string;
+            };
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_export_md_api_v1_public__token__lectures__lecture_id__export_md_get: {
+        parameters: {
+            query: {
+                grant: string;
+            };
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_export_pdf_api_v1_public__token__lectures__lecture_id__export_pdf_get: {
+        parameters: {
+            query: {
+                grant: string;
+            };
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
