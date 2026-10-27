@@ -170,7 +170,7 @@ async def create_payment(
     receipt_email: str | None = None,
 ) -> Payment:
     user_id = user.id
-    email = normalize_email(receipt_email) if receipt_email else user.email
+    email = user.email or (normalize_email(receipt_email) if receipt_email else None)
     if not email:
         raise PaymentError("Для чека нужен email: укажите адрес, на который отправить чек")
     payment = await find_by_key(session, user_id, idempotence_key)
