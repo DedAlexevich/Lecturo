@@ -499,3 +499,40 @@ async def test_timecode_uses_words_when_embeddings_fail(client, user, auth_heade
     response = await search(client, auth_headers, q="самолёт", lecture_id=str(lecture_id))
 
     assert [hit["start"] for hit in response.json()] == [15.0]
+
+
+async def test_timecode_follows_meaning_without_shared_words(
+    client, user, auth_headers, monkeypatch
+):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    segments = [
+        (0.0, 12.0, "Начнём с истории."),
+        (12.0, 25.0, "Этот лайнер стоит миллиард."),
+        (25.0, 50.0, "Цены растут."),
+    ]
+    chunk_text = " ".join(text for _, _, text in segments)
+    await add_segments(lecture_id, *segments)
+    await add_spans(lecture_id, ChunkKind.transcript, (0.0, 50.0, chunk_text))
+    chunk, segment = await TopicEmbeddings().embed_documents([chunk_text, segments[1][2]])
+    target = [(a + b) / 2**0.5 for a, b in zip(chunk, segment, strict=True)]
+
+    class MeaningEmbeddings(TopicEmbeddings):
+        async def embed_query(self, text: str) -> list[float]:
+            return target
+
+    monkeypatch.setattr(search_service, "get_embeddings", MeaningEmbeddings)
+
+    response = await search(client, auth_headers, q="дорогая техника", lecture_id=str(lecture_id))
+
+    assert [hit["start"] for hit in response.json()] == [12.0]
+
+
+async def test_summary_pieces_join_by_section(client, user, auth_headers):
+    lecture_id = await create_lecture(user.id, "Самолёты")
+    await add_chunk(lecture_id, ChunkKind.summary, QUESTION, section=1)
+    await add_chunk(lecture_id, ChunkKind.summary, QUESTION, section=1)
+    await add_chunk(lecture_id, ChunkKind.summary, QUESTION, section=2)
+
+    response = await search(client, auth_headers, q=QUESTION)
+
+    assert sorted(hit["section"] for hit in response.json()) == [1, 2]
