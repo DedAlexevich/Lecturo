@@ -153,18 +153,20 @@ async def start_flow(
 async def take_flow(settings: Settings, state: str, nonce: str, user_id: uuid.UUID | None) -> dict:
     redis = Redis.from_url(settings.redis_url)
     try:
-        raw = await redis.getdel(state_key(state))
+        raw = await redis.get(state_key(state))
+        if raw is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
+        record = json.loads(raw)
+        if not secrets.compare_digest(record["nonce"], nonce) or record["user_id"] != (
+            str(user_id) if user_id else None
+        ):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
+        if await redis.getdel(state_key(state)) is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
     except (OSError, RedisError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, YANDEX_UNAVAILABLE) from None
     finally:
         await redis.aclose()
-    if raw is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
-    record = json.loads(raw)
-    if not secrets.compare_digest(record["nonce"], nonce) or record["user_id"] != (
-        str(user_id) if user_id else None
-    ):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
     return record
 
 

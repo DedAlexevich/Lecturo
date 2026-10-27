@@ -409,6 +409,27 @@ async def test_link_with_wrong_nonce_is_rejected(client, yandex, cleanup):
     assert yandex.requests == []
 
 
+async def test_wrong_nonce_does_not_burn_state(client, yandex, yandex_id, cleanup):
+    await create_user(cleanup, [(AuthProvider.yandex, yandex_id)])
+    state = await start_login(client)
+    wrong = callback_body(state) | {"nonce": "another-browser"}
+    assert (await client.post("/api/v1/auth/yandex/callback", json=wrong)).status_code == 400
+    assert (
+        await client.post("/api/v1/auth/yandex/callback", json=callback_body(state))
+    ).status_code == 200
+
+
+async def test_link_start_is_rate_limited(client, cleanup, monkeypatch):
+    monkeypatch.setattr(get_settings(), "yandex_oauth_start_rate_limit", 1)
+    user = await create_user(cleanup, [(AuthProvider.email, "ya-rate@example.test")])
+    first = await client.post("/api/v1/me/identities/yandex/start", headers=headers(user))
+    second = await client.post("/api/v1/me/identities/yandex/start", headers=headers(user))
+    assert [first.status_code, second.status_code] == [200, 429]
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.delete(f"rate:yandex-link-start:{user.id}")
+    await redis.aclose()
+
+
 async def test_start_is_rate_limited(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "yandex_oauth_start_rate_limit", 2)
     statuses = [

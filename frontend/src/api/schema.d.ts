@@ -2438,6 +2438,13 @@ export interface operations {
                     "application/json": components["schemas"]["YandexStartOut"];
                 };
             };
+            /** @description Слишком много попыток привязки */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Вход через Яндекс не настроен */
             503: {
                 headers: {

@@ -110,10 +110,18 @@ async def link_vk(
 @router.post(
     "/identities/yandex/start",
     responses={
-        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"}
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток привязки"},
+        status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
     },
 )
 async def start_yandex_link(user: CurrentUser) -> YandexStartOut:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:yandex-link-start:{user.id}",
+        settings.yandex_oauth_start_rate_limit,
+        settings.yandex_oauth_start_rate_window_seconds,
+    )
     url, nonce = await yandex_auth.start_flow(get_settings(), user_id=user.id)
     return YandexStartOut(url=url, nonce=nonce)
 
