@@ -112,6 +112,7 @@ function PlanBody({ plan, waiting, pending, error, onChange, onLeave }: PlanBody
   const over = needed > available;
   const share = available > 0 ? Math.min(100, (needed / available) * 100) : needed > 0 ? 100 : 0;
   const waitingCount = lectures.length - plan.selected.length;
+  const localTargets = waitingCount > 0 ? lectures.filter((lecture) => !plan.selected.includes(lecture.id)) : lectures;
   const optionsId = useId();
 
   const toggle = (id: string) =>
@@ -173,10 +174,20 @@ function PlanBody({ plan, waiting, pending, error, onChange, onLeave }: PlanBody
           </li>
           <li>
             <span className="quota-plan__option-title">Обработать на устройстве</span>
-            <span>Расшифровка в браузере, без лимита. Файл с записью выберете на следующем экране, на сервер он не уйдёт.</span>
-            <Link to="/local" onClick={onLeave}>
-              Открыть обработку на устройстве
-            </Link>
+            <span>Расшифровка в браузере, без лимита. Запись не уйдёт на сервер. Выберите лекцию:</span>
+            <ul className="quota-plan__local">
+              {localTargets.map((lecture) => (
+                <li key={lecture.id}>
+                  <Link
+                    to={`/local?lecture=${lecture.id}`}
+                    aria-label={`Обработать на устройстве «${lecture.title}»`}
+                    onClick={onLeave}
+                  >
+                    {lecture.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </li>
         </ul>
       </section>
