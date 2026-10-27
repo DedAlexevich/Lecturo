@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
 from app.api.courses import get_own_course
+from app.api.shares import shared_with
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, RequireSubscription, SessionDep
 from app.models import (
@@ -17,7 +18,6 @@ from app.models import (
     LectureStatus,
     ProcessingStep,
     Quiz,
-    ShareLink,
     SourceType,
     StepName,
     StepStatus,
@@ -139,9 +139,7 @@ async def video_access(
         raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
     query = select(Lecture.id).where(Lecture.id == lecture_id, Lecture.video_path.is_not(None))
     if share is not None:
-        query = query.join(ShareLink, ShareLink.lecture_id == Lecture.id).where(
-            ShareLink.token == share, ShareLink.revoked_at.is_(None)
-        )
+        query = query.where(shared_with(share))
     if await session.scalar(query) is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
     return Response(status_code=status.HTTP_200_OK)
