@@ -162,6 +162,7 @@ export function LecturePage() {
   const status = useLectureStatus(id, lecture.data);
   const retry = useRetryProcessing(id);
   const [tab, setTab] = useState<PanelKind>("summary");
+  const [searching, setSearching] = useState(false);
   const { currentTime, seek, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
@@ -292,11 +293,13 @@ export function LecturePage() {
           )}
         </div>
         <section
-          className={tabHasContent[tab] ? "lecture__panel" : "lecture__panel lecture__panel--empty"}
+          className={searching || tabHasContent[tab] ? "lecture__panel" : "lecture__panel lecture__panel--empty"}
           aria-label="Материалы лекции"
         >
           {data.status === "ready" ? (
-            <SearchPanel scope={{ lectureId: data.id }}>{tabs}</SearchPanel>
+            <SearchPanel scope={{ lectureId: data.id }} onActiveChange={setSearching}>
+              {tabs}
+            </SearchPanel>
           ) : (
             tabs
           )}

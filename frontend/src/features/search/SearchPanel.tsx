@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { formatTimecode } from "../../pages/lecture/time";
 import { Button } from "../../ui/Button";
@@ -17,7 +17,13 @@ function fragmentsCount(count: number) {
   return `${count} фрагментов`;
 }
 
-export function SearchPanel({ scope, children }: { scope: SearchScope; children?: ReactNode }) {
+type SearchPanelProps = {
+  scope: SearchScope;
+  children?: ReactNode;
+  onActiveChange?: (active: boolean) => void;
+};
+
+export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProps) {
   const [value, setValue] = useState("");
   const query = useDebouncedValue(value.trim(), 300);
   const search = useSearch(scope, query);
@@ -26,6 +32,10 @@ export function SearchPanel({ scope, children }: { scope: SearchScope; children?
   const hits = active ? search.data : undefined;
   const matcher = useMemo(() => buildMatcher(query), [query]);
   const label = inCourse ? "Поиск по курсу" : "Поиск по лекции";
+
+  useEffect(() => {
+    onActiveChange?.(active);
+  }, [active, onActiveChange]);
 
   return (
     <div className={inCourse ? "search search--course" : "search search--lecture"}>
