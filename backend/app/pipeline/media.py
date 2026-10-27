@@ -19,7 +19,7 @@ MAX_DURATION_SEC = 4 * 3600
 PROBE_TIMEOUT_SEC = 60.0
 PROGRESS_INTERVAL_SEC = 2.0
 VIDEO_HEIGHT = 720
-VIDEO_PRESET = "superfast"
+VIDEO_PRESET = "veryfast"
 PLAYER_PROFILES = {"Constrained Baseline", "Baseline", "Main", "High"}
 
 
