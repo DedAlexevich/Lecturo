@@ -104,7 +104,11 @@ async def test_create_payment_returns_confirmation_url(client, user, auth_header
         "type": "redirect",
         "return_url": "http://localhost/account",
     }
-    assert body["metadata"] == {"payment_id": data["id"], "user_id": str(user.id)}
+    assert body["metadata"] == {
+        "payment_id": data["id"],
+        "user_id": str(user.id),
+        "receipt_email": user.email,
+    }
     assert "receipt" not in body
 
     async with SessionLocal() as session:
@@ -337,6 +341,60 @@ async def test_payment_api_without_email_is_rejected(client, user, auth_headers,
     assert "email" in response.json()["detail"]
     assert fake.requests == []
     assert await count_payments(user) == 0
+
+
+async def test_payment_uses_receipt_email_without_account_email(client, user, auth_headers, fake):
+    await remove_email(user)
+
+    response = await client.post(
+        "/api/v1/billing/payments",
+        json={
+            "product_code": "subscription",
+            "accept_offer": True,
+            "receipt_email": "Buyer@Example.org",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    [request] = fake.requests
+    assert json.loads(request.content)["metadata"]["receipt_email"] == "buyer@example.org"
+    async with SessionLocal() as session:
+        payment = await session.get(Payment, response.json()["id"])
+        assert payment.raw["metadata"]["receipt_email"] == "buyer@example.org"
+        assert (await session.get(User, user.id)).email is None
+
+
+async def test_receipt_email_goes_to_receipt(user):
+    await remove_email(user)
+    settings = SETTINGS.model_copy(update={"yookassa_receipt": True})
+    fake = FakeYooKassa()
+    async with SessionLocal() as session:
+        db_user = await session.get(User, user.id)
+        await yookassa.create_payment(
+            session,
+            fake.client(settings),
+            db_user,
+            product("hours_5"),
+            "key-receipt-email",
+            "http://localhost/account",
+            settings,
+            "buyer@example.org",
+        )
+
+    body = json.loads(fake.requests[0].content)
+    assert body["receipt"]["customer"] == {"email": "buyer@example.org"}
+
+
+async def test_invalid_receipt_email_is_rejected(client, user, auth_headers, fake):
+    response = await client.post(
+        "/api/v1/billing/payments",
+        json={"product_code": "hours_5", "accept_offer": True, "receipt_email": "не почта"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert fake.requests == []
 
 
 def test_client_requires_credentials():
