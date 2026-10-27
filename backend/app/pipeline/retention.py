@@ -12,11 +12,9 @@ from app.models import Lecture
 
 
 async def extend_video_retention(
-    session: AsyncSession, user_id: uuid.UUID, settings: Settings
+    session: AsyncSession, user_id: uuid.UUID, now: datetime, settings: Settings
 ) -> None:
-    subscription_expiry = Lecture.created_at + timedelta(
-        days=settings.subscription_video_retention_days
-    )
+    subscription_expiry = now + timedelta(days=settings.subscription_video_retention_days)
     await session.execute(
         update(Lecture)
         .where(

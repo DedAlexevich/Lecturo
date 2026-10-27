@@ -10,7 +10,7 @@ from app.pipeline.retention import delete_expired_videos, extend_video_retention
 SETTINGS = Settings(free_video_retention_days=3, subscription_video_retention_days=30)
 
 
-async def add_lecture(user, video_path, expires_at, created_at=None) -> Lecture:
+async def add_lecture(user, video_path, expires_at) -> Lecture:
     async with SessionLocal() as session:
         lecture = Lecture(
             owner_id=user.id,
@@ -19,8 +19,6 @@ async def add_lecture(user, video_path, expires_at, created_at=None) -> Lecture:
             video_path=str(video_path) if video_path else None,
             video_expires_at=expires_at,
         )
-        if created_at is not None:
-            lecture.created_at = created_at
         session.add(lecture)
         await session.flush()
         session.add(TranscriptSegment(lecture_id=lecture.id, idx=0, start=0, end=1, text="раз"))
@@ -68,16 +66,15 @@ async def test_missing_video_file_is_cleared(user, tmp_path):
 
 async def test_subscription_extends_uploaded_videos(user, tmp_path):
     now = datetime.now(UTC)
-    uploaded = now - timedelta(days=2)
-    recent = await add_lecture(user, tmp_path / "a.mp4", uploaded + timedelta(days=3), uploaded)
+    recent = await add_lecture(user, tmp_path / "a.mp4", now + timedelta(days=1))
     long_kept = now + timedelta(days=60)
-    kept = await add_lecture(user, tmp_path / "b.mp4", long_kept, uploaded)
-    deleted = await add_lecture(user, None, None, uploaded)
+    kept = await add_lecture(user, tmp_path / "b.mp4", long_kept)
+    deleted = await add_lecture(user, None, None)
 
     async with SessionLocal() as session:
-        await extend_video_retention(session, user.id, SETTINGS)
+        await extend_video_retention(session, user.id, now, SETTINGS)
         await session.commit()
 
-    assert (await reload(recent)).video_expires_at == uploaded + timedelta(days=30)
+    assert (await reload(recent)).video_expires_at == now + timedelta(days=30)
     assert (await reload(kept)).video_expires_at == long_kept
     assert (await reload(deleted)).video_expires_at is None

@@ -273,12 +273,15 @@ async def test_subscription_extends_uploaded_video_retention(client, user, fake)
     payment = await make_payment(user, "subscription")
     fake.set_remote(payment, "succeeded")
 
-    await client.post(WEBHOOK, json=notification(payment))
+    before = datetime.now(UTC)
 
+    response = await client.post(WEBHOOK, json=notification(payment))
+
+    assert response.status_code == 200
     async with SessionLocal() as session:
         lecture = await session.get(Lecture, lecture.id)
-    expected = lecture.created_at + timedelta(days=get_settings().subscription_video_retention_days)
-    assert lecture.video_expires_at == expected
+    days = timedelta(days=get_settings().subscription_video_retention_days)
+    assert before + days <= lecture.video_expires_at <= datetime.now(UTC) + days
 
 
 async def test_subscription_extends_active_one(client, user, fake):

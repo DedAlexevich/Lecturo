@@ -260,7 +260,7 @@ async def grant_subscription(
         ends_at=starts_at + timedelta(days=settings.subscription_days),
     )
     session.add(subscription)
-    await extend_video_retention(session, payment.user_id, settings)
+    await extend_video_retention(session, payment.user_id, now, settings)
     return subscription
 
 
