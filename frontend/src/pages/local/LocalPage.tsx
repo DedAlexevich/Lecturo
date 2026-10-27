@@ -85,6 +85,16 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
+
   const media = file ?? savedMedia?.blob ?? null;
   const mediaType = file ? file.type : savedMedia?.type ?? "";
 
@@ -171,7 +181,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
     setNotesError("");
     setNotesProgress({ type: "loading", value: 0 });
     try {
-      const result = await generateNotes(saved.segments, setNotesProgress, abort.signal);
+      const result = await generateNotes(saved.segments, saved.language, setNotesProgress, abort.signal);
       abort.signal.throwIfAborted();
       savingNotes.current = true;
       setNotesProgress({ type: "saving", value: 0 });
@@ -221,6 +231,7 @@ function LocalProcessing({ lectureId }: { lectureId: string | null }) {
   function openSaved(lecture: LocalLecture) {
     controller.current?.abort();
     setFile(null);
+    setLanguage(lecture.language === "en" ? "en" : "ru");
     resetMedia(lecture.id);
     setMediaState("loading");
     setSaved(lecture);
