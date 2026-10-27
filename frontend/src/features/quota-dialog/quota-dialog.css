@@ -215,6 +215,18 @@
   font-weight: var(--weight-medium);
 }
 
+.quota-plan__options .quota-plan__local {
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.quota-plan__local a {
+  display: inline-block;
+  margin-top: 0;
+  padding-block: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
 .waiting-notice {
   display: flex;
   flex-wrap: wrap;
