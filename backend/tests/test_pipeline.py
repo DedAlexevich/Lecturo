@@ -46,6 +46,7 @@ from app.models import (
 )
 from app.pipeline import events, media, stages, tasks
 from app.providers.stub import STUB_PHRASES
+from tests.conftest import notifications
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -125,16 +126,6 @@ async def count(model, lecture_id) -> int:
 
 def steps_by_name(lecture: Lecture) -> dict:
     return {step.step: step for step in lecture.steps}
-
-
-async def notifications(lecture_id) -> list[tuple[NotificationKind, NotificationOutcome]]:
-    async with SessionLocal() as session:
-        rows = await session.execute(
-            select(NotificationEvent.kind, NotificationEvent.outcome)
-            .where(NotificationEvent.lecture_id == lecture_id)
-            .order_by(NotificationEvent.created_at)
-        )
-        return [(kind, outcome) for kind, outcome in rows]
 
 
 async def test_lecture_passes_all_steps(user, sample_video):

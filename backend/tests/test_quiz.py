@@ -23,7 +23,7 @@ from app.models import (
 )
 from app.pipeline import quiz, tasks
 from app.pipeline.quiz import InvalidQuiz, parse_questions, transcript_excerpt
-from tests.test_pipeline import notifications
+from tests.conftest import notifications
 
 
 def make_question(number: int = 0, **changes) -> dict:

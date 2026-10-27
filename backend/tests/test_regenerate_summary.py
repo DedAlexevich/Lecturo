@@ -20,7 +20,7 @@ from app.models import (
     User,
 )
 from app.pipeline import summarize, tasks
-from tests.test_pipeline import notifications
+from tests.conftest import notifications
 from tests.test_summarize import FailingReduceLLM, ScriptedLLM
 
 

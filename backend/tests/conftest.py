@@ -8,7 +8,13 @@ from sqlalchemy import delete, select
 from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
-from app.models import Payment, User
+from app.models import (
+    NotificationEvent,
+    NotificationKind,
+    NotificationOutcome,
+    Payment,
+    User,
+)
 from app.services.legal import read_document
 
 
@@ -51,3 +57,13 @@ def retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 
     monkeypatch.setattr("app.providers.retry.sleep", record)
     return pauses
+
+
+async def notifications(lecture_id) -> list[tuple[NotificationKind, NotificationOutcome]]:
+    async with SessionLocal() as session:
+        rows = await session.execute(
+            select(NotificationEvent.kind, NotificationEvent.outcome)
+            .where(NotificationEvent.lecture_id == lecture_id)
+            .order_by(NotificationEvent.created_at)
+        )
+        return [(kind, outcome) for kind, outcome in rows]
