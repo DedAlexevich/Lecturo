@@ -22,6 +22,7 @@ from app.models.lecture import (
     Summary,
     TranscriptSegment,
 )
+from app.models.notification import NotificationEvent, NotificationKind, NotificationOutcome
 from app.models.search import ChunkKind, SearchChunk
 from app.models.share import Complaint, ShareLink
 from app.models.user import AuthIdentity, AuthProvider, AuthToken, AuthTokenKind, User
@@ -41,6 +42,9 @@ __all__ = [
     "HourPackage",
     "Lecture",
     "LectureStatus",
+    "NotificationEvent",
+    "NotificationKind",
+    "NotificationOutcome",
     "Payment",
     "PaymentKind",
     "PaymentStatus",

@@ -1646,6 +1646,11 @@ export interface components {
             /** Hash */
             hash: string;
         };
+        /**
+         * TelegramNotifications
+         * @enum {string}
+         */
+        TelegramNotifications: "not_linked" | "start_required" | "ready" | "blocked";
         /** TelegramSignupIn */
         TelegramSignupIn: {
             /** Id */
@@ -1720,6 +1725,7 @@ export interface components {
             ai_transfer_accepted_at: string | null;
             /** Identities */
             identities: components["schemas"]["IdentityOut"][];
+            telegram_notifications: components["schemas"]["TelegramNotifications"];
         };
         /** ValidationError */
         ValidationError: {

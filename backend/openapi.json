@@ -4967,6 +4967,16 @@
         ],
         "title": "TelegramLoginIn"
       },
+      "TelegramNotifications": {
+        "type": "string",
+        "enum": [
+          "not_linked",
+          "start_required",
+          "ready",
+          "blocked"
+        ],
+        "title": "TelegramNotifications"
+      },
       "TelegramSignupIn": {
         "properties": {
           "id": {
@@ -5136,6 +5146,9 @@
             },
             "type": "array",
             "title": "Identities"
+          },
+          "telegram_notifications": {
+            "$ref": "#/components/schemas/TelegramNotifications"
           }
         },
         "type": "object",
@@ -5145,7 +5158,8 @@
           "email_verified",
           "display_name",
           "ai_transfer_accepted_at",
-          "identities"
+          "identities",
+          "telegram_notifications"
         ],
         "title": "UserOut"
       },
