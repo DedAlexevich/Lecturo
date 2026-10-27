@@ -1,4 +1,4 @@
-import { openExternalLink } from "../../telegram/sdk";
+import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useId } from "react";
 import { EmptyState } from "../../ui/EmptyState";
 import styles from "./AccountPage.module.css";
@@ -59,6 +59,7 @@ export function PaymentsSection() {
                       <a
                         href={payment.confirmation_url}
                         onClick={(event) => {
+                          if (!getWebApp()) return;
                           event.preventDefault();
                           openExternalLink(payment.confirmation_url!);
                         }}

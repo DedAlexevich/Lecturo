@@ -170,6 +170,20 @@ try {
     assert.deepEqual(errors, []);
     await context.close();
   }
+  {
+    const { context, page, requests, errors } = await setup(undefined, 200, true);
+    await page.goto(base + "/account");
+    await page.getByRole("link", { name: "Оплатить", exact: true }).waitFor();
+    await page.evaluate(() => document.addEventListener("click", (event) => {
+      window.nativePrevented = event.defaultPrevented;
+      event.preventDefault();
+    }, { once: true }));
+    await page.getByRole("link", { name: "Оплатить", exact: true }).click({ modifiers: ["Control"] });
+    assert.equal(await page.evaluate(() => window.nativePrevented), false);
+    assert.equal(requests.length, 0);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
   console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors");
 } finally {
   await browser.close();
