@@ -22,3 +22,15 @@ test("конспект не выполняет произвольный HTML и 
   assert.doesNotMatch(html, /<script>/);
   assert.doesNotMatch(html, /href=\"javascript:/);
 });
+
+test("обычные суммы не превращаются в формулы", () => {
+  const html = renderSummary("Цена $5 и $10.\n\n$$x^2$$");
+  assert.match(html, /Цена \$5 и \$10/);
+  assert.match(html, /katex-display/);
+});
+
+test("двойные доллары внутри абзаца остаются текстом", () => {
+  const html = renderSummary("Текст $$x^2$$ рядом с текстом");
+  assert.match(html, /\$\$x\^2\$\$/);
+  assert.doesNotMatch(html, /class=\"katex/);
+});

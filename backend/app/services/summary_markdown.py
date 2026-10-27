@@ -7,8 +7,10 @@ from typing import Any
 
 import quickjs
 from markdown_it import MarkdownIt
+from markdown_it.rules_inline import StateInline
 from mdit_py_plugins.container import container_plugin
 from mdit_py_plugins.dollarmath import dollarmath_plugin
+from mdit_py_plugins.dollarmath.index import math_inline_dollar
 
 KATEX_DIR = Path(__file__).parent / "katex"
 KATEX_SCRIPT = (KATEX_DIR / "katex.min.js").read_text(encoding="utf-8")
@@ -64,7 +66,24 @@ def render_summary(source: str) -> str:
 
     markdown = MarkdownIt("commonmark", {"html": False}).enable("table")
     markdown.disable("image")
-    markdown.use(dollarmath_plugin, renderer=render_math, allow_labels=False)
+    markdown.use(
+        dollarmath_plugin,
+        renderer=render_math,
+        allow_labels=False,
+        allow_space=False,
+        allow_digits=False,
+        double_inline=False,
+    )
+    inline_math = math_inline_dollar(False, False, False)
+
+    def parse_inline_math(state: StateInline, silent: bool) -> bool:
+        if state.src[state.pos : state.pos + 2] == "$$" or (
+            state.pos > 0 and state.src[state.pos - 1 : state.pos + 1] == "$$"
+        ):
+            return False
+        return inline_math(state, silent)
+
+    markdown.inline.ruler.at("math_inline", parse_inline_math)
     for kind, label in LABELS.items():
         markdown.use(container_plugin, kind, render=make_container(kind, label))
     return markdown.render(source)

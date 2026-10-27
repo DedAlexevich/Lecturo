@@ -20,7 +20,7 @@ dependencies = [
     "yt-dlp>=2024.11.18",
     "weasyprint>=66",
     "markdown-it-py>=3.0",
-    "mdit-py-plugins>=0.4,<0.7",
+    "mdit-py-plugins>=0.6,<0.7",
     "quickjs>=1.19.4,<2",
 ]
 

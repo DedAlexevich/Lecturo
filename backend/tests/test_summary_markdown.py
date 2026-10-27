@@ -30,3 +30,17 @@ def test_fonts_are_embedded():
 
     assert "data:application/octet-stream;base64," in css
     assert "url(fonts/" not in css
+
+
+def test_currency_and_display_math():
+    html = render_summary("Цена $5 и $10.\n\n$$x^2$$")
+
+    assert "Цена $5 и $10." in html
+    assert 'class="katex-display"' in html
+
+
+def test_double_dollars_inside_paragraph_remain_text():
+    html = render_summary("Текст $$x^2$$ рядом с текстом")
+
+    assert "$$x^2$$" in html
+    assert 'class="katex' not in html

@@ -1,7 +1,6 @@
 import MarkdownIt from "markdown-it";
 import container from "markdown-it-container";
-import texmath from "markdown-it-texmath";
-import katex from "katex";
+import { katex } from "@mdit/plugin-katex";
 
 const labels: Record<string, string> = {
   definition: "Определение",
@@ -13,7 +12,7 @@ const labels: Record<string, string> = {
 
 const markdown = new MarkdownIt({ html: false, linkify: false });
 markdown.disable("image");
-markdown.use(texmath, { engine: katex, delimiters: "dollars", katexOptions: { throwOnError: false, trust: false } });
+markdown.use(katex, { throwOnError: false, trust: false });
 for (const [kind, label] of Object.entries(labels)) {
   markdown.use(container, kind, {
     validate: (info: string) => info.trim() === kind,
