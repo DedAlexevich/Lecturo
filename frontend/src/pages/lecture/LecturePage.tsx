@@ -7,6 +7,8 @@ import { cameFromQuiz } from "../../features/quiz/moment";
 import { QuizButton } from "../../features/quiz/QuizButton";
 import { SearchPanel } from "../../features/search/SearchPanel";
 import { ShareButton } from "../../features/share/ShareButton";
+import { useZoomerMode } from "../../features/zoomer/useZoomerMode";
+import { ZoomerClip, ZoomerToggle } from "../../features/zoomer/Zoomer";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
@@ -193,6 +195,7 @@ export function LecturePage() {
   const [searching, setSearching] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
   const { currentTime, playFrom, bind } = usePlayer();
+  const zoomer = useZoomerMode();
 
   const rawSegments = lecture.data?.segments;
   const segments = useMemo(
@@ -315,6 +318,7 @@ export function LecturePage() {
           <div className="lecture__title-actions">
             <QuizButton lecture={data} />
             {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
+            <ZoomerToggle mode={zoomer} />
             <LectureActions lecture={data} />
           </div>
         </div>
@@ -347,37 +351,42 @@ export function LecturePage() {
       )}
       <div className="lecture__body">
         <div className="lecture__media">
-          {videoUrl ? (
-            <VideoPlayer
-              key={videoIdentity(videoUrl)}
-              src={videoUrl}
-              title={data.title}
-              refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
-              {...bind}
-            />
-          ) : audioUrl ? (
-            <VideoPlayer
-              key={videoIdentity(audioUrl)}
-              src={audioUrl}
-              title={data.title}
-              refreshSrc={async () => (await fetchLecture(id)).audio_url ?? null}
-              audio
-              {...bind}
-            />
-          ) : embed ? (
-            <EmbedPlayer
-              key={data.embed_url}
-              embed={embed}
-              title={data.title}
-              start={startAt ?? 0}
-              autoplay={startAt !== null}
-              currentTime={currentTime}
-              sourceUrl={data.source_url}
-              {...bind}
-            />
-          ) : (
-            <NoVideo lecture={data} />
-          )}
+          <div className={zoomer.clip !== null ? "zoomer-stage zoomer-stage--on" : "zoomer-stage"}>
+            {videoUrl ? (
+              <VideoPlayer
+                key={videoIdentity(videoUrl)}
+                src={videoUrl}
+                title={data.title}
+                refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
+                {...bind}
+              />
+            ) : audioUrl ? (
+              <VideoPlayer
+                key={videoIdentity(audioUrl)}
+                src={audioUrl}
+                title={data.title}
+                refreshSrc={async () => (await fetchLecture(id)).audio_url ?? null}
+                audio
+                {...bind}
+              />
+            ) : embed ? (
+              <EmbedPlayer
+                key={data.embed_url}
+                embed={embed}
+                title={data.title}
+                start={startAt ?? 0}
+                autoplay={startAt !== null}
+                currentTime={currentTime}
+                sourceUrl={data.source_url}
+                {...bind}
+              />
+            ) : (
+              <NoVideo lecture={data} />
+            )}
+            {zoomer.clip !== null && (
+              <ZoomerClip src={zoomer.clip} autoplay={zoomer.autoplay} onHide={zoomer.disable} />
+            )}
+          </div>
         </div>
         <section
           className={searching || tabHasContent[tab] ? "lecture__panel" : "lecture__panel lecture__panel--empty"}
