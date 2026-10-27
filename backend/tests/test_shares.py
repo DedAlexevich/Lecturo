@@ -119,7 +119,6 @@ async def test_share_course(client, verified_user, auth_headers):
             json={"lecture_id": str(lecture_id)},
             headers=auth_headers,
         )
-    lecture_share = (await create_share(client, auth_headers, lecture_id=str(first))).json()
     course_share = (await create_share(client, auth_headers, course_id=course["id"])).json()
 
     public = await client.get(f"/api/v1/public/{course_share['token']}")
@@ -128,11 +127,53 @@ async def test_share_course(client, verified_user, auth_headers):
     assert body["lecture"] is None
     assert body["course"]["title"] == "Матан"
     assert [item["title"] for item in body["course"]["lectures"]] == ["Пределы", "Ряды"]
-    assert [item["share_token"] for item in body["course"]["lectures"]] == [
-        lecture_share["token"],
-        None,
-    ]
     assert all(item["processed_locally"] for item in body["course"]["lectures"])
+
+    for lecture_id, title in ((first, "Пределы"), (second, "Ряды")):
+        lecture = await client.get(f"/api/v1/public/{course_share['token']}/lectures/{lecture_id}")
+        assert lecture.status_code == 200
+        assert lecture.json()["title"] == title
+        assert lecture.json()["video_url"] is not None
+
+
+async def shared_course(client, headers, *lecture_ids: uuid.UUID) -> str:
+    course = (await client.post("/api/v1/courses", json={"title": "Матан"}, headers=headers)).json()
+    for lecture_id in lecture_ids:
+        await client.post(
+            f"/api/v1/courses/{course['id']}/lectures",
+            json={"lecture_id": str(lecture_id)},
+            headers=headers,
+        )
+    return (await create_share(client, headers, course_id=course["id"])).json()["token"]
+
+
+async def test_course_share_hides_lectures_outside_course(client, verified_user, auth_headers):
+    inside = await create_lecture(verified_user.id, "Пределы")
+    outside = await create_lecture(verified_user.id, "Ряды")
+    token = await shared_course(client, auth_headers, inside)
+    assert (await client.get(f"/api/v1/public/{token}/lectures/{outside}")).status_code == 404
+    unknown = await client.get(f"/api/v1/public/{token}/lectures/{uuid.uuid4()}")
+    assert unknown.status_code == 404
+
+
+async def test_course_share_lecture_after_revoke_or_removal(client, verified_user, auth_headers):
+    first = await create_lecture(verified_user.id, "Пределы")
+    second = await create_lecture(verified_user.id, "Ряды")
+    token = await shared_course(client, auth_headers, first, second)
+    course_id = (await client.get("/api/v1/shares", headers=auth_headers)).json()[0]["course_id"]
+    await client.delete(f"/api/v1/courses/{course_id}/lectures/{second}", headers=auth_headers)
+    assert (await client.get(f"/api/v1/public/{token}/lectures/{second}")).status_code == 404
+
+    await client.delete(f"/api/v1/shares/{token}", headers=auth_headers)
+    assert (await client.get(f"/api/v1/public/{token}/lectures/{first}")).status_code == 404
+
+
+async def test_lecture_share_opens_only_its_lecture(client, verified_user, auth_headers):
+    shared = await create_lecture(verified_user.id, "Пределы")
+    other = await create_lecture(verified_user.id, "Ряды")
+    token = (await create_share(client, auth_headers, lecture_id=str(shared))).json()["token"]
+    assert (await client.get(f"/api/v1/public/{token}/lectures/{shared}")).status_code == 200
+    assert (await client.get(f"/api/v1/public/{token}/lectures/{other}")).status_code == 404
 
 
 async def test_share_validation(client, verified_user, auth_headers):
@@ -345,3 +386,19 @@ async def test_complaint_course_requires_lecture(
             f"/api/v1/public/{share['token']}/complaints", json={"reason": "Нарушение"}
         )
     ).status_code == 422
+
+
+async def test_complaint_on_course_lecture(
+    client, verified_user, auth_headers, reset_complaint_limit
+):
+    inside = await create_lecture(verified_user.id, "Пределы")
+    outside = await create_lecture(verified_user.id, "Ряды")
+    token = await shared_course(client, auth_headers, inside)
+    url = f"/api/v1/public/{token}/complaints"
+    foreign = await client.post(url, json={"reason": "Нарушение", "lecture_id": str(outside)})
+    assert foreign.status_code == 404
+    saved = await client.post(url, json={"reason": "Нарушение", "lecture_id": str(inside)})
+    assert saved.status_code == 204
+    async with SessionLocal() as session:
+        complaint = await session.scalar(select(Complaint))
+    assert complaint.lecture_id == inside

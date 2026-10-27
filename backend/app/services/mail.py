@@ -26,7 +26,7 @@ def login_and_send(smtp: smtplib.SMTP, message: EmailMessage) -> None:
     smtp.send_message(message)
 
 
-async def send_mail(to: str, subject: str, body: str) -> None:
+async def deliver_mail(to: str, subject: str, body: str) -> None:
     settings = get_settings()
     if not settings.smtp_host:
         logger.info("Письмо для %s: %s\n%s", to, subject, body)
@@ -36,8 +36,12 @@ async def send_mail(to: str, subject: str, body: str) -> None:
     message["To"] = to
     message["Subject"] = subject
     message.set_content(body)
+    await asyncio.to_thread(deliver, message)
+
+
+async def send_mail(to: str, subject: str, body: str) -> None:
     try:
-        await asyncio.to_thread(deliver, message)
+        await deliver_mail(to, subject, body)
     except Exception:
         logger.exception("Не удалось отправить письмо для %s", to)
 

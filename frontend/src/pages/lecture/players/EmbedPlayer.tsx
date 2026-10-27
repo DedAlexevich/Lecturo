@@ -10,16 +10,17 @@ type EmbedPlayerProps = PlayerProps & {
   embed: Embed;
   title: string;
   start: number;
+  autoplay?: boolean;
   currentTime: number;
   sourceUrl: string | null;
 };
 
 type Load = EmbedStart & { attempt: number };
 
-export function EmbedPlayer({ embed, title, start, currentTime, sourceUrl, onReady, onTimeUpdate }: EmbedPlayerProps) {
+export function EmbedPlayer({ embed, title, start, autoplay = false, currentTime, sourceUrl, onReady, onTimeUpdate }: EmbedPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const positionRef = useRef(start);
-  const [load, setLoad] = useState<Load>({ seconds: start, autoplay: false, attempt: 0 });
+  const [load, setLoad] = useState<Load>({ seconds: start, autoplay, attempt: 0 });
   const [loading, setLoading] = useState(true);
   const [degraded, setDegraded] = useState(false);
   const { provider } = embed;

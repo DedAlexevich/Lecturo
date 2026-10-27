@@ -35,6 +35,16 @@ export function errorMessage(error: Error | null) {
   return typeof detail === "string" ? detail : null;
 }
 
+export function createErrorText(error: Error | null) {
+  const code = errorCode(error);
+  if (code === "no_summaries") {
+    return "В курсе пока нет лекций с готовым конспектом. Памятку можно собрать, когда обработается хотя бы одна лекция.";
+  }
+  if (code === "subscription_required") return "Памятка доступна только с подпиской.";
+  if (error instanceof ApiError && error.status === 503) return "Очередь сейчас недоступна. Попробуйте через пару минут.";
+  return errorMessage(error) ?? "Не получилось запустить сборку памятки. Попробуйте ещё раз.";
+}
+
 export function definitionsOf(sheet: ExamSheet): Definition[] {
   return sheet.definitions.flatMap(({ term, definition }) =>
     term && definition ? [{ term, definition }] : [],
@@ -51,7 +61,8 @@ export function useExamSheet(courseId: string) {
       if (data === undefined) throw new ApiError(response.status, error);
       return data;
     },
-    refetchInterval: (query) => (errorCode(query.state.error) === "exam_sheet_processing" ? pollInterval : false),
+    refetchInterval: (query) =>
+      query.state.data?.processing || errorCode(query.state.error) === "exam_sheet_processing" ? pollInterval : false,
   });
 }
 

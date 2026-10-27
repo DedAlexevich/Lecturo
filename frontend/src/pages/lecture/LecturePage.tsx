@@ -10,13 +10,14 @@ import { ShareButton } from "../../features/share/ShareButton";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
 import { Tabs } from "../../ui/Tabs";
-import { Markdown } from "../legal/markdown";
+import { SummaryMarkdown } from "./SummaryMarkdown";
 import { Chapters } from "./Chapters";
 import { ExportActions } from "./ExportActions";
 import { EmbedPlayer } from "./players/EmbedPlayer";
 import { resolveEmbed } from "./players/embed";
 import { VideoPlayer } from "./players/VideoPlayer";
 import { usePlayer, videoIdentity } from "./players/player";
+import { localNotes } from "./localNotes";
 import { Processing } from "./Processing";
 import { formatDuration, parseSection, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
@@ -61,6 +62,9 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
   } else if (external) {
     title = "Видео на сайте источника";
     description = "Запись хранится на площадке, откуда её добавили.";
+  } else if (lecture.processed_locally) {
+    title = "Видео осталось на устройстве";
+    description = "Лекцию обработали на устройстве, в аккаунт сохранены только расшифровка и материалы.";
   } else if (expiresAt !== null && expiresAt < new Date()) {
     title = "Срок хранения видео истёк";
     description = `Видео удалено ${dateFormat.format(expiresAt)}. Расшифровка остаётся на странице.`;
@@ -83,27 +87,37 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
 
 type PanelKind = "summary" | "chapters" | "transcript";
 
-const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: string }> = {
+const panelNotes: Record<PanelKind, { pending: string; failed: string; empty: string; local: string }> = {
   summary: {
     pending: "Конспект появится здесь, когда обработка закончится.",
     failed: "Обработка не удалась, поэтому конспекта нет.",
     empty: "Для этой лекции конспекта нет.",
+    local: localNotes.summary,
   },
   chapters: {
     pending: "Главы появятся здесь, когда обработка закончится.",
     failed: "Обработка не удалась, поэтому глав нет.",
     empty: "Лекция слишком короткая, чтобы делить её на главы.",
+    local: localNotes.chapters,
   },
   transcript: {
     pending: "Расшифровка появится здесь, когда обработка закончится.",
     failed: "Обработка не удалась, поэтому расшифровки нет.",
     empty: "В записи не распознано ни одной фразы.",
+    local: localNotes.transcript,
   },
 };
 
-function PanelEmpty({ kind, status }: { kind: PanelKind; status: Lecture["status"] }) {
+function PanelEmpty({ kind, lecture }: { kind: PanelKind; lecture: Lecture }) {
   const notes = panelNotes[kind];
-  const note = isPending(status) ? notes.pending : status === "failed" ? notes.failed : notes.empty;
+  const { status } = lecture;
+  const note = isPending(status)
+    ? notes.pending
+    : status === "failed"
+      ? notes.failed
+      : lecture.processed_locally
+        ? notes.local
+        : notes.empty;
   return <p className="lecture__panel-note">{note}</p>;
 }
 
@@ -178,7 +192,7 @@ export function LecturePage() {
   const [tab, setTab] = useState<PanelKind>("summary");
   const [searching, setSearching] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
-  const { currentTime, seek, playFrom, bind } = usePlayer();
+  const { currentTime, playFrom, bind } = usePlayer();
 
   const rawSegments = lecture.data?.segments;
   const segments = useMemo(
@@ -192,12 +206,13 @@ export function LecturePage() {
   );
 
   useEffect(() => {
-    if (startAt !== null) seek(startAt);
-  }, [startAt, locationKey, seek]);
+    if (startAt !== null) playFrom(startAt);
+  }, [startAt, locationKey, playFrom]);
 
   useEffect(() => {
     if (section !== null) setTab("summary");
-  }, [section, locationKey]);
+    else if (startAt !== null) setTab("transcript");
+  }, [section, startAt, locationKey]);
 
   const summaryReady = Boolean(lecture.data?.summary?.content_md.trim());
 
@@ -222,6 +237,7 @@ export function LecturePage() {
   const audioUrl = videoUrl ? null : (data.audio_url ?? null);
   const embed = videoUrl || audioUrl ? null : resolveEmbed(data.embed_url);
   const hasPlayer = videoUrl !== null || audioUrl !== null || embed !== null;
+  const shownTime = hasPlayer ? currentTime : startAt;
   const summary = data.summary?.content_md.trim() ?? "";
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
@@ -238,10 +254,10 @@ export function LecturePage() {
           label: "Конспект",
           panel: summary ? (
             <div className="lecture__scroll summary" ref={summaryRef}>
-              <Markdown source={summary} />
+              <SummaryMarkdown source={summary} />
             </div>
           ) : (
-            <PanelEmpty kind="summary" status={data.status} />
+            <PanelEmpty kind="summary" lecture={data} />
           ),
         },
         {
@@ -252,12 +268,12 @@ export function LecturePage() {
               <div className="lecture__scroll">
                 <Chapters
                   chapters={chapters}
-                  currentTime={hasPlayer ? currentTime : null}
+                  currentTime={shownTime}
                   onSelect={hasPlayer ? playFrom : undefined}
                 />
               </div>
             ) : (
-              <PanelEmpty kind="chapters" status={data.status} />
+              <PanelEmpty kind="chapters" lecture={data} />
             ),
         },
         {
@@ -268,11 +284,11 @@ export function LecturePage() {
               <Transcript
                 segments={segments}
                 chapters={chapters}
-                currentTime={hasPlayer ? currentTime : null}
+                currentTime={shownTime}
                 onSelect={hasPlayer ? playFrom : undefined}
               />
             ) : (
-              <PanelEmpty kind="transcript" status={data.status} />
+              <PanelEmpty kind="transcript" lecture={data} />
             ),
         },
       ]}
@@ -305,7 +321,6 @@ export function LecturePage() {
         <LectureMeta lecture={data} />
         <ExportActions
           lectureId={data.id}
-          title={data.title}
           ready={data.status === "ready"}
           hasSegments={segments.length > 0}
         />
@@ -355,6 +370,7 @@ export function LecturePage() {
               embed={embed}
               title={data.title}
               start={startAt ?? 0}
+              autoplay={startAt !== null}
               currentTime={currentTime}
               sourceUrl={data.source_url}
               {...bind}

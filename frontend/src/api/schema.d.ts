@@ -677,6 +677,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lectures/{lecture_id}/exports/{export_format}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Export Link */
+        post: operations["export_link_api_v1_lectures__lecture_id__exports__export_format__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lectures/{lecture_id}/export.srt": {
         parameters: {
             query?: never;
@@ -789,6 +806,23 @@ export interface paths {
         };
         /** Get Public */
         get: operations["get_public_api_v1_public__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/{token}/lectures/{lecture_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Course Lecture */
+        get: operations["get_public_course_lecture_api_v1_public__token__lectures__lecture_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -917,6 +951,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/legal/updates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Updates */
+        get: operations["list_updates_api_v1_legal_updates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/legal/{slug}": {
         parameters: {
             query?: never;
@@ -988,6 +1039,8 @@ export interface components {
         ComplaintIn: {
             /** Reason */
             reason: string;
+            /** Lecture Id */
+            lecture_id?: string | null;
         };
         /** CourseIn */
         CourseIn: {
@@ -1069,6 +1122,20 @@ export interface components {
             }[];
             /** Cheatsheet Md */
             cheatsheet_md: string;
+            /** Outdated */
+            outdated: boolean;
+            /** Processing */
+            processing: boolean;
+        };
+        /** ExportLinkOut */
+        ExportLinkOut: {
+            /** Url */
+            url: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1189,13 +1256,20 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
-            /** Content Md */
-            content_md: string;
             /**
              * Revision Date
              * Format: date
              */
             revision_date: string;
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Changes */
+            changes: string | null;
+            /** Content Md */
+            content_md: string;
         };
         /** LegalDocSummary */
         LegalDocSummary: {
@@ -1203,6 +1277,25 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+        };
+        /** LegalUpdateOut */
+        LegalUpdateOut: {
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /**
+             * Revision Date
+             * Format: date
+             */
+            revision_date: string;
+            /**
+             * Effective Date
+             * Format: date
+             */
+            effective_date: string;
+            /** Changes */
+            changes: string | null;
         };
         /** LinkIn */
         LinkIn: {
@@ -1413,8 +1506,6 @@ export interface components {
             duration_sec: number | null;
             /** Processed Locally */
             processed_locally: boolean;
-            /** Share Token */
-            share_token: string | null;
         };
         /** PublicShareOut */
         PublicShareOut: {
@@ -1608,6 +1699,11 @@ export interface components {
             /** Hash */
             hash: string;
         };
+        /**
+         * TelegramNotifications
+         * @enum {string}
+         */
+        TelegramNotifications: "not_linked" | "start_required" | "ready" | "blocked";
         /** TelegramSignupIn */
         TelegramSignupIn: {
             /** Id */
@@ -1682,6 +1778,7 @@ export interface components {
             ai_transfer_accepted_at: string | null;
             /** Identities */
             identities: components["schemas"]["IdentityOut"][];
+            telegram_notifications: components["schemas"]["TelegramNotifications"];
         };
         /** ValidationError */
         ValidationError: {
@@ -3491,9 +3588,43 @@ export interface operations {
             };
         };
     };
-    export_srt_api_v1_lectures__lecture_id__export_srt_get: {
+    export_link_api_v1_lectures__lecture_id__exports__export_format__link_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                lecture_id: string;
+                export_format: "pdf" | "srt" | "vtt";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_srt_api_v1_lectures__lecture_id__export_srt_get: {
+        parameters: {
+            query?: {
+                token?: string | null;
+            };
             header?: never;
             path: {
                 lecture_id: string;
@@ -3522,7 +3653,9 @@ export interface operations {
     };
     export_vtt_api_v1_lectures__lecture_id__export_vtt_get: {
         parameters: {
-            query?: never;
+            query?: {
+                token?: string | null;
+            };
             header?: never;
             path: {
                 lecture_id: string;
@@ -3551,7 +3684,9 @@ export interface operations {
     };
     export_pdf_api_v1_lectures__lecture_id__export_pdf_get: {
         parameters: {
-            query?: never;
+            query?: {
+                token?: string | null;
+            };
             header?: never;
             path: {
                 lecture_id: string;
@@ -3711,6 +3846,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicShareOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_course_lecture_api_v1_public__token__lectures__lecture_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicLectureOut"];
                 };
             };
             /** @description Validation Error */
@@ -3921,6 +4088,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LegalDocSummary"][];
+                };
+            };
+        };
+    };
+    list_updates_api_v1_legal_updates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalUpdateOut"][];
                 };
             };
         };

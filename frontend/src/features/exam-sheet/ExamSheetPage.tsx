@@ -10,20 +10,10 @@ import { useAiTransferConsent } from "../consent/useAiTransferConsent";
 import { Cheatsheet, DefinitionList, TicketList } from "./ExamSheetContent";
 import { ExamSheetPrint } from "./ExamSheetPrint";
 import { definitionsCount, ticketsCount } from "./format";
-import { definitionsOf, errorCode, errorMessage, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
+import { createErrorText, definitionsOf, errorCode, useCreateExamSheet, useExamSheet, type Definition, type ExamSheet } from "./queries";
 import "./exam-sheet.css";
 
 const sheetStates = ["subscription_required", "exam_sheet_processing", "exam_sheet_not_found"];
-
-function createErrorText(error: Error | null) {
-  const code = errorCode(error);
-  if (code === "no_summaries") {
-    return "В курсе пока нет лекций с готовым конспектом. Памятку можно собрать, когда обработается хотя бы одна лекция.";
-  }
-  if (code === "subscription_required") return "Памятка доступна только с подпиской.";
-  if (error instanceof ApiError && error.status === 503) return "Очередь сейчас недоступна. Попробуйте через пару минут.";
-  return errorMessage(error) ?? "Не получилось запустить сборку памятки. Попробуйте ещё раз.";
-}
 
 function SheetSkeleton() {
   return (
@@ -46,6 +36,15 @@ function Processing() {
           Обычно это занимает несколько минут. Можно уйти со страницы: памятка сохранится в курсе.
         </p>
       </div>
+    </div>
+  );
+}
+
+function Refreshing() {
+  return (
+    <div className="exam-sheet__notice" role="status">
+      <Spinner size="sm" label="Обновляем памятку" />
+      <p className="exam-sheet__notice-text">Обновляем памятку. Пока показана прежняя версия.</p>
     </div>
   );
 }
@@ -113,7 +112,7 @@ export function ExamSheetPage() {
       {code === "subscription_required" && (
         <EmptyState
           title="Памятка доступна с подпиской"
-          description="В подписке больше часов распознавания в неделю, квиз, памятка к экзамену и долгое хранение видео."
+          description="В подписке больше часов распознавания в неделю, квиз, памятка к экзамену, чат по лекции и долгое хранение видео."
           action={
             <Link to="/account#purchase" className="button button--primary button--md exam-sheet__plans">
               Посмотреть тарифы
@@ -162,6 +161,26 @@ export function ExamSheetPage() {
           <button type="button" className="exam-sheet__retry" onClick={() => sheet.refetch()}>
             Повторить
           </button>
+        </div>
+      )}
+
+      {data?.processing && <Refreshing />}
+
+      {data && data.outdated && !data.processing && (
+        <div className="exam-sheet__notice">
+          <div className="exam-sheet__notice-body">
+            <p className="exam-sheet__notice-text">
+              Состав курса изменился после сборки памятки. Соберите её заново, чтобы в ней были все лекции курса.
+            </p>
+            {create.isError && (
+              <p className="exam-sheet__alert" role="alert">
+                {createErrorText(create.error)}
+              </p>
+            )}
+          </div>
+          <Button variant="secondary" size="sm" onClick={startCreate} loading={create.isPending}>
+            Обновить памятку
+          </Button>
         </div>
       )}
 

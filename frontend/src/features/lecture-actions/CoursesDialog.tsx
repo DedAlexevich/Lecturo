@@ -38,21 +38,18 @@ export function CoursesDialog({ lecture, onClose }: CoursesDialogProps) {
     setPicked(next);
   }
 
-  function save(target: Set<string>, title: string) {
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (pending || !ready) return;
+    const title = newCourse.trim();
     change.mutate(
       {
-        add: [...target].filter((id) => !currentIds.has(id)),
-        remove: [...currentIds].filter((id) => !target.has(id)),
+        add: [...selected].filter((id) => !currentIds.has(id)),
+        remove: [...currentIds].filter((id) => !selected.has(id)),
         newCourse: title || undefined,
       },
       { onSuccess: onClose },
     );
-  }
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (pending || !ready) return;
-    save(selected, newCourse.trim());
   }
 
   function retry() {
@@ -68,16 +65,6 @@ export function CoursesDialog({ lecture, onClose }: CoursesDialogProps) {
       onClose={close}
       actions={
         <>
-          {ready && currentIds.size > 0 && (
-            <Button
-              variant="ghost"
-              className="lecture-courses__remove"
-              disabled={pending}
-              onClick={() => save(new Set(), "")}
-            >
-              {currentIds.size > 1 ? "Убрать из курсов" : "Убрать из курса"}
-            </Button>
-          )}
           <Button variant="secondary" disabled={pending} onClick={close}>
             Отмена
           </Button>

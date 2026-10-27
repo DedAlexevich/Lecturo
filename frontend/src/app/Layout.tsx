@@ -8,6 +8,7 @@ import styles from "./Layout.module.css";
 import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
 import { CookieNotice } from "../features/consent/CookieNotice";
+import { LegalUpdateNotice } from "../features/legal-updates/LegalUpdateNotice";
 import { AddLectureDialog } from "../features/upload/AddLectureDialog";
 import { QuotaDialog } from "../features/quota-dialog/QuotaDialog";
 import { WaitingNotice } from "../features/quota-dialog/WaitingNotice";
@@ -111,6 +112,7 @@ export function Layout() {
         </header>
         <main className={styles.main}>
           <TelegramBridge />
+          <LegalUpdateNotice />
           {signedIn && <WaitingNotice />}
           <Outlet />
         </main>

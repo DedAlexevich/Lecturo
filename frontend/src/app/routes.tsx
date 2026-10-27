@@ -30,6 +30,7 @@ export const publicRoutes: RouteObject[] = [
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/ui", element: <UiPage /> },
   { path: "/s/:token", element: <PublicSharePage /> },
+  { path: "/s/:token/:lectureId", element: <PublicSharePage /> },
 ];
 
 export const privateRoutes: RouteObject[] = [

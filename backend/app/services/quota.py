@@ -56,13 +56,17 @@ def current_week_start(week_start: datetime, now: datetime) -> datetime:
 async def subscription_until(
     session: AsyncSession, user_id: uuid.UUID, now: datetime
 ) -> datetime | None:
-    return await session.scalar(
-        select(func.max(Subscription.ends_at)).where(
-            Subscription.user_id == user_id,
-            Subscription.starts_at <= now,
-            Subscription.ends_at > now,
-        )
+    periods = await session.execute(
+        select(Subscription.starts_at, Subscription.ends_at)
+        .where(Subscription.user_id == user_id, Subscription.ends_at > now)
+        .order_by(Subscription.starts_at)
     )
+    until = None
+    for starts_at, ends_at in periods:
+        if starts_at > (until or now):
+            break
+        until = max(until or ends_at, ends_at)
+    return until
 
 
 async def has_subscription(session: AsyncSession, user: User, now: datetime | None = None) -> bool:

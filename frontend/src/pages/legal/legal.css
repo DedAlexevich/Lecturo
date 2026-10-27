@@ -20,6 +20,13 @@
   font-size: var(--text-sm);
 }
 
+.legal__changes {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-lg);
+}
+
 .legal__body {
   display: grid;
   gap: var(--space-3);

@@ -1,3 +1,7 @@
+:root:has(.lecture) {
+  --content-width: 80rem;
+}
+
 .lecture {
   display: grid;
   gap: var(--space-5);
@@ -43,7 +47,7 @@
 
 .lecture__body {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr);
   align-items: start;
   gap: var(--space-5);
 }
@@ -56,7 +60,7 @@
 .lecture__panel {
   display: flex;
   flex-direction: column;
-  height: min(36rem, calc(100dvh - var(--bar-height) - var(--space-6)));
+  height: calc(100dvh - var(--bar-height) - var(--space-4) * 2);
   min-height: 20rem;
   overflow: hidden;
   border: 1px solid var(--color-border);
@@ -71,6 +75,7 @@
 
 .lecture__panel .tabs {
   flex: 1;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   min-height: 0;
@@ -212,8 +217,47 @@
   line-height: var(--leading-relaxed);
 }
 
-.summary > * {
+.summary__content > * {
   margin: 0;
+}
+
+.summary__content {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.summary__header p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+.summary-callout {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-sunken);
+}
+
+.summary-callout--definition { border-color: #3880a0; background: color-mix(in srgb, #3880a0 12%, var(--color-surface)); }
+.summary-callout--theorem { border-color: #5b69a2; background: color-mix(in srgb, #5b69a2 12%, var(--color-surface)); }
+.summary-callout--formula { border-color: #a37826; background: color-mix(in srgb, #a37826 12%, var(--color-surface)); }
+.summary-callout--example { border-color: #43875c; background: color-mix(in srgb, #43875c 12%, var(--color-surface)); }
+.summary-callout--important { border-color: #ad5b52; background: color-mix(in srgb, #ad5b52 12%, var(--color-surface)); }
+
+.summary-callout__title {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+}
+
+.summary-callout > :last-child {
+  margin-bottom: 0;
+}
+
+.summary .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .summary h2 {

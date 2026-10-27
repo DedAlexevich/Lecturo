@@ -21,6 +21,7 @@ class ShareOut(Schema):
 
 class ComplaintIn(Schema):
     reason: str
+    lecture_id: uuid.UUID | None = None
 
 
 class PublicLectureOut(Schema):
@@ -40,7 +41,6 @@ class PublicLectureSummary(Schema):
     title: str
     duration_sec: float | None
     processed_locally: bool
-    share_token: str | None
 
 
 class PublicCourseOut(Schema):

@@ -91,6 +91,8 @@ class ExamSheetOut(Schema):
     tickets: list[str]
     definitions: list[dict[str, str]]
     cheatsheet_md: str
+    outdated: bool
+    processing: bool
 
 
 class LocalResultIn(Schema):
@@ -114,3 +116,8 @@ class LectureStatusOut(Schema):
     duration_sec: float | None = None
     eta_sec: int | None = None
     steps: list[StepOut]
+
+
+class ExportLinkOut(Schema):
+    url: str
+    expires_at: datetime

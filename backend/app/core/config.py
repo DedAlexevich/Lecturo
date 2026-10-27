@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://lecturo:lecturo@db:5432/lecturo"
     redis_url: str = "redis://redis:6379/0"
     storage_dir: Path = Path("/data/storage")
+    youtube_proxy: str = ""
 
     log_dir: Path | None = None
     log_service: str = "app"

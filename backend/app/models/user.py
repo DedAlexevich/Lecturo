@@ -52,6 +52,8 @@ class AuthIdentity(UUIDPk, CreatedAt, Base):
     provider: Mapped[AuthProvider] = mapped_column(Enum(AuthProvider, name="auth_provider"))
     provider_user_id: Mapped[str] = mapped_column(String(255))
     data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    bot_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bot_blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="identities")
 

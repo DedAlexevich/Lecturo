@@ -1,14 +1,16 @@
 from html import escape
 from zoneinfo import ZoneInfo
 
-from markdown_it import MarkdownIt
 from weasyprint import CSS, HTML
+from weasyprint.text.fonts import FontConfiguration
 
 from app.models import Lecture
+from app.services.summary_markdown import katex_css, render_summary
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 
-markdown_renderer = MarkdownIt("commonmark", {"html": False}).enable("table")
+FONT_CONFIG = FontConfiguration()
+KATEX_STYLE = CSS(string=katex_css(), font_config=FONT_CONFIG)
 
 STYLE = CSS(
     string="""
@@ -117,6 +119,19 @@ p { margin: 0 0 3mm; }
   vertical-align: top;
 }
 .summary img { display: none; }
+.summary-callout {
+  margin: 0 0 4mm;
+  padding: 3mm 5mm;
+  border-left: 3pt solid #3880a0;
+  background: #e5f0f4;
+  break-inside: avoid;
+}
+.summary-callout--theorem { border-color: #5b69a2; background: #ebedf5; }
+.summary-callout--formula { border-color: #a37826; background: #f4eee4; }
+.summary-callout--example { border-color: #43875c; background: #e8f1eb; }
+.summary-callout--important { border-color: #ad5b52; background: #f5eae9; }
+.summary-callout__title { font-weight: 700; margin: 0 0 2mm; }
+.summary-callout > :last-child { margin-bottom: 0; }
 """
 )
 
@@ -162,7 +177,7 @@ def lecture_html(lecture: Lecture, base_url: str) -> str:
     if lecture.summary is not None and lecture.summary.content_md.strip():
         parts.append(
             f'<h2>Конспект</h2><div class="summary">'
-            f"{markdown_renderer.render(lecture.summary.content_md)}</div>"
+            f"{render_summary(lecture.summary.content_md)}</div>"
         )
 
     return (
@@ -176,4 +191,6 @@ def refuse_fetch(url: str, *args: object, **kwargs: object) -> dict:
 
 
 def render_pdf(html: str) -> bytes:
-    return HTML(string=html, url_fetcher=refuse_fetch).write_pdf(stylesheets=[STYLE])
+    return HTML(string=html, url_fetcher=refuse_fetch).write_pdf(
+        stylesheets=[KATEX_STYLE, STYLE], font_config=FONT_CONFIG
+    )
