@@ -65,3 +65,15 @@ export function toLocalResultPayload(lecture: LocalLecture): LocalResultPayload 
     summary_md: lecture.summaryMd,
   };
 }
+
+export async function markLocalLectureSynced(id: string, userId: string, lectureId: string): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(LECTURES_STORE, "readwrite");
+  const store = transaction.objectStore(LECTURES_STORE);
+  const request = store.get(id);
+  request.onsuccess = () => {
+    const lecture = request.result as LocalLecture | undefined;
+    if (lecture) store.put({ ...lecture, syncedLectures: { ...lecture.syncedLectures, [userId]: lectureId } });
+  };
+  await transactionDone(transaction);
+}

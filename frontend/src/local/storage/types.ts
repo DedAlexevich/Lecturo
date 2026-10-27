@@ -14,6 +14,7 @@ export interface LocalLecture {
   segments: LocalSegment[];
   chapters: LocalChapter[];
   summaryMd: string | null;
+  syncedLectures?: Record<string, string>;
 }
 
 export type NewLocalLecture = Omit<LocalLecture, "id" | "createdAt" | "chapters" | "summaryMd"> &

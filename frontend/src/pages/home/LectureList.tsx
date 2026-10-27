@@ -31,7 +31,7 @@ function LectureRow({ lecture, progress }: { lecture: Lecture; progress?: Lectur
         </Link>
         <p className="lecture-row__meta">
           <span className="lecture-row__duration">{formatDuration(lecture.duration_sec)}</span>
-          <span>{sourceLabels[lecture.source_type]}</span>
+          <span>{lecture.processed_locally ? "обработано на устройстве" : sourceLabels[lecture.source_type]}</span>
           <span>{formatDate(lecture.created_at)}</span>
         </p>
         {step && (
