@@ -52,9 +52,14 @@ dump_database() {
   echo "saved $target ($(du -h "$target" | cut -f1))"
 }
 
+check_keep() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail "BACKUP_KEEP must be a whole number from 1, got '$1'"
+}
+
 rotate_backups() {
   local dir=$1 keep=$2
   local old file
+  check_keep "$keep"
   mapfile -t old < <(printf '%s\n' "$dir"/lecturo-*.dump | sort -r | tail -n +$((keep + 1)))
   for file in "${old[@]}"; do
     [ -e "$file" ] || continue
