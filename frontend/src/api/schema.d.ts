@@ -1105,6 +1105,10 @@ export interface components {
             }[];
             /** Cheatsheet Md */
             cheatsheet_md: string;
+            /** Outdated */
+            outdated: boolean;
+            /** Processing */
+            processing: boolean;
         };
         /** ExportLinkOut */
         ExportLinkOut: {

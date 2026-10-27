@@ -51,7 +51,8 @@ export function useExamSheet(courseId: string) {
       if (data === undefined) throw new ApiError(response.status, error);
       return data;
     },
-    refetchInterval: (query) => (errorCode(query.state.error) === "exam_sheet_processing" ? pollInterval : false),
+    refetchInterval: (query) =>
+      query.state.data?.processing || errorCode(query.state.error) === "exam_sheet_processing" ? pollInterval : false,
   });
 }
 
