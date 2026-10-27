@@ -5,6 +5,13 @@ dir=/backups
 keep=${BACKUP_KEEP:-7}
 interval=$(( ${BACKUP_INTERVAL_HOURS:-24} * 3600 ))
 
+case "$keep" in
+  "" | *[!0-9]* | 0)
+    echo "BACKUP_KEEP must be a whole number from 1, got '$keep'" >&2
+    exit 1
+    ;;
+esac
+
 umask 022
 mkdir -p "$dir"
 chmod 777 "$dir"
@@ -39,5 +46,5 @@ while true; do
     sleep "$wait"
   fi
   backup
-  sleep 60
+  sleep 600
 done
