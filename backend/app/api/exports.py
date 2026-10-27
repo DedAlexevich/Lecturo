@@ -13,12 +13,6 @@ from app.services.subtitles import Segment, content_disposition, to_srt, to_vtt
 
 router = APIRouter(prefix="/lectures/{lecture_id}", tags=["exports"])
 
-SUBTITLE_RESPONSES = {
-    404: {"description": "Лекция не найдена"},
-    409: {"description": "Расшифровки ещё нет"},
-}
-
-
 async def subtitles_response(
     session: AsyncSession,
     user: User,
@@ -43,14 +37,14 @@ async def subtitles_response(
     )
 
 
-@router.get("/export.srt", response_class=Response, responses=SUBTITLE_RESPONSES)
+@router.get("/export.srt", response_class=Response)
 async def export_srt(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     return await subtitles_response(
         session, user, lecture_id, to_srt, "srt", "application/x-subrip"
     )
 
 
-@router.get("/export.vtt", response_class=Response, responses=SUBTITLE_RESPONSES)
+@router.get("/export.vtt", response_class=Response)
 async def export_vtt(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> Response:
     return await subtitles_response(session, user, lecture_id, to_vtt, "vtt", "text/vtt")
 

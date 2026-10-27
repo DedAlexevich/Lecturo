@@ -2593,20 +2593,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Лекция не найдена */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Расшифровки ещё нет */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2631,20 +2617,6 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Лекция не найдена */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Расшифровки ещё нет */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };
