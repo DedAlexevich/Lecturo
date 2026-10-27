@@ -6,6 +6,7 @@
 | `deploy.sh` | выкладка коммита на сервер, запускается из GitHub Actions |
 | `compose.prod.yml` | настройки compose для сервера |
 | `Caddyfile` | конфигурация Caddy |
+| `status.sh`, `health-alert.sh`, `install-monitoring.sh` | сводка по серверу и алерты в Telegram, см. [docs/deploy.md](../docs/deploy.md#мониторинг-и-логи) |
 | `backup/` | бэкапы базы, см. ниже |
 
 ## Бэкапы базы
