@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 
 from app.models import LectureStatus, SourceType, StepName, StepStatus
+from app.pipeline.download import with_scheme
 from app.schemas.common import Schema
 
 
@@ -11,6 +12,11 @@ class LinkIn(Schema):
     url: HttpUrl
     title: str | None = Field(default=None, max_length=300)
     course_id: uuid.UUID | None = None
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def add_scheme(cls, value: object) -> object:
+        return with_scheme(value) if isinstance(value, str) else value
 
 
 class SegmentOut(Schema):
@@ -50,8 +56,14 @@ class LectureOut(Schema):
     created_at: datetime
 
 
+class LinkLectureOut(LectureOut):
+    existing: bool = False
+
+
 class LectureDetail(LectureOut):
     video_url: str | None = None
+    audio_only: bool = False
+    audio_url: str | None = None
     steps: list[StepOut]
     segments: list[SegmentOut]
     chapters: list[ChapterOut]

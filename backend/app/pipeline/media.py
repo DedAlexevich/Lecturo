@@ -19,6 +19,8 @@ MAX_DURATION_SEC = 4 * 3600
 PROBE_TIMEOUT_SEC = 60.0
 PROGRESS_INTERVAL_SEC = 2.0
 VIDEO_HEIGHT = 720
+VIDEO_PRESET = "veryfast"
+PLAYER_PROFILES = {"Constrained Baseline", "Baseline", "Main", "High"}
 
 
 class MediaError(Exception):
@@ -78,13 +80,62 @@ async def probe_duration(path: Path) -> float:
         raise MediaError("Не удалось определить длительность записи") from error
 
 
-async def has_video(path: Path) -> bool:
-    info = await probe(path, "stream=codec_type:stream_disposition=attached_pic")
-    return any(
-        stream.get("codec_type") == "video"
-        and not stream.get("disposition", {}).get("attached_pic")
-        for stream in info.get("streams") or []
+async def media_streams(path: Path) -> list[dict[str, Any]]:
+    info = await probe(
+        path, "stream=codec_type,codec_name,profile,height,pix_fmt:stream_disposition=attached_pic"
     )
+    return info.get("streams") or []
+
+
+def is_picture(stream: dict[str, Any]) -> bool:
+    return bool(stream.get("disposition", {}).get("attached_pic"))
+
+
+def first_stream(streams: list[dict[str, Any]], codec_type: str) -> dict[str, Any] | None:
+    return next((stream for stream in streams if stream.get("codec_type") == codec_type), None)
+
+
+def has_video(streams: list[dict[str, Any]]) -> bool:
+    return any(stream.get("codec_type") == "video" and not is_picture(stream) for stream in streams)
+
+
+def fits_player(streams: list[dict[str, Any]]) -> bool:
+    video = first_stream(streams, "video")
+    audio = first_stream(streams, "audio")
+    return (
+        video is not None
+        and audio is not None
+        and not is_picture(video)
+        and video.get("codec_name") == "h264"
+        and video.get("profile") in PLAYER_PROFILES
+        and video.get("pix_fmt") == "yuv420p"
+        and 0 < int(video.get("height") or 0) <= VIDEO_HEIGHT
+        and audio.get("codec_name") == "aac"
+    )
+
+
+def video_args(original: Path, streams: list[dict[str, Any]]) -> list[str]:
+    args = ["-i", str(original), "-map", "0:v:0", "-map", "0:a:0"]
+    if fits_player(streams):
+        args += ["-c", "copy"]
+    else:
+        args += [
+            "-vf",
+            f"scale=-2:'2*trunc(min({VIDEO_HEIGHT},ih)/2)'",
+            "-c:v",
+            "libx264",
+            "-preset",
+            VIDEO_PRESET,
+            "-crf",
+            "28",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+        ]
+    return [*args, "-movflags", "+faststart", "-f", "mp4"]
 
 
 async def run_ffmpeg(args: list[str], duration: float | None, report: Report, error: str) -> None:
@@ -169,43 +220,23 @@ async def extract_audio(session: AsyncSession, lecture: Lecture, report: Report)
 async def transcode_video(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     settings = get_settings()
     original = original_path(lecture.id)
-    if await has_video(original):
-        target = settings.storage_dir / "videos" / f"{lecture.id}.mp4"
-        await encode(
-            [
-                "-i",
-                str(original),
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0",
-                "-vf",
-                f"scale=-2:'2*trunc(min({VIDEO_HEIGHT},ih)/2)'",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "28",
-                "-pix_fmt",
-                "yuv420p",
-                "-c:a",
-                "aac",
-                "-b:a",
-                "96k",
-                "-movflags",
-                "+faststart",
-                "-f",
-                "mp4",
-            ],
-            target,
-            lecture.duration_sec,
-            report,
-            "Не удалось пережать видео",
-        )
-        lecture.video_path = str(target)
-        owner = await session.get(User, lecture.owner_id, with_for_update=True)
-        now = datetime.now(UTC)
-        days = await quota.video_retention_days(session, owner, now=now, settings=settings)
-        lecture.video_expires_at = now + timedelta(days=days)
+    try:
+        streams = await media_streams(original)
+        if has_video(streams):
+            target = settings.storage_dir / "videos" / f"{lecture.id}.mp4"
+            await encode(
+                video_args(original, streams),
+                target,
+                lecture.duration_sec,
+                report,
+                "Не удалось пережать видео",
+            )
+            lecture.video_path = str(target)
+            owner = await session.get(User, lecture.owner_id, with_for_update=True)
+            now = datetime.now(UTC)
+            days = await quota.video_retention_days(session, owner, now=now, settings=settings)
+            lecture.video_expires_at = now + timedelta(days=days)
+    except Exception:
+        await asyncio.to_thread(original.unlink, missing_ok=True)
+        raise
     await asyncio.to_thread(original.unlink, missing_ok=True)

@@ -6,9 +6,7 @@ import pytest
 
 from app.core.config import Settings
 from app.providers.retry import RetryPolicy
-from app.providers.salute import OAUTH_URL, SaluteSpeechError, SaluteSpeechToText
 from app.providers.yandex import RECOGNIZE_URL, YandexSpeechKitError, YandexSpeechToText
-from tests.test_salute_stt import result, saved_result, token_response
 from tests.test_yandex_stt import saved_operation, yandex_settings
 
 INTERNAL = {"code": 13, "message": "Internal"}
@@ -70,7 +68,7 @@ async def test_yandex_start_recovers_after_internal_error(
     assert len(retry_pauses) == 1
     assert len(calls["PUT"]) == 1
     assert "попытка 1 из 5" in caplog.text
-    assert yandex_settings().yandex_speechkit_api_key not in caplog.text
+    assert "api-key" not in caplog.text
 
 
 @pytest.mark.parametrize("status", [429, 502, 503, 504])
@@ -185,93 +183,4 @@ async def test_yandex_poll_retry_does_not_start_second_operation(
     segments = await provider.transcribe(make_audio(tmp_path))
     assert len(segments) == 3
     assert starts == 1
-    assert len(retry_pauses) == 1
-
-
-def salute_provider(handler) -> SaluteSpeechToText:
-    return SaluteSpeechToText(
-        Settings(stt_provider="salute", salute_auth_key="k"),
-        poll_interval=0,
-        transport=httpx.MockTransport(handler),
-    )
-
-
-async def test_salute_start_recovers_after_server_error(tmp_path: Path, retry_pauses: list[float]):
-    starts = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal starts
-        if str(request.url) == OAUTH_URL:
-            return token_response()
-        match request.url.path:
-            case "/rest/v1/data:upload":
-                return result({"request_file_id": "file-1"})
-            case "/rest/v1/speech:async_recognize":
-                starts += 1
-                if starts == 1:
-                    return httpx.Response(503)
-                return result({"id": "task-1"})
-            case "/rest/v1/task:get":
-                return result({"status": "DONE", "response_file_id": "r1"})
-            case "/rest/v1/data:download":
-                return httpx.Response(200, json=saved_result())
-        return httpx.Response(404)
-
-    segments = await salute_provider(handler).transcribe(make_audio(tmp_path))
-    assert len(segments) == 3
-    assert starts == 2
-    assert len(retry_pauses) == 1
-
-
-async def test_salute_gives_up_after_all_attempts(tmp_path: Path, retry_pauses: list[float]):
-    uploads = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal uploads
-        if str(request.url) == OAUTH_URL:
-            return token_response()
-        uploads += 1
-        return httpx.Response(500, text="boom")
-
-    with pytest.raises(SaluteSpeechError, match="500"):
-        await salute_provider(handler).transcribe(make_audio(tmp_path))
-    assert uploads == 5
-    assert len(retry_pauses) == 4
-
-
-async def test_salute_permanent_error_is_not_retried(tmp_path: Path, retry_pauses: list[float]):
-    uploads = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal uploads
-        if str(request.url) == OAUTH_URL:
-            return token_response()
-        uploads += 1
-        return httpx.Response(400, text="bad")
-
-    with pytest.raises(SaluteSpeechError, match="400"):
-        await salute_provider(handler).transcribe(make_audio(tmp_path))
-    assert uploads == 1
-    assert retry_pauses == []
-
-
-async def test_salute_token_request_is_retried(tmp_path: Path, retry_pauses: list[float]):
-    tokens = iter([httpx.Response(503), token_response()])
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if str(request.url) == OAUTH_URL:
-            return next(tokens)
-        match request.url.path:
-            case "/rest/v1/data:upload":
-                return result({"request_file_id": "file-1"})
-            case "/rest/v1/speech:async_recognize":
-                return result({"id": "task-1"})
-            case "/rest/v1/task:get":
-                return result({"status": "DONE", "response_file_id": "r1"})
-            case "/rest/v1/data:download":
-                return httpx.Response(200, json=saved_result())
-        return httpx.Response(404)
-
-    segments = await salute_provider(handler).transcribe(make_audio(tmp_path))
-    assert len(segments) == 3
     assert len(retry_pauses) == 1

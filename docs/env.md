@@ -49,20 +49,17 @@ cp .env.example .env
 
 ## Распознавание речи (STT)
 
-`STT_PROVIDER` принимает `stub`, `yandex` или `salute`. Другое значение приведёт к ошибке «Неизвестный STT_PROVIDER». Если провайдер выбран, но не хватает обязательных значений, при его создании будет ошибка «Не заданы настройки ...» со списком недостающих переменных.
+`STT_PROVIDER` принимает `stub` или `yandex`. Другое значение приведёт к ошибке «Неизвестный STT_PROVIDER». Если провайдер выбран, но не хватает обязательных значений, при его создании будет ошибка «Не заданы настройки ...» со списком недостающих переменных.
 
 | Переменная | Описание | Обязательна | По умолчанию | Где используется |
 |---|---|---|---|---|
-| `STT_PROVIDER` | `stub`, `yandex` или `salute` | нет | `stub` | `backend/app/providers/__init__.py` |
+| `STT_PROVIDER` | `stub` или `yandex` | нет | `stub` | `backend/app/providers/__init__.py` |
 | `YANDEX_SPEECHKIT_API_KEY` | API-ключ сервисного аккаунта для SpeechKit | при `yandex` | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_FOLDER_ID` | Идентификатор каталога Yandex Cloud, передаётся в запрос распознавания как `folderId` | рекомендуется при `yandex`, код работает и без него | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_STORAGE_BUCKET` | Имя бакета Object Storage, куда на время распознавания загружается аудио | при `yandex` | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_STORAGE_ACCESS_KEY` | Идентификатор статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
 | `YANDEX_STORAGE_SECRET_KEY` | Секретная часть статического ключа доступа | при `yandex` | пусто | `backend/app/providers/yandex.py` |
-| `SALUTE_AUTH_KEY` | Ключ авторизации SaluteSpeech, подставляется в заголовок `Authorization: Basic ...` | при `salute` | пусто | `backend/app/providers/salute.py` |
-| `SALUTE_SCOPE` | Область доступа SaluteSpeech, например `SALUTE_SPEECH_PERS` для физических лиц | нет | `SALUTE_SPEECH_PERS` | `backend/app/providers/salute.py` |
-| `SALUTE_CA_BUNDLE` | Путь внутри контейнера к файлу с корневыми сертификатами в формате PEM | нет | пусто | `backend/app/providers/salute.py` |
-| `STT_RETRY_ATTEMPTS` | Сколько раз всего пробовать запрос к SpeechKit или SaluteSpeech при временной ошибке (429, 500, 502, 503, 504, код 13, таймаут или обрыв соединения). `1` отключает повторы | нет | `5` | `backend/app/providers/retry.py` |
+| `STT_RETRY_ATTEMPTS` | Сколько раз всего пробовать запрос к SpeechKit при временной ошибке (429, 500, 502, 503, 504, код 13, таймаут или обрыв соединения). `1` отключает повторы | нет | `5` | `backend/app/providers/retry.py` |
 | `STT_RETRY_BASE_SECONDS` | Пауза перед первым повтором, секунды | нет | `2` | `backend/app/providers/retry.py` |
 | `STT_RETRY_FACTOR` | Во сколько раз растёт пауза после каждой неудачи. При значениях по умолчанию паузы около 2, 6, 18 и 54 секунд, к каждой добавляется случайный разброс до 20% | нет | `3` | `backend/app/providers/retry.py` |
 | `STT_RETRY_MAX_SECONDS` | Верхняя граница одной паузы, секунды | нет | `60` | `backend/app/providers/retry.py` |
@@ -80,14 +77,6 @@ cp .env.example .env
 7. В `.env` задайте `STT_PROVIDER=yandex` и примените настройки: `docker compose up -d`.
 
 Бэкенд обращается к `storage.yandexcloud.net` и к API распознавания `transcribe.api.cloud.yandex.net`.
-
-### SaluteSpeech
-
-1. Зарегистрируйтесь в [SberDevices Studio](https://developers.sber.ru/studio) и создайте проект с сервисом SaluteSpeech API.
-2. В настройках API сгенерируйте ключ авторизации. Он показывается один раз, его значение идёт в `SALUTE_AUTH_KEY`. Бэкенд подставляет его в заголовок `Authorization: Basic ...`, поэтому вставляйте строку в том виде, в каком её выдаёт студия.
-3. `SALUTE_SCOPE` зависит от типа доступа. Для физического лица подходит значение по умолчанию `SALUTE_SPEECH_PERS`. Для юридических лиц значения другие, их список указан в документации SaluteSpeech и в личном кабинете.
-4. API SaluteSpeech использует сертификат национального удостоверяющего центра. Если запросы падают с ошибкой проверки сертификата, скачайте корневой сертификат по ссылке из документации SaluteSpeech, положите его на сервер в формате PEM, примонтируйте файл в контейнеры `api` и `worker` и укажите путь внутри контейнера в `SALUTE_CA_BUNDLE`. Если ошибки нет, оставьте переменную пустой.
-5. Задайте `STT_PROVIDER=salute` и примените настройки: `docker compose up -d`.
 
 ## LLM и эмбеддинги
 

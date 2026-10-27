@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react";
 import { Spinner } from "../../../ui/Spinner";
 import { formatTimecode } from "../../../lib/timecode";
 import type { PlayerProps } from "./player";
@@ -13,6 +13,7 @@ type VideoPlayerProps = PlayerProps & {
   src: string;
   title: string;
   refreshSrc: () => Promise<string | null>;
+  audio?: boolean;
 };
 
 type Resume = { time: number; play: boolean };
@@ -34,9 +35,9 @@ const icons = {
   exitFullscreen: "M8 4h2v6H4V8h4zM14 4h2v4h4v2h-6zM4 14h6v6H8v-4H4zM14 14h6v2h-4v4h-2z",
 };
 
-export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: VideoPlayerProps) {
+export function VideoPlayer({ src, title, refreshSrc, audio = false, onReady, onTimeUpdate }: VideoPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLMediaElement | null>(null);
   const resumeRef = useRef<Resume | null>(null);
   const refreshedRef = useRef(false);
   const [activeSrc, setActiveSrc] = useState(src);
@@ -88,7 +89,7 @@ export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: V
     setRate(value);
   };
 
-  const canFullscreen = document.fullscreenEnabled || "webkitEnterFullscreen" in HTMLVideoElement.prototype;
+  const canFullscreen = !audio && (document.fullscreenEnabled || "webkitEnterFullscreen" in HTMLVideoElement.prototype);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -155,7 +156,7 @@ export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: V
       ArrowLeft: () => seekTo(element.currentTime - STEP_SECONDS),
       ArrowRight: () => seekTo(element.currentTime + STEP_SECONDS),
       m: toggleMute,
-      f: toggleFullscreen,
+      ...(canFullscreen && { f: toggleFullscreen }),
     };
     const action = actions[event.key];
     if (!action) return;
@@ -164,53 +165,86 @@ export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: V
   };
 
   const progress = duration > 0 ? Math.min(1, time / duration) : 0;
+  const failedText = audio
+    ? "Не удалось загрузить аудио. Обновите страницу или попробуйте позже."
+    : "Не удалось загрузить видео. Обновите страницу или попробуйте позже.";
+  const mediaEvents = {
+    onLoadedMetadata,
+    onDurationChange: (event: SyntheticEvent<HTMLMediaElement>) => setDuration(event.currentTarget.duration),
+    onTimeUpdate: (event: SyntheticEvent<HTMLMediaElement>) => {
+      if (resumeRef.current) return;
+      setTime(event.currentTarget.currentTime);
+      onTimeUpdate(event.currentTarget.currentTime);
+    },
+    onPlay: () => setPlaying(true),
+    onPause: () => setPlaying(false),
+    onWaiting: () => setWaiting(true),
+    onPlaying: () => setWaiting(false),
+    onCanPlay: () => setWaiting(false),
+    onError: () => void onError(),
+  };
 
   return (
     <div
       ref={rootRef}
-      className={fullscreen ? "video-player video-player--fullscreen" : "video-player"}
+      className={
+        audio
+          ? "video-player video-player--audio"
+          : fullscreen
+            ? "video-player video-player--fullscreen"
+            : "video-player"
+      }
       tabIndex={0}
       role="group"
       aria-label={`Плеер: ${title}`}
       onKeyDown={onKeyDown}
     >
-      <div className="video-player__screen">
-        <video
-          ref={videoRef}
-          className="video-player__video"
-          src={activeSrc}
-          preload="metadata"
-          playsInline
-          aria-label={title}
-          onClick={() => {
-            rootRef.current?.focus({ preventScroll: true });
-            togglePlay();
-          }}
-          onLoadedMetadata={onLoadedMetadata}
-          onDurationChange={(event) => setDuration(event.currentTarget.duration)}
-          onTimeUpdate={(event) => {
-            if (resumeRef.current) return;
-            setTime(event.currentTarget.currentTime);
-            onTimeUpdate(event.currentTarget.currentTime);
-          }}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onWaiting={() => setWaiting(true)}
-          onPlaying={() => setWaiting(false)}
-          onCanPlay={() => setWaiting(false)}
-          onError={() => void onError()}
-        />
-        {waiting && !failed && (
-          <div className="video-player__overlay">
-            <Spinner size="lg" label="Видео загружается" />
-          </div>
-        )}
-        {failed && (
-          <div className="video-player__overlay video-player__overlay--error" role="alert">
-            Не удалось загрузить видео. Обновите страницу или попробуйте позже.
-          </div>
-        )}
-      </div>
+      {audio ? (
+        <>
+          <audio
+            ref={(element) => {
+              videoRef.current = element;
+            }}
+            src={activeSrc}
+            preload="metadata"
+            aria-label={title}
+            {...mediaEvents}
+          />
+          {failed && (
+            <p className="video-player__audio-error" role="alert">
+              {failedText}
+            </p>
+          )}
+        </>
+      ) : (
+        <div className="video-player__screen">
+          <video
+            ref={(element) => {
+              videoRef.current = element;
+            }}
+            className="video-player__video"
+            src={activeSrc}
+            preload="metadata"
+            playsInline
+            aria-label={title}
+            onClick={() => {
+              rootRef.current?.focus({ preventScroll: true });
+              togglePlay();
+            }}
+            {...mediaEvents}
+          />
+          {waiting && !failed && (
+            <div className="video-player__overlay">
+              <Spinner size="lg" label="Видео загружается" />
+            </div>
+          )}
+          {failed && (
+            <div className="video-player__overlay video-player__overlay--error" role="alert">
+              {failedText}
+            </div>
+          )}
+        </div>
+      )}
       <div className="video-player__controls">
         <div className="video-player__track">
           <div className="video-player__rail">
@@ -235,11 +269,12 @@ export function VideoPlayer({ src, title, refreshSrc, onReady, onTimeUpdate }: V
             className="video-player__button"
             onClick={togglePlay}
             disabled={failed}
-            aria-label={playing ? "Пауза" : "Смотреть"}
+            aria-label={playing ? "Пауза" : audio ? "Слушать" : "Смотреть"}
           >
             <Icon path={playing ? icons.pause : icons.play} />
           </button>
           <span className="video-player__time">
+            {audio && waiting && !failed && <Spinner size="sm" label="Аудио загружается" />}
             {formatTimecode(time)}
             <span className="video-player__duration"> / {formatTimecode(duration)}</span>
           </span>

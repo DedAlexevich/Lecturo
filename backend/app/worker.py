@@ -8,7 +8,13 @@ from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.pipeline.exam import build_exam_sheet
 from app.pipeline.retention import delete_expired_videos
-from app.pipeline.tasks import process_lecture, process_quiz
+from app.pipeline.tasks import (
+    LECTURE_TIMEOUT_SEC,
+    process_lecture,
+    process_quiz,
+    process_regeneration,
+    resume_interrupted_lectures,
+)
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings
 from app.providers.yandex import YandexEmbeddings
@@ -31,13 +37,15 @@ async def check_providers(
 async def startup(ctx: dict[str, Any]) -> None:
     configure_logging()
     await check_providers(get_settings())
+    await resume_interrupted_lectures(ctx["redis"])
 
 
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    functions = [process_lecture, process_quiz, build_exam_sheet]
+    functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
     on_startup = startup
-    job_timeout = 4 * 3600
+    job_timeout = LECTURE_TIMEOUT_SEC + 600
+    max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
     cron_jobs = [cron(delete_expired_videos, minute=0)]

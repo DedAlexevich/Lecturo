@@ -28,6 +28,46 @@ export function findActiveSegment(segments: { start: number }[], time: number) {
   return found;
 }
 
+export type TranscriptSentence<S> = {
+  start: number;
+  end: number;
+  text: string;
+  segments: S[];
+};
+
+const SENTENCE_END = /[.!?…]["»”')\]]*$/;
+const SENTENCE_PAUSE_SEC = 1.5;
+const SENTENCE_MAX_SEC = 25;
+
+export function joinSentences<S extends { start: number; end: number; text: string }>(
+  segments: S[],
+  chapters: { start: number }[] = [],
+): TranscriptSentence<S>[] {
+  const sentences: TranscriptSentence<S>[] = [];
+  let current: TranscriptSentence<S> | null = null;
+  let currentChapter = -1;
+  for (const segment of segments) {
+    const text = segment.text.trim();
+    const chapter = findActiveSegment(chapters, segment.start);
+    const continues =
+      current !== null &&
+      chapter === currentChapter &&
+      !SENTENCE_END.test(current.text) &&
+      segment.start - current.end <= SENTENCE_PAUSE_SEC &&
+      Math.max(segment.end, segment.start) - current.start <= SENTENCE_MAX_SEC;
+    if (continues && current !== null) {
+      current.end = Math.max(current.end, segment.end);
+      current.text = [current.text, text].filter(Boolean).join(" ");
+      current.segments.push(segment);
+    } else {
+      current = { start: segment.start, end: segment.end, text, segments: [segment] };
+      sentences.push(current);
+      currentChapter = chapter;
+    }
+  }
+  return sentences;
+}
+
 export type TranscriptRow<S, C> =
   | { kind: "chapter"; chapter: C; chapterIndex: number }
   | { kind: "segment"; segment: S; segmentIndex: number };

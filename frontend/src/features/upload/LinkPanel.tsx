@@ -12,12 +12,18 @@ type LinkPanelProps = {
   onClose: () => void;
 };
 
-function isWebLink(value: string) {
+function withScheme(value: string) {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return value;
+  return `https://${value.replace(/^\/\//, "")}`;
+}
+
+function webLinkOf(value: string) {
   try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
+    const url = new URL(withScheme(value));
+    const web = url.protocol === "https:" || url.protocol === "http:";
+    return web && url.hostname.includes(".") ? url.href : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -25,7 +31,8 @@ export function LinkPanel({ courseField, pending, error, onSubmit, onClose }: Li
   const [url, setUrl] = useState("");
   const [touched, setTouched] = useState(false);
   const trimmed = url.trim();
-  const invalid = touched && !isWebLink(trimmed);
+  const link = webLinkOf(trimmed);
+  const invalid = touched && link === null;
 
   return (
     <form
@@ -34,19 +41,21 @@ export function LinkPanel({ courseField, pending, error, onSubmit, onClose }: Li
       onSubmit={(event) => {
         event.preventDefault();
         setTouched(true);
-        if (isWebLink(trimmed)) onSubmit(trimmed);
+        if (link !== null) onSubmit(link);
       }}
     >
       <Field
         label="Ссылка на видео"
         hint="VK Видео, YouTube, Rutube, Яндекс Диск и другие сайты с видео"
-        error={invalid ? "Вставьте ссылку целиком, вместе с https://" : undefined}
+        error={invalid ? "Не похоже на ссылку. Пример: youtu.be/…" : undefined}
       >
         {(control) => (
           <Input
             {...control}
-            type="url"
+            type="text"
             inputMode="url"
+            autoCapitalize="none"
+            spellCheck={false}
             autoComplete="off"
             placeholder="https://vkvideo.ru/video-…"
             value={url}

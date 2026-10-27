@@ -26,9 +26,6 @@ class Settings(BaseSettings):
     yandex_storage_bucket: str = ""
     yandex_storage_access_key: str = ""
     yandex_storage_secret_key: str = ""
-    salute_auth_key: str = ""
-    salute_scope: str = "SALUTE_SPEECH_PERS"
-    salute_ca_bundle: str = ""
     stt_retry_attempts: int = 5
     stt_retry_base_seconds: float = 2.0
     stt_retry_factor: float = 3.0
@@ -95,6 +92,7 @@ class Settings(BaseSettings):
     local_timecode_tolerance_sec: float = 1.0
     local_results_rate_limit: int = 10
     local_results_rate_window_seconds: int = 60
+    regenerate_summary_rate_window_seconds: int = 300
     complaints_rate_limit: int = 5
     complaints_rate_window_seconds: int = 3600
     auth_mail_rate_limit: int = 3

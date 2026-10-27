@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useMe } from "../../app/useMe";
 import { rememberPickedFile } from "../../local/pickedFiles";
 import { Dialog } from "../../ui/Dialog";
@@ -31,6 +31,7 @@ export function AddLectureDialog() {
   const addLink = useAddLink();
   const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
   const { setOpen: setQuotaDialogOpen } = useQuotaDialogParam();
 
@@ -113,6 +114,12 @@ export function AddLectureDialog() {
           onSuccess: (lecture) => {
             refreshLists();
             setLinkKey((key) => key + 1);
+            if (lecture.existing) {
+              resetLink();
+              navigate(`/lectures/${lecture.id}`);
+              toast.show(`Лекция «${lecture.title}» уже добавлена, открыли её`);
+              return;
+            }
             if (lecture.status === "waiting_quota") {
               toast.show(`Лекция «${lecture.title}» добавлена, но лимита на неё не хватает`);
               resetLink();
