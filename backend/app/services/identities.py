@@ -18,7 +18,7 @@ from app.models import (
     UsageEntry,
     User,
 )
-from app.schemas.user import EmailIdentityIn, IdentityOut, UserOut
+from app.schemas.user import EmailIdentityIn, IdentityOut, TelegramNotifications, UserOut
 from app.services.auth import hash_password, normalize_email
 from app.services.consents import ai_transfer_given, current_ai_transfer_revision
 
@@ -47,7 +47,22 @@ async def user_out(session: AsyncSession, user: User) -> UserOut:
         if ai_transfer_given(user.ai_transfer_accepted_at, user.ai_transfer_revision)
         else None,
         identities=[IdentityOut.model_validate(identity) for identity in user.identities],
+        telegram_notifications=telegram_notifications(user.identities),
     )
+
+
+def telegram_notifications(user_identities: list[AuthIdentity]) -> TelegramNotifications:
+    telegram = next(
+        (item for item in user_identities if item.provider == AuthProvider.telegram), None
+    )
+    if telegram is None:
+        return TelegramNotifications.not_linked
+    started, blocked = telegram.bot_started_at, telegram.bot_blocked_at
+    if blocked is not None and (started is None or blocked > started):
+        return TelegramNotifications.blocked
+    if started is not None:
+        return TelegramNotifications.ready
+    return TelegramNotifications.start_required
 
 
 async def find_identity(
