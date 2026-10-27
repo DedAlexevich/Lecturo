@@ -60,7 +60,7 @@ export function SearchPanel({ scope, children }: { scope: SearchScope; children?
             </Button>
           </div>
         )}
-        {hits && hits.length === 0 && (
+        {hits && hits.length === 0 && !search.isPlaceholderData && (
           <p className="search__note">
             По запросу «{query}» ничего не нашлось. Попробуйте другие слова.
           </p>
