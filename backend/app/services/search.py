@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections.abc import Sequence
 
-from sqlalchemy import ColumnElement, func, literal, select
+from sqlalchemy import ColumnElement, Text, cast, func, literal, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from app.schemas.search import SearchHit
 RRF_K = 60
 CANDIDATES = 50
 LIMIT = 20
+LEXEME_PATTERN = r"'((?:[^']|'')+)'"
 
 
 async def hybrid_search(
@@ -45,7 +46,7 @@ async def hybrid_search(
 
 
 async def fulltext_ids(session: AsyncSession, scope: ColumnElement[bool], q: str) -> list[int]:
-    query = func.websearch_to_tsquery(literal("russian", REGCONFIG), q)
+    query = prefix_tsquery(q)
     rows = await session.scalars(
         select(SearchChunk.id)
         .where(scope, SearchChunk.tsv.op("@@")(query))
@@ -53,6 +54,12 @@ async def fulltext_ids(session: AsyncSession, scope: ColumnElement[bool], q: str
         .limit(CANDIDATES)
     )
     return list(rows)
+
+
+def prefix_tsquery(q: str) -> ColumnElement:
+    stemmed = cast(func.websearch_to_tsquery(literal("russian", REGCONFIG), q), Text)
+    prefixed = func.regexp_replace(stemmed, LEXEME_PATTERN, r"'\1':*", "g")
+    return func.to_tsquery(literal("simple", REGCONFIG), prefixed)
 
 
 async def vector_ids(session: AsyncSession, scope: ColumnElement[bool], q: str) -> list[int]:
