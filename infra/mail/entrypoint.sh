@@ -7,6 +7,11 @@ keys=/etc/opendkim/keys
 tls=/etc/postfix/tls
 networks="127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
 
+if ! echo "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; then
+  echo "MAIL_DOMAIN must be a single domain like example.ru, got '$domain'. Set MAIL_DOMAIN in .env" >&2
+  exit 1
+fi
+
 mkdir -p "$keys" "$tls"
 if [ ! -f "$keys/$selector.private" ]; then
   opendkim-genkey -b 2048 -d "$domain" -s "$selector" -D "$keys"
