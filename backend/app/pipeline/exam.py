@@ -72,6 +72,12 @@ def parse_definitions(items: Any) -> list[dict[str, str]]:
     return list(definitions.values())
 
 
+def outline(content_md: str) -> str:
+    return "\n".join(
+        f"- {line.lstrip('#').strip()}" for line in content_md.splitlines() if line.startswith("#")
+    )
+
+
 async def digest_lecture(llm: LLM, notes: LectureNotes) -> LectureDigest:
     request = f"# {notes.title}\n\n{notes.content_md}"
     data: dict[str, Any] = {}
@@ -85,7 +91,7 @@ async def digest_lecture(llm: LLM, notes: LectureNotes) -> LectureDigest:
         title=notes.title,
         tickets=parse_tickets(data.get("tickets")),
         definitions=parse_definitions(data.get("definitions")),
-        cheatsheet_md=str(data.get("cheatsheet_md") or "").strip() or notes.content_md,
+        cheatsheet_md=str(data.get("cheatsheet_md") or "").strip() or outline(notes.content_md),
     )
 
 

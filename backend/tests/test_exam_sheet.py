@@ -278,3 +278,16 @@ async def test_foreign_course_is_not_found(client, user, auth_headers, enqueued,
         async with SessionLocal() as session:
             await session.delete(await session.get(User, stranger.id))
             await session.commit()
+
+
+async def test_broken_map_answer_falls_back_to_outline():
+    class BrokenMapLLM:
+        async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+            return "не JSON"
+
+    notes = exam.LectureNotes(title="Ряды", content_md="## Ряды\nтекст\n### Признаки\nещё текст")
+
+    digest = await exam.digest_lecture(BrokenMapLLM(), notes)
+
+    assert (digest.tickets, digest.definitions) == ([], [])
+    assert digest.cheatsheet_md == "- Ряды\n- Признаки"
