@@ -43,3 +43,11 @@
 .local-release__description { margin: 0; line-height: var(--leading-normal); }
 .local-media-missing__pick { justify-self: start; margin-top: var(--space-2); }
 .local-media-loading { display: flex; align-items: center; gap: var(--space-2); margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); }
+.local-export-dialog { width: min(40rem, calc(100% - var(--space-5))); }
+.local-export-dialog__body { display: grid; gap: var(--space-3); min-width: 0; }
+.local-export-dialog__body p { margin: 0; overflow-wrap: anywhere; }
+.local-export-dialog__text { width: 100%; min-width: 0; min-height: 12rem; max-height: 50vh; padding: var(--space-3); border: 0; border-radius: var(--radius-md); background: var(--color-surface-sunken); color: var(--color-text); font: inherit; font-size: var(--text-sm); line-height: var(--leading-normal); resize: vertical; }
+.local-export-dialog__text:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.local-export-dialog__status { font-size: var(--text-sm); }
+.local-export-dialog__status--done { color: var(--color-success); }
+.local-export-dialog__status--error { color: var(--color-danger); }
