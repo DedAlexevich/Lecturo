@@ -15,6 +15,7 @@ from app.services.mail import deliver_mail
 
 logger = logging.getLogger(__name__)
 
+REVOCABLE = {"ai-transfer"}
 EMAIL_BATCH = 20
 MAX_ATTEMPTS = 5
 RETRY_AFTER = timedelta(minutes=30)
@@ -28,6 +29,15 @@ def notice_subject(doc: LegalDocOut) -> str:
     return f"Новая редакция документа «{doc.title}»"
 
 
+def refusal(slug: str, account_link: str) -> str:
+    if slug in REVOCABLE:
+        return (
+            "Если вы не согласны, до этой даты отзовите согласие в личном кабинете "
+            f"({account_link}) или удалите аккаунт."
+        )
+    return f"Если вы не согласны, до этой даты удалите аккаунт в личном кабинете ({account_link})."
+
+
 def notice_text(doc: LegalDocOut, link: str, account_link: str) -> str:
     effective = doc.effective_date.strftime("%d.%m.%Y")
     return (
@@ -35,8 +45,7 @@ def notice_text(doc: LegalDocOut, link: str, account_link: str) -> str:
         f"Новая редакция: {link}\n"
         f"Она вступает в силу {effective}. С этой даты она действует для вас "
         "без отдельного подтверждения.\n\n"
-        "Если вы не согласны, до этой даты отзовите согласие в личном кабинете "
-        f"({account_link}) или удалите аккаунт."
+        f"{refusal(doc.slug, account_link)}"
     )
 
 

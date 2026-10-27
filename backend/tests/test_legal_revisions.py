@@ -231,3 +231,10 @@ async def test_email_is_not_sent_after_verification_is_lost(people, mails):
     email = next(row for row in await notices(people) if row.channel == NoticeChannel.email)
     assert email.sent_at is None
     assert email.attempts == legal_notices.MAX_ATTEMPTS
+
+
+def test_refusal_offers_revocation_only_for_consent():
+    terms = read_document("terms").model_copy(update={"changes": "Новый раздел"})
+    text = legal_notices.notice_text(terms, "https://lecturo.test/legal/terms", "/account")
+    assert "отзовите согласие" not in text
+    assert "удалите аккаунт" in text
