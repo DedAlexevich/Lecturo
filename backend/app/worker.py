@@ -11,6 +11,7 @@ from app.pipeline.retention import delete_expired_videos
 from app.pipeline.tasks import process_lecture, process_quiz
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings
+from app.providers.yandex import YandexEmbeddings
 
 STARTUP_CHECK_TIMEOUT_SECONDS = 15
 
@@ -19,11 +20,12 @@ async def check_providers(
     settings: Settings, transport: httpx.AsyncBaseTransport | None = None
 ) -> None:
     get_llm(settings)
-    if isinstance(get_embeddings(settings), OpenAICompatibleEmbeddings):
-        probe = OpenAICompatibleEmbeddings(
+    embeddings = get_embeddings(settings)
+    if isinstance(embeddings, OpenAICompatibleEmbeddings | YandexEmbeddings):
+        probe = type(embeddings)(
             settings, attempts=1, timeout=STARTUP_CHECK_TIMEOUT_SECONDS, transport=transport
         )
-        await probe.embed(["проверка"])
+        await probe.embed_query("проверка")
 
 
 async def startup(ctx: dict[str, Any]) -> None:

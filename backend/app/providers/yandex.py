@@ -12,10 +12,20 @@ from urllib.parse import quote
 import httpx
 
 from app.core.config import Settings
+from app.models import EMBEDDING_DIM
 from app.providers.base import Segment
+from app.providers.openai_compat import (
+    OpenAICompatibleClient,
+    OpenAICompatibleError,
+    require_settings,
+)
 
 RECOGNIZE_URL = "https://transcribe.api.cloud.yandex.net/speech/stt/v2/longRunningRecognize"
 OPERATION_URL = "https://operation.api.cloud.yandex.net/operations/{operation_id}"
+TEXT_EMBEDDING_PATH = "/foundationModels/v1/textEmbedding"
+DOCUMENT_MODEL = "text-search-doc"
+QUERY_MODEL = "text-search-query"
+EMBEDDINGS_CONCURRENCY = 4
 STORAGE_HOST = "storage.yandexcloud.net"
 STORAGE_REGION = "ru-central1"
 
@@ -224,3 +234,53 @@ class YandexSpeechToText:
             raise YandexSpeechKitError(
                 f"Yandex SpeechKit: {action} вернула {response.status_code}: {response.text[:500]}"
             )
+
+
+class YandexEmbeddings:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        concurrency: int = EMBEDDINGS_CONCURRENCY,
+        transport: httpx.AsyncBaseTransport | None = None,
+        **options: Any,
+    ) -> None:
+        api_key = settings.yandex_embeddings_api_key or settings.yandex_speechkit_api_key
+        folder_id = settings.yandex_embeddings_folder_id or settings.yandex_folder_id
+        require_settings(
+            {
+                "YANDEX_EMBEDDINGS_API_KEY или YANDEX_SPEECHKIT_API_KEY": api_key,
+                "YANDEX_EMBEDDINGS_FOLDER_ID или YANDEX_FOLDER_ID": folder_id,
+            },
+            "эмбеддингов Yandex",
+        )
+        self.dimension = EMBEDDING_DIM
+        self.folder_id = folder_id
+        self.semaphore = asyncio.Semaphore(concurrency)
+        self.client = OpenAICompatibleClient(
+            settings.yandex_embeddings_base_url,
+            api_key,
+            transport=transport,
+            headers={"Authorization": f"Api-Key {api_key}", "x-folder-id": folder_id},
+            **options,
+        )
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return list(await asyncio.gather(*(self._embed(DOCUMENT_MODEL, text) for text in texts)))
+
+    async def embed_query(self, text: str) -> list[float]:
+        return await self._embed(QUERY_MODEL, text)
+
+    async def _embed(self, model: str, text: str) -> list[float]:
+        body = {"modelUri": f"emb://{self.folder_id}/{model}/latest", "text": text}
+        async with self.semaphore:
+            response = await self.client.post(TEXT_EMBEDDING_PATH, body)
+        vector = response.get("embedding")
+        if not isinstance(vector, list):
+            raise OpenAICompatibleError(f"{TEXT_EMBEDDING_PATH}: в ответе нет вектора")
+        if len(vector) != self.dimension:
+            raise OpenAICompatibleError(
+                f"{TEXT_EMBEDDING_PATH}: модель вернула вектор размерности {len(vector)}, "
+                f"ожидалась {self.dimension}"
+            )
+        return [float(value) for value in vector]
