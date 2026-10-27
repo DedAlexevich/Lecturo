@@ -93,6 +93,8 @@ systemctl try-reload-or-restart ssh
 
 systemctl enable --now fail2ban
 
+bash "$app_dir/infra/install-monitoring.sh"
+
 host_ip=$(curl -fsS4 https://api.ipify.org || hostname -I | awk '{print $1}')
 
 echo

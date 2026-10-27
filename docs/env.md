@@ -143,6 +143,7 @@ Gmail:
 | `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
 | `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
 | `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml` |
+| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/health-alert.sh` |
 
 Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
