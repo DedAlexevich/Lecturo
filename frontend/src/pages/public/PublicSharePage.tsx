@@ -53,7 +53,16 @@ export function PublicSharePage() {
   }
 
   const { lecture, course } = share.data;
-  if (lecture) return <PublicLecture key={token} token={token} lecture={lecture} />;
+  if (lecture) {
+    return (
+      <PublicLecture
+        key={token}
+        token={token}
+        lecture={lecture}
+        refreshVideo={async () => (await share.refetch()).data?.lecture?.video_url ?? null}
+      />
+    );
+  }
   if (course) return <PublicCourse course={course} />;
   return <Unavailable />;
 }

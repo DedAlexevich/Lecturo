@@ -6,7 +6,7 @@ import { Chapters } from "../lecture/Chapters";
 import { EmbedPlayer } from "../lecture/players/EmbedPlayer";
 import { resolveEmbed } from "../lecture/players/embed";
 import { VideoPlayer } from "../lecture/players/VideoPlayer";
-import { usePlayer } from "../lecture/players/player";
+import { usePlayer, videoIdentity } from "../lecture/players/player";
 import { formatDuration } from "../lecture/time";
 import { Transcript } from "../lecture/Transcript";
 import { Markdown } from "../legal/markdown";
@@ -23,7 +23,13 @@ const emptyNotes: Record<PanelKind, string> = {
   transcript: "В записи не распознано ни одной фразы.",
 };
 
-export function PublicLecture({ token, lecture }: { token: string; lecture: Lecture }) {
+type PublicLectureProps = {
+  token: string;
+  lecture: Lecture;
+  refreshVideo: () => Promise<string | null>;
+};
+
+export function PublicLecture({ token, lecture, refreshVideo }: PublicLectureProps) {
   const [tab, setTab] = useState<PanelKind>("summary");
   const [complaining, setComplaining] = useState(false);
   const { currentTime, playFrom, bind } = usePlayer();
@@ -54,7 +60,13 @@ export function PublicLecture({ token, lecture }: { token: string; lecture: Lect
       <div className="lecture__body">
         <div className="lecture__media">
           {lecture.video_url ? (
-            <VideoPlayer key={lecture.video_url} src={lecture.video_url} title={lecture.title} {...bind} />
+            <VideoPlayer
+              key={videoIdentity(lecture.video_url)}
+              src={lecture.video_url}
+              title={lecture.title}
+              refreshSrc={refreshVideo}
+              {...bind}
+            />
           ) : embed ? (
             <EmbedPlayer
               key={lecture.embed_url}

@@ -12,6 +12,10 @@ export type PlayerProps = {
   onTimeUpdate: (seconds: number) => void;
 };
 
+export function videoIdentity(src: string) {
+  return src.split("?")[0];
+}
+
 export function usePlayer() {
   const playerRef = useRef<Player | null>(null);
   const pendingSeek = useRef<number | null>(null);
