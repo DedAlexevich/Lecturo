@@ -5,7 +5,7 @@ import uuid
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import ColumnElement, Text, cast, func, literal, select, text
+from sqlalchemy import ColumnElement, Row, Text, cast, func, literal, select, text
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,8 @@ PINPOINTED_MOMENTS = 3
 MAX_SEGMENT_EMBEDDINGS = 16
 CONTEXT_SECONDS = 30.0
 LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
+
+ChapterSpan = Row[tuple[uuid.UUID, float, float, str]]
 
 
 async def embed_query(q: str) -> list[float] | None:
@@ -120,19 +122,21 @@ async def semantic_search(
 
 async def chapter_titles(
     session: AsyncSession, moments: list[Moment]
-) -> dict[uuid.UUID, list[Chapter]]:
+) -> dict[uuid.UUID, list[ChapterSpan]]:
     lecture_ids = {moment.lecture_id for moment in moments if moment.at is not None}
     if not lecture_ids:
         return {}
-    chapters: dict[uuid.UUID, list[Chapter]] = {}
-    for chapter in await session.scalars(
-        select(Chapter).where(Chapter.lecture_id.in_(lecture_ids)).order_by(Chapter.start)
+    chapters: dict[uuid.UUID, list[ChapterSpan]] = {}
+    for chapter in await session.execute(
+        select(Chapter.lecture_id, Chapter.start, Chapter.end, Chapter.title)
+        .where(Chapter.lecture_id.in_(lecture_ids))
+        .order_by(Chapter.start)
     ):
         chapters.setdefault(chapter.lecture_id, []).append(chapter)
     return chapters
 
 
-def chapter_at(chapters: list[Chapter], at: float | None) -> str | None:
+def chapter_at(chapters: list[ChapterSpan], at: float | None) -> str | None:
     if at is None:
         return None
     current = None
