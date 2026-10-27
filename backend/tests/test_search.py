@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 
 import pytest
@@ -15,11 +16,22 @@ from app.models import (
 from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import StubEmbeddings
 from app.services import search as search_service
-from app.services.search import LIMIT, RRF_K, add_prefixes, rrf
+from app.services.search import KEYWORD_BONUS, LIMIT, MARGIN, add_prefixes, relevant
+
+
+class TopicEmbeddings(StubEmbeddings):
+    def _vector(self, text: str) -> list[float]:
+        topic = int.from_bytes(hashlib.sha256(text.encode()).digest()[:4]) % self.dimension
+        return [float(idx == topic) for idx in range(self.dimension)]
+
+
+@pytest.fixture(autouse=True)
+def topic_embeddings(monkeypatch):
+    monkeypatch.setattr(search_service, "get_embeddings", TopicEmbeddings)
 
 
 async def create_lecture(owner_id: uuid.UUID, title: str, *texts: str) -> uuid.UUID:
-    vectors = await StubEmbeddings().embed_documents(list(texts))
+    vectors = await TopicEmbeddings().embed_documents(list(texts))
     async with SessionLocal() as session:
         lecture = Lecture(owner_id=owner_id, title=title, source_type=SourceType.upload)
         session.add(lecture)
@@ -86,7 +98,6 @@ async def test_fulltext_finds_word_forms(client, user, auth_headers, q):
     assert hits[0]["end"] == 90.0
     assert hits[0]["lecture_id"] == str(lecture_id)
     assert hits[0]["lecture_title"] == "Интегралы"
-    assert hits[0]["score"] > hits[1]["score"]
     assert [hit["score"] for hit in hits] == sorted((hit["score"] for hit in hits), reverse=True)
 
 
@@ -198,14 +209,25 @@ async def test_requires_login(client):
     assert response.status_code == 401
 
 
-def test_rrf_sums_reciprocal_ranks():
-    scores = rrf([[1, 2], [2, 3]])
+def test_relevant_ranks_by_meaning_with_small_keyword_bonus():
+    scores = relevant({1: 0.5, 2: 0.48, 3: 0.4}, {2, 3})
 
-    assert scores == {
-        1: 1 / (RRF_K + 1),
-        2: 1 / (RRF_K + 2) + 1 / (RRF_K + 1),
-        3: 1 / (RRF_K + 2),
-    }
+    assert sorted(scores, key=scores.__getitem__, reverse=True) == [2, 1, 3]
+    assert scores[2] == pytest.approx(0.48 + KEYWORD_BONUS)
+
+
+def test_relevant_drops_hits_far_below_best():
+    scores = relevant({1: 0.5, 2: 0.5 - MARGIN - 0.01, 3: 0.1}, {3})
+
+    assert set(scores) == {1}
+
+
+def test_relevant_drops_weak_hits_without_keywords():
+    assert set(relevant({1: 0.15, 2: 0.1}, {2})) == {2}
+
+
+def test_relevant_handles_no_candidates():
+    assert relevant({}, set()) == {}
 
 
 @pytest.mark.parametrize(
@@ -232,7 +254,7 @@ async def test_short_word_matches_exactly(client, user, auth_headers, monkeypatc
 
 
 async def add_chunk(lecture_id: uuid.UUID, kind: ChunkKind, text: str, **fields) -> None:
-    [vector] = await StubEmbeddings().embed_documents([text])
+    [vector] = await TopicEmbeddings().embed_documents([text])
     async with SessionLocal() as session:
         session.add(
             SearchChunk(lecture_id=lecture_id, kind=kind, text=text, embedding=vector, **fields)
@@ -293,9 +315,9 @@ async def test_global_search_finds_meaning_without_shared_words(
 ):
     lecture_id = await create_lecture(user.id, "Матанализ", "Скорость изменения функции")
     await add_chunk(lecture_id, ChunkKind.chapter, "Ряды Фурье", start=0.0, end=60.0)
-    [target] = await StubEmbeddings().embed_documents(["Скорость изменения функции"])
+    [target] = await TopicEmbeddings().embed_documents(["Скорость изменения функции"])
 
-    class MeaningEmbeddings(StubEmbeddings):
+    class MeaningEmbeddings(TopicEmbeddings):
         async def embed_query(self, text: str) -> list[float]:
             return target
 
@@ -304,3 +326,20 @@ async def test_global_search_finds_meaning_without_shared_words(
     response = await search(client, auth_headers, q="производная")
 
     assert response.json()[0]["text"] == "Скорость изменения функции"
+
+
+async def test_meaning_outranks_keyword_noise(client, user, auth_headers, monkeypatch):
+    lecture_id = await create_lecture(
+        user.id, "Лекция", "Скорость изменения функции", "Скачайте курс по производной"
+    )
+    [target] = await TopicEmbeddings().embed_documents(["Скорость изменения функции"])
+
+    class MeaningEmbeddings(TopicEmbeddings):
+        async def embed_query(self, text: str) -> list[float]:
+            return target
+
+    monkeypatch.setattr(search_service, "get_embeddings", MeaningEmbeddings)
+
+    response = await search(client, auth_headers, q="производная", lecture_id=str(lecture_id))
+
+    assert [hit["text"] for hit in response.json()] == ["Скорость изменения функции"]
