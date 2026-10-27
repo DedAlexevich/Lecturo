@@ -114,7 +114,8 @@ async def test_export_srt(client, user, auth_headers):
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}/export.srt", headers=auth_headers)
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/x-subrip")
+    assert response.headers["content-type"] == "application/x-subrip; charset=utf-8"
+    assert response.headers["content-disposition"].startswith("attachment;")
     assert "filename*=UTF-8''" in response.headers["content-disposition"]
     assert response.text.startswith("1\n00:00:00,000 --> 00:00:02,000\nраз\n\n2\n")
 
@@ -124,7 +125,8 @@ async def test_export_vtt(client, user, auth_headers):
 
     response = await client.get(f"/api/v1/lectures/{lecture.id}/export.vtt", headers=auth_headers)
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/vtt")
+    assert response.headers["content-type"] == "text/vtt; charset=utf-8"
+    assert response.headers["content-disposition"].startswith("attachment;")
     assert response.text == "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nраз\n\n"
 
 

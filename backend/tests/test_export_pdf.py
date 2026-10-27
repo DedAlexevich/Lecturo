@@ -64,7 +64,8 @@ async def test_export_pdf(client, user, auth_headers):
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.headers["content-disposition"].startswith("attachment;")
+    assert 'filename="lecture.pdf"' in response.headers["content-disposition"]
     assert "filename*=UTF-8''%D0%9B" in response.headers["content-disposition"]
     assert response.content.startswith(b"%PDF")
     objects = pdf_objects(response.content)
