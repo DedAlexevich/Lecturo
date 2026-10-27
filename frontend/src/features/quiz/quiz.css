@@ -469,7 +469,12 @@ button.quiz-timeline__mark {
 }
 
 .moment-dialog .dialog__panel {
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
+}
+
+.moment-dialog .dialog__actions a {
+  text-decoration: none;
 }
 
 .moment-dialog .dialog__title {
@@ -479,10 +484,10 @@ button.quiz-timeline__mark {
 
 @media (max-width: 30rem) {
   .moment-dialog {
-    width: calc(100% - var(--space-3));
+    width: calc(100% - var(--space-2));
   }
 
   .moment-dialog .dialog__panel {
-    padding: var(--space-4);
+    padding: var(--space-3);
   }
 }
