@@ -1,6 +1,7 @@
 import { LinkTelegramPrompt } from "../telegram/LinkTelegramPrompt";
 import { TelegramBridge } from "../telegram/TelegramBridge";
 import { useQuery } from "@tanstack/react-query";
+import { Suspense } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
 import { ApiError } from "./queryClient";
@@ -13,6 +14,7 @@ import { AddLectureDialog } from "../features/upload/AddLectureDialog";
 import { QuotaDialog } from "../features/quota-dialog/QuotaDialog";
 import { WaitingNotice } from "../features/quota-dialog/WaitingNotice";
 import { Logo } from "../ui/Logo";
+import { Spinner } from "../ui/Spinner";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
 const navItems = [
@@ -114,7 +116,9 @@ export function Layout() {
           <TelegramBridge />
           <LegalUpdateNotice />
           {signedIn && <WaitingNotice />}
-          <Outlet />
+          <Suspense fallback={<Spinner label="Загрузка" />}>
+            <Outlet />
+          </Suspense>
         </main>
         <LegalFooter />
       </div>
