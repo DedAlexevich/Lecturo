@@ -13,7 +13,18 @@ const formats: { format: Format; label: string; needs: "ready" | "segments" }[] 
 
 function fileName(title: string, format: Format, disposition: string | null) {
   const match = disposition && /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
-  if (match) return match[1] ? decodeURIComponent(match[1]) : match[2];
+  if (match?.[2]) return match[2];
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return defaultName(title, format);
+    }
+  }
+  return defaultName(title, format);
+}
+
+function defaultName(title: string, format: Format) {
   const base = title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "lecture";
   return `${base}.${format}`;
 }
