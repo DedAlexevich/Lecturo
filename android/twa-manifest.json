@@ -35,7 +35,7 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://lecturo.ru/",
-  "minSdkVersion": 21,
+  "minSdkVersion": 24,
   "fingerprints": [
     {
       "name": "release",
