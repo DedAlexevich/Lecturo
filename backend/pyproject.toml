@@ -39,6 +39,7 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.pipeline" = ["prompts/*.md"]
 "app" = ["legal/docs/*.md"]
+"app.providers" = ["certs/*.pem"]
 
 [tool.ruff]
 line-length = 100

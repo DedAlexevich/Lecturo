@@ -13,6 +13,8 @@ from app.providers.base import Segment
 OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 API_URL = "https://smartspeech.sber.ru/rest/v1"
 TOKEN_REFRESH_MARGIN_SECONDS = 60
+MAX_UPLOAD_BYTES = 1024**3
+RUSSIAN_TRUSTED_CA = Path(__file__).parent / "certs" / "russian_trusted_ca.pem"
 
 AUDIO_FORMATS = {
     ".opus": ("OPUS", "audio/ogg;codecs=opus"),
@@ -80,6 +82,12 @@ class SaluteSpeechToText:
         language_code = LANGUAGE_CODES.get(language)
         if language_code is None:
             raise ValueError(f"Язык не поддерживается SaluteSpeech: {language}")
+        size = (await asyncio.to_thread(audio_path.stat)).st_size
+        if size > MAX_UPLOAD_BYTES:
+            raise SaluteSpeechError(
+                f"SaluteSpeech принимает файлы до 1 ГБ, а {audio_path.name} весит "
+                f"{size / 1024**3:.2f} ГБ"
+            )
         encoding, content_type = audio_format
         async with httpx.AsyncClient(
             timeout=120, verify=self._ssl_context(), transport=self.transport
@@ -92,6 +100,7 @@ class SaluteSpeechToText:
 
     def _ssl_context(self) -> ssl.SSLContext:
         context = ssl.create_default_context()
+        context.load_verify_locations(cafile=RUSSIAN_TRUSTED_CA)
         if self.ca_bundle:
             context.load_verify_locations(cafile=self.ca_bundle)
         return context
