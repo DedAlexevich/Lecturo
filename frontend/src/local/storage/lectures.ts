@@ -1,10 +1,6 @@
+import { createId } from "../../lib/id";
 import { LECTURES_STORE, MEDIA_STORE, openDb, requestResult, transactionDone } from "./db";
 import type { LocalLecture, LocalLectureSummary, LocalResultPayload, NewLocalLecture } from "./types";
-
-function createId() {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function toSummary(lecture: LocalLecture): LocalLectureSummary {
   return {
@@ -60,7 +56,6 @@ export function toLocalResultPayload(lecture: LocalLecture): LocalResultPayload 
     title: lecture.title,
     duration_sec: lecture.durationSec,
     language: lecture.language,
-    model: lecture.model,
     segments: lecture.segments,
     chapters: lecture.chapters,
     summary_md: lecture.summaryMd,

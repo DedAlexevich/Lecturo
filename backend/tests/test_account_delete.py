@@ -148,6 +148,12 @@ async def test_requires_confirmation(client, account):
     assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
 
 
+async def test_too_long_password_rejected(client, account):
+    response = await client.post(URL, json={"password": "я" * 129}, headers=headers(account))
+    assert response.status_code == 422
+    assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
+
+
 async def test_requires_auth(client):
     response = await client.post(URL, json={"password": PASSWORD})
     assert response.status_code == 401

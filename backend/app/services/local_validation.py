@@ -16,6 +16,13 @@ def validate_local_result(body: LocalResultIn, settings: Settings) -> None:
         raise LocalResultInvalid("Слишком много сегментов или глав")
     if any(len(s.text) > settings.local_max_text_chars for s in body.segments):
         raise LocalResultInvalid("Слишком длинный текст сегмента")
+    total = (
+        sum(len(s.text) for s in body.segments)
+        + sum(len(c.title) + len(c.summary) for c in body.chapters)
+        + len(body.summary_md or "")
+    )
+    if total > settings.local_max_total_chars:
+        raise LocalResultInvalid("Слишком большой объём текста")
     items = [*body.segments, *body.chapters]
     if not all(math.isfinite(i.start) and math.isfinite(i.end) for i in items):
         raise LocalResultInvalid("Некорректные таймкоды")
