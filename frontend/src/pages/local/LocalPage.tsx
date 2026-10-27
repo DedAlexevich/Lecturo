@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router";
+import { useToken } from "../../app/session";
 import { extractAudio } from "../../local/audio";
+import { pickedFileOf } from "../../local/pickedFiles";
 import { disposeWhisper, transcribe } from "../../local/whisper";
 import { saveLocalLecture } from "../../local/storage";
 import type { LocalLecture } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
 import { Transcript } from "../lecture/Transcript";
+import { fetchLecture, lectureQueryKey } from "../lecture/useLecture";
 import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";
+import { Spinner } from "../../ui/Spinner";
 import { ExportButtons } from "./ExportButtons";
 import { LocalLibrary } from "./LocalLibrary";
+import { QueueRelease } from "./QueueRelease";
 import { SaveToAccount } from "./SaveToAccount";
 import "../lecture/lecture.css";
 import "./local.css";
@@ -22,7 +29,27 @@ const models: { id: WhisperModel; label: string; size: string; description: stri
 type Stage = "idle" | "extracting" | "loading" | "transcribing" | "done" | "error";
 
 export function LocalPage() {
-  const [file, setFile] = useState<File | null>(null);
+  const [searchParams] = useSearchParams();
+  const lectureId = searchParams.get("lecture");
+  return <LocalProcessing key={lectureId ?? ""} lectureId={lectureId} />;
+}
+
+function useQueuedLecture(lectureId: string | null, token: string | null) {
+  return useQuery({
+    queryKey: lectureQueryKey(lectureId ?? ""),
+    enabled: lectureId !== null && token !== null,
+    queryFn: () => fetchLecture(lectureId ?? ""),
+    retry: false,
+  });
+}
+
+function LocalProcessing({ lectureId }: { lectureId: string | null }) {
+  const [queuedFile] = useState(() => (lectureId ? pickedFileOf(lectureId) : null));
+  const [file, setFile] = useState<File | null>(queuedFile);
+  const [usingQueued, setUsingQueued] = useState(queuedFile !== null);
+  const token = useToken();
+  const lecture = useQueuedLecture(lectureId, token);
+  const [released, setReleased] = useState(false);
   const [model, setModel] = useState<WhisperModel>("tiny");
   const [language, setLanguage] = useState("ru");
   const [stage, setStage] = useState<Stage>("idle");
@@ -70,15 +97,16 @@ export function LocalPage() {
       }, { signal: abort.signal, language });
       setSegments(result);
       setStage("done");
+      if (lectureId !== null && token !== null) void lecture.refetch();
       try {
-        const lecture = await saveLocalLecture({
-          title: file.name.replace(/\.[^.]+$/, "") || file.name,
+        const local = await saveLocalLecture({
+          title: (usingQueued ? lecture.data?.title : undefined) ?? (file.name.replace(/\.[^.]+$/, "") || file.name),
           durationSec: audio.duration,
           language,
           model,
           segments: result,
         });
-        setSaved(lecture);
+        setSaved(local);
         setLibraryVersion((value) => value + 1);
       } catch {
         setSaveError(true);
@@ -129,6 +157,14 @@ export function LocalPage() {
     setStage("idle");
   }
 
+  function pickAnother() {
+    setUsingQueued(false);
+    selectFile(null);
+  }
+
+  const queued = lecture.data;
+  const fromLink = queued?.source_type === "link";
+  const lostFile = queued?.source_type === "upload" && queued.status === "waiting_quota" && queuedFile === null;
   const selectedModel = models.find((item) => item.id === model)!;
   const stageLabel = stage === "extracting" ? "Извлечение звука" : stage === "loading" ? "Загрузка модели" : "Распознавание речи";
 
@@ -140,11 +176,39 @@ export function LocalPage() {
       </header>
       <div className="local-page__layout">
         <section className="local-setup" aria-labelledby="local-setup-title">
-          <h2 id="local-setup-title">Новая запись</h2>
-          <label className="local-field">
-            <span>Аудио или видео</span>
-            <input type="file" accept="audio/*,video/*" disabled={busy} onChange={(event) => selectFile(event.target.files?.[0] ?? null)} />
-          </label>
+          <h2 id="local-setup-title">{queued || usingQueued ? "Лекция из очереди" : "Новая запись"}</h2>
+          {lectureId && !usingQueued && lecture.isLoading && (
+            <p className="local-source__status"><Spinner size="sm" label="Загружаем лекцию" />Загружаем лекцию</p>
+          )}
+          {fromLink && (
+            <div className="local-source local-source--notice" role="status">
+              <p className="local-source__title">«{queued.title}» добавлена по ссылке</p>
+              <p>На устройстве обрабатывается только файл с записью. Если он у вас есть, выберите его ниже. Иначе лекция дождётся лимита и обработается на сервере.</p>
+            </div>
+          )}
+          {lostFile && !usingQueued && (
+            <div className="local-source local-source--notice" role="status">
+              <p className="local-source__title">«{queued.title}»</p>
+              <p>Выберите файл этой лекции: в этой вкладке браузера его уже нет.</p>
+            </div>
+          )}
+          {lectureId && lecture.isError && !usingQueued && !released && (
+            <p className="local-note">Не удалось найти лекцию из очереди. Выберите файл с записью.</p>
+          )}
+          {usingQueued && file ? (
+            <div className="local-source">
+              {queued && <p className="local-source__title">«{queued.title}»</p>}
+              <p className="local-source__file">{file.name}</p>
+              <Button variant="ghost" size="sm" className="local-source__change" disabled={busy} onClick={pickAnother}>
+                Выбрать другой файл
+              </Button>
+            </div>
+          ) : (
+            <label className="local-field">
+              <span>Аудио или видео</span>
+              <input type="file" accept="audio/*,video/*" disabled={busy} onChange={(event) => selectFile(event.target.files?.[0] ?? null)} />
+            </label>
+          )}
           <label className="local-field">
             <span>Модель распознавания</span>
             <select value={model} disabled={busy} onChange={(event) => setModel(event.target.value as WhisperModel)}>
@@ -179,6 +243,9 @@ export function LocalPage() {
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
           {stage === "done" && saved && <SaveToAccount key={saved.id} lecture={saved} />}
           {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
+          {stage === "done" && file && !released && !lecture.isFetching && !lecture.isError && queued?.status === "waiting_quota" && (
+            <QueueRelease lecture={queued} onReleased={() => setReleased(true)} />
+          )}
           {stage === "done" && saveError && <p className="local-error" role="alert">Не удалось сохранить результат в браузере. Он доступен только до закрытия страницы.</p>}
         </section>
       </div>
