@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { extractAudio } from "../../local/audio";
 import { disposeWhisper, transcribe } from "../../local/whisper";
-import { saveLocalLecture } from "../../local/storage";
+import { disposeLlm } from "../../local/llm";
+import type { Outline } from "../../local/llm";
+import { saveLocalLecture, saveLocalOutline } from "../../local/storage";
 import type { LocalLecture } from "../../local/storage";
 import type { Segment, WhisperModel } from "../../local/whisper";
+import { Chapters } from "../lecture/Chapters";
 import { Transcript } from "../lecture/Transcript";
+import { Markdown } from "../legal/markdown";
 import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";
+import { Tabs } from "../../ui/Tabs";
 import { ExportButtons } from "./ExportButtons";
 import { LocalLibrary } from "./LocalLibrary";
+import { LocalOutline } from "./LocalOutline";
 import { SaveToAccount } from "./SaveToAccount";
 import "../lecture/lecture.css";
 import "./local.css";
@@ -20,6 +26,11 @@ const models: { id: WhisperModel; label: string; size: string; description: stri
 ];
 
 type Stage = "idle" | "extracting" | "loading" | "transcribing" | "done" | "error";
+
+function outlineOf(lecture: LocalLecture): Outline | null {
+  const summaryMd = lecture.summaryMd?.trim() ?? "";
+  return lecture.chapters.length > 0 || summaryMd ? { chapters: lecture.chapters, summaryMd } : null;
+}
 
 export function LocalPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -34,6 +45,9 @@ export function LocalPage() {
   const [saved, setSaved] = useState<LocalLecture | null>(null);
   const [saveError, setSaveError] = useState(false);
   const [libraryVersion, setLibraryVersion] = useState(0);
+  const [outline, setOutline] = useState<Outline | null>(null);
+  const [outlineSaveError, setOutlineSaveError] = useState(false);
+  const [tab, setTab] = useState("summary");
   const player = useRef<HTMLMediaElement | null>(null);
   const controller = useRef<AbortController | null>(null);
   const busy = stage === "extracting" || stage === "loading" || stage === "transcribing";
@@ -48,6 +62,7 @@ export function LocalPage() {
   useEffect(() => () => {
     controller.current?.abort();
     disposeWhisper();
+    disposeLlm();
   }, []);
 
   async function start() {
@@ -58,6 +73,9 @@ export function LocalPage() {
     setSegments([]);
     setSaved(null);
     setSaveError(false);
+    setOutline(null);
+    setOutlineSaveError(false);
+    disposeLlm();
     setStage("extracting");
     setProgress(undefined);
     try {
@@ -106,6 +124,8 @@ export function LocalPage() {
     setSegments([]);
     setSaved(null);
     setSaveError(false);
+    setOutline(null);
+    setOutlineSaveError(false);
     setError("");
     setCurrentTime(0);
   }
@@ -117,6 +137,9 @@ export function LocalPage() {
     setSaved(lecture);
     setSaveError(false);
     setSegments(lecture.segments);
+    setOutline(outlineOf(lecture));
+    setOutlineSaveError(false);
+    setTab("summary");
     setError("");
     setCurrentTime(0);
     setStage("done");
@@ -126,10 +149,30 @@ export function LocalPage() {
     if (saved?.id !== id) return;
     setSaved(null);
     setSegments([]);
+    setOutline(null);
     setStage("idle");
   }
 
+  async function outlineReady(next: Outline) {
+    setOutline(next);
+    setTab("summary");
+    setOutlineSaveError(false);
+    if (!saved) return;
+    try {
+      const updated = await saveLocalOutline(saved.id, next);
+      if (updated) setSaved(updated);
+      setLibraryVersion((value) => value + 1);
+    } catch {
+      setOutlineSaveError(true);
+    }
+  }
+
   const selectedModel = models.find((item) => item.id === model)!;
+  const hasPlayer = Boolean(file && url);
+  const seek = (time: number) => {
+    if (player.current) player.current.currentTime = time;
+  };
+  const transcript = <Transcript segments={segments} currentTime={currentTime} onSelect={seek} />;
   const stageLabel = stage === "extracting" ? "Извлечение звука" : stage === "loading" ? "Загрузка модели" : "Распознавание речи";
 
   return (
@@ -173,9 +216,42 @@ export function LocalPage() {
           ) : (
             <audio ref={(element) => { player.current = element; }} className="local-player" controls src={url} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} />
           ))}
-          {stage === "done" && segments.length > 0 ? (
-            <Transcript segments={segments} currentTime={currentTime} onSelect={(time) => { if (player.current) player.current.currentTime = time; }} />
-          ) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
+          {stage === "done" && segments.length > 0 ? (outline ? (
+            <Tabs
+              label="Материалы лекции"
+              value={tab}
+              onChange={setTab}
+              items={[
+                {
+                  id: "summary",
+                  label: "Конспект",
+                  panel: outline.summaryMd ? (
+                    <div className="lecture__scroll summary"><Markdown source={outline.summaryMd} /></div>
+                  ) : <p className="lecture__panel-note">Конспект не получился. Попробуйте составить его заново.</p>,
+                },
+                {
+                  id: "chapters",
+                  label: "Главы",
+                  panel: outline.chapters.length > 0 ? (
+                    <div className="lecture__scroll">
+                      <Chapters chapters={outline.chapters} currentTime={hasPlayer ? currentTime : null} onSelect={hasPlayer ? seek : undefined} />
+                    </div>
+                  ) : <p className="lecture__panel-note">Лекция слишком короткая, чтобы делить её на главы.</p>,
+                },
+                { id: "transcript", label: "Расшифровка", panel: transcript },
+              ]}
+            />
+          ) : transcript) : <p className="local-result__empty">{stage === "done" ? "Речь в записи не найдена." : "Здесь появится текст с отметками времени."}</p>}
+          {stage === "done" && segments.length > 0 && (
+            <LocalOutline
+              key={`outline-${saved?.id ?? file?.name ?? ""}`}
+              title={saved?.title ?? file?.name ?? ""}
+              segments={segments}
+              hasOutline={outline !== null}
+              onDone={outlineReady}
+            />
+          )}
+          {outlineSaveError && <p className="local-error" role="alert">Не удалось сохранить конспект в браузере. Он доступен только до закрытия страницы.</p>}
           {stage === "done" && saved && <ExportButtons lecture={saved} />}
           {stage === "done" && saved && <SaveToAccount key={saved.id} lecture={saved} />}
           {stage === "done" && saved && <p className="local-note local-result__note">Результат сохранён в этом браузере и останется после перезагрузки страницы.</p>}
