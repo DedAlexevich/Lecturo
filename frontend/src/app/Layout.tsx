@@ -1,3 +1,4 @@
+import { TelegramBridge } from "../telegram/TelegramBridge";
 import { useQuery } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
@@ -106,6 +107,7 @@ export function Layout() {
           )}
         </header>
         <main className={styles.main}>
+          <TelegramBridge />
           {signedIn && <WaitingNotice />}
           <Outlet />
         </main>

@@ -1,3 +1,4 @@
+import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router";
 import { Button } from "../../ui/Button";
@@ -66,6 +67,10 @@ function PurchaseForm({ products }: { products: Product[] }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (getWebApp() && createPayment.data?.confirmation_url) {
+      openExternalLink(createPayment.data.confirmation_url);
+      return;
+    }
     if (!accepted) {
       setShowConsentError(true);
       return;
@@ -75,13 +80,13 @@ function PurchaseForm({ products }: { products: Product[] }) {
       {
         onSuccess: (payment) => {
           idempotenceKey.current = crypto.randomUUID();
-          if (payment.confirmation_url) window.location.assign(payment.confirmation_url);
+          if (payment.confirmation_url && !getWebApp()) openExternalLink(payment.confirmation_url);
         },
       },
     );
   };
 
-  const redirecting = createPayment.isSuccess && Boolean(createPayment.data.confirmation_url);
+  const redirecting = !getWebApp() && createPayment.isSuccess && Boolean(createPayment.data.confirmation_url);
   const failure = createPayment.isError
     ? errorMessage(createPayment.error, "Не удалось создать платёж. Попробуйте ещё раз.")
     : createPayment.isSuccess && !createPayment.data.confirmation_url
@@ -146,9 +151,15 @@ function PurchaseForm({ products }: { products: Product[] }) {
         </p>
       )}
       <div>
-        <Button type="submit" loading={createPayment.isPending || redirecting}>
-          Оплатить {formatRubles(selected.price_rub)}
-        </Button>
+        {getWebApp() && createPayment.data?.confirmation_url ? (
+          <Button type="button" onClick={() => openExternalLink(createPayment.data.confirmation_url!)}>
+            Открыть оплату в браузере
+          </Button>
+        ) : (
+          <Button type="submit" loading={createPayment.isPending || redirecting}>
+            Оплатить {formatRubles(selected.price_rub)}
+          </Button>
+        )}
       </div>
     </form>
   );
