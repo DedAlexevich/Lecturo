@@ -282,6 +282,10 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
     return audio_path
 
 
+async def keep_progress(progress: float) -> None:
+    pass
+
+
 async def download(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     url = lecture.source_url or ""
     if is_yandex_disk(url):
@@ -297,5 +301,5 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
         await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
         await report(progress["fraction"])
     audio_path = fetching.result()
-    await make_mono(audio_path, lecture.duration_sec, report)
+    await make_mono(audio_path, lecture.duration_sec, keep_progress)
     lecture.audio_path = str(audio_path)
