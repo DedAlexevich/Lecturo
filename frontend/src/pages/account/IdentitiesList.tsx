@@ -147,7 +147,7 @@ function VerifyEmail({ email }: { email: string }) {
   );
 }
 
-function LinkTelegram() {
+export function LinkTelegram() {
   const link = useLinkTelegram();
   const toast = useToast();
   const { mutate } = link;

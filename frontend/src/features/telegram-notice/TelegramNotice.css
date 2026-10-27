@@ -1,0 +1,36 @@
+.telegram-notice {
+  justify-self: stretch;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+  line-height: var(--leading-relaxed);
+}
+
+.processing .telegram-notice {
+  background: var(--color-surface);
+}
+
+.telegram-notice--offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.telegram-notice--offer p {
+  flex: 1 1 18rem;
+  margin: 0;
+}
+
+.telegram-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.telegram-notice__actions a.button {
+  text-decoration: none;
+}

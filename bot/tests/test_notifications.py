@@ -1,22 +1,35 @@
-import json
+import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+)
 from aiogram.methods import SendMessage
 
 from app.notifications import (
+    CLAIM_LECTURE_NOTICES,
+    CLOSE_LECTURE_NOTICE,
     DROP_LEGAL_NOTICE,
+    EXPIRE_LECTURE_NOTICES,
+    LECTURE_NOTICE_BATCH,
+    LECTURE_NOTICE_LEASE_SECONDS,
     LEGAL_NOTICE_ATTEMPTS,
+    MARK_BOT_BLOCKED,
+    MARK_LECTURE_NOTICE_SENT,
     MARK_LEGAL_NOTICE_FAILED,
     MARK_LEGAL_NOTICE_SENT,
     PENDING_LEGAL_NOTICES,
+    POSTPONE_LECTURE_NOTICE,
+    RELEASE_LECTURE_NOTICES,
     check_quotas,
+    deliver_lecture_notices,
     deliver_legal_notices,
-    deliver_pending,
-    handle_event,
     send_once,
 )
 
@@ -24,7 +37,6 @@ from app.notifications import (
 class FakeRedis:
     def __init__(self):
         self.keys = {}
-        self.pending = {}
 
     async def get(self, key):
         return self.keys.get(key)
@@ -38,41 +50,6 @@ class FakeRedis:
     async def eval(self, script, count, key, token):
         if self.keys.get(key) == token:
             del self.keys[key]
-
-    async def hset(self, name, key, value):
-        self.pending[key] = value
-
-    async def hgetall(self, name):
-        return self.pending.copy()
-
-    async def hdel(self, name, key):
-        self.pending.pop(key, None)
-
-
-async def test_event_is_owned_and_deduplicated():
-    user, lecture = uuid4(), uuid4()
-    redis, bot = FakeRedis(), AsyncMock()
-    pool = AsyncMock()
-    updated = datetime(2026, 10, 27, tzinfo=UTC)
-    pool.fetchrow.return_value = {"telegram_chat_id": 123, "updated_at": updated}
-    event = json.dumps({"user_id": str(user), "lecture_id": str(lecture), "status": "ready"})
-    await handle_event(event, pool, redis, bot, "https://lecturo.test")
-    await handle_event(event, pool, redis, bot, "https://lecturo.test")
-    await deliver_pending(redis, bot, "https://lecturo.test")
-    await deliver_pending(redis, bot, "https://lecturo.test")
-    assert bot.send_message.await_count == 1
-    args, kwargs = bot.send_message.await_args
-    assert args == (123, "Лекция готова.")
-    assert kwargs["reply_markup"].inline_keyboard[0][0].web_app.url == (
-        f"https://lecturo.test/lectures/{lecture}"
-    )
-    assert pool.fetchrow.await_args.args[1:] == (user, lecture)
-    pool.fetchrow.return_value = None
-    await handle_event(
-        event.replace('"ready"', '"failed"'), pool, redis, bot, "https://lecturo.test"
-    )
-    await handle_event("{}", pool, redis, bot, "https://lecturo.test")
-    assert bot.send_message.await_count == 1
 
 
 async def test_failed_send_can_retry():
@@ -122,24 +99,6 @@ async def test_periodic_notifications_respect_users_cycles_and_packages():
     rows[0]["week_start"] += timedelta(days=7)
     await check_quotas(pool, redis, bot, 7200, 36000, now + timedelta(days=7))
     assert bot.send_message.await_count == 5
-
-
-async def test_event_retry_and_new_attempt():
-    user, lecture = uuid4(), uuid4()
-    redis, bot, pool = FakeRedis(), AsyncMock(), AsyncMock()
-    updated = datetime(2026, 10, 27, tzinfo=UTC)
-    pool.fetchrow.return_value = {"telegram_chat_id": 1, "updated_at": updated}
-    event = json.dumps({"user_id": str(user), "lecture_id": str(lecture), "status": "failed"})
-    await handle_event(event, pool, redis, bot, "https://lecturo.test")
-    bot.send_message.side_effect = [RuntimeError(), None, None]
-    await deliver_pending(redis, bot, "https://lecturo.test")
-    assert len(redis.pending) == 1
-    await deliver_pending(redis, bot, "https://lecturo.test")
-    assert not redis.pending
-    pool.fetchrow.return_value["updated_at"] += timedelta(minutes=1)
-    await handle_event(event, pool, redis, bot, "https://lecturo.test")
-    await deliver_pending(redis, bot, "https://lecturo.test")
-    assert bot.send_message.await_count == 3
 
 
 async def test_reset_is_sent_after_long_downtime():
@@ -209,3 +168,123 @@ async def test_legal_notices_stop_on_retry_after():
     assert await deliver_legal_notices(pool, redis, bot) == 90
     assert bot.send_message.await_count == 1
     pool.execute.assert_not_awaited()
+
+
+class FakeLecturePool:
+    def __init__(self, rows):
+        self.rows = rows
+        self.calls = []
+
+    async def fetch(self, query, *args):
+        self.calls.append((query, *args))
+        return self.rows
+
+    async def execute(self, query, *args):
+        self.calls.append((query, *args))
+
+
+def lecture_row(chat, kind="lecture", outcome="ready", started=True, attempts=0):
+    return {
+        "id": uuid4(),
+        "lecture_id": uuid4(),
+        "kind": kind,
+        "outcome": outcome,
+        "attempts": attempts,
+        "title": "Матанализ",
+        "telegram_chat_id": chat,
+        "identity_id": uuid4(),
+        "started": started,
+    }
+
+
+async def test_lecture_notices_are_sent_and_closed():
+    rows = [
+        lecture_row(11),
+        lecture_row(22, "regenerate", "failed"),
+        lecture_row(33, "quiz", "ready", attempts=2),
+        lecture_row(44),
+        lecture_row(55, started=False),
+        lecture_row(None),
+    ]
+    pool, bot = FakeLecturePool(rows), AsyncMock()
+
+    async def send(chat_id, text, reply_markup=None):
+        method = SendMessage(chat_id=chat_id, text=text)
+        if chat_id == 33:
+            raise TelegramNetworkError(method, "timeout")
+        if chat_id == 44:
+            raise TelegramForbiddenError(method, "blocked")
+
+    bot.send_message.side_effect = send
+    assert await deliver_lecture_notices(pool, bot, "https://lecturo.test") == 0
+
+    assert pool.calls == [
+        (EXPIRE_LECTURE_NOTICES,),
+        (CLAIM_LECTURE_NOTICES, LECTURE_NOTICE_BATCH, LECTURE_NOTICE_LEASE_SECONDS),
+        (MARK_LECTURE_NOTICE_SENT, rows[0]["id"]),
+        (MARK_LECTURE_NOTICE_SENT, rows[1]["id"]),
+        (POSTPONE_LECTURE_NOTICE, rows[2]["id"], 240),
+        (MARK_BOT_BLOCKED, rows[3]["identity_id"]),
+        (CLOSE_LECTURE_NOTICE, rows[3]["id"]),
+        (CLOSE_LECTURE_NOTICE, rows[4]["id"]),
+        (CLOSE_LECTURE_NOTICE, rows[5]["id"]),
+    ]
+    sent = bot.send_message.await_args_list
+    assert [call.args for call in sent] == [
+        (11, "Лекция «Матанализ» готова."),
+        (
+            22,
+            "Не удалось пересоздать главы и конспект лекции «Матанализ». "
+            "Прежний конспект сохранён.",
+        ),
+        (33, "Квиз по лекции «Матанализ» готов."),
+        (44, "Лекция «Матанализ» готова."),
+    ]
+    assert sent[0].kwargs["reply_markup"].inline_keyboard[0][0].web_app.url == (
+        f"https://lecturo.test/lectures/{rows[0]['lecture_id']}"
+    )
+    assert sent[2].kwargs["reply_markup"].inline_keyboard[0][0].web_app.url == (
+        f"https://lecturo.test/lectures/{rows[2]['lecture_id']}/quiz"
+    )
+
+
+async def test_lecture_notice_without_https_has_link_in_text():
+    row = lecture_row(11, outcome="failed")
+    pool, bot = FakeLecturePool([row]), AsyncMock()
+    await deliver_lecture_notices(pool, bot, "http://localhost:8088")
+    args, kwargs = bot.send_message.await_args
+    assert args[1] == (
+        "Не удалось обработать лекцию «Матанализ». Откройте её, чтобы повторить.\n"
+        f"http://localhost:8088/lectures/{row['lecture_id']}"
+    )
+    assert kwargs["reply_markup"] is None
+
+
+async def test_lecture_notices_wait_on_retry_after_and_close_bad_requests():
+    rows = [lecture_row(11), lecture_row(22), lecture_row(33)]
+    pool, bot = FakeLecturePool(rows), AsyncMock()
+
+    async def send(chat_id, text, reply_markup=None):
+        method = SendMessage(chat_id=chat_id, text=text)
+        if chat_id == 11:
+            raise TelegramBadRequest(method, "chat not found")
+        if chat_id == 22:
+            raise TelegramRetryAfter(method, "flood", 30)
+
+    bot.send_message.side_effect = send
+    assert await deliver_lecture_notices(pool, bot, "https://lecturo.test") == 30
+    assert pool.calls[2:] == [
+        (CLOSE_LECTURE_NOTICE, rows[0]["id"]),
+        (POSTPONE_LECTURE_NOTICE, rows[1]["id"], 30),
+        (RELEASE_LECTURE_NOTICES, [rows[2]["id"]], 30),
+    ]
+    assert bot.send_message.await_count == 2
+
+
+async def test_sent_notice_is_marked_before_next_send():
+    rows = [lecture_row(11), lecture_row(22)]
+    pool, bot = FakeLecturePool(rows), AsyncMock()
+    bot.send_message.side_effect = [None, asyncio.CancelledError()]
+    with pytest.raises(asyncio.CancelledError):
+        await deliver_lecture_notices(pool, bot, "https://lecturo.test")
+    assert pool.calls[2:] == [(MARK_LECTURE_NOTICE_SENT, rows[0]["id"])]

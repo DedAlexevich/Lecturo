@@ -4,13 +4,26 @@ import uuid
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import LectureStatus
+from app.models import LectureStatus, NotificationEvent, NotificationKind, NotificationOutcome
 
 CHANNEL = "lecture-events"
 
 logger = logging.getLogger(__name__)
+
+
+def add_notification(
+    session: AsyncSession,
+    lecture_id: uuid.UUID,
+    user_id: uuid.UUID,
+    kind: NotificationKind,
+    outcome: NotificationOutcome,
+) -> None:
+    session.add(
+        NotificationEvent(user_id=user_id, lecture_id=lecture_id, kind=kind, outcome=outcome)
+    )
 
 
 async def publish_status(

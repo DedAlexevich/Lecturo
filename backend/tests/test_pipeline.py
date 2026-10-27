@@ -31,6 +31,9 @@ from app.models import (
     Chapter,
     Lecture,
     LectureStatus,
+    NotificationEvent,
+    NotificationKind,
+    NotificationOutcome,
     ProcessingStep,
     SearchChunk,
     SourceType,
@@ -43,6 +46,7 @@ from app.models import (
 )
 from app.pipeline import events, media, stages, tasks
 from app.providers.stub import STUB_PHRASES
+from tests.conftest import notifications
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -280,6 +284,9 @@ async def test_failed_video_keeps_lecture_ready(user, sample_video, storage, mon
     assert steps[StepName.video].error == "Не удалось пережать видео"
     assert steps[StepName.transcribe].status == StepStatus.done
     assert await count(UsageEntry, lecture.id) == 1
+    assert await notifications(lecture.id) == [
+        (NotificationKind.lecture, NotificationOutcome.ready)
+    ]
     assert not media.original_path(lecture.id).exists()
 
 
@@ -712,6 +719,7 @@ async def test_transcribe_waits_for_quota(user, sample_audio, monkeypatch):
     assert step.error == "Не хватает лимита на обработку лекции"
     assert StepName.summarize not in steps_by_name(waiting)
     assert await count(TranscriptSegment, lecture.id) == 0
+    assert await notifications(lecture.id) == []
     assert await charged_seconds(lecture.id) == 0
 
 
@@ -792,10 +800,60 @@ async def test_error_outside_step_publishes_failed(user, sample_audio, received,
     assert (last["status"], last["error"]) == ("failed", "база недоступна")
 
 
+async def test_ready_lecture_records_notification(user, sample_audio):
+    lecture = await create_lecture(user, sample_audio)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    async with SessionLocal() as session:
+        event = await session.scalar(
+            select(NotificationEvent).where(NotificationEvent.lecture_id == lecture.id)
+        )
+    assert (event.user_id, event.kind, event.outcome) == (
+        user.id,
+        NotificationKind.lecture,
+        NotificationOutcome.ready,
+    )
+    assert event.sent_at is None
+    assert event.expired_at is None
+    assert event.attempts == 0
+
+
+async def test_failed_step_records_notification_once(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken(session, lecture, report):
+        raise RuntimeError("сбой распознавания")
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.transcribe, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    assert await notifications(lecture.id) == [
+        (NotificationKind.lecture, NotificationOutcome.failed)
+    ]
+
+
+async def test_error_outside_step_records_notification(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken_get_step(*args):
+        raise ConnectionError("база недоступна")
+
+    monkeypatch.setattr("app.pipeline.runner.get_step", broken_get_step)
+    with pytest.raises(ConnectionError):
+        await tasks.process_lecture({}, str(lecture.id))
+
+    assert await notifications(lecture.id) == [
+        (NotificationKind.lecture, NotificationOutcome.failed)
+    ]
+
+
 async def test_unavailable_redis_does_not_break_pipeline(user, sample_audio, monkeypatch):
     monkeypatch.setattr(get_settings(), "redis_url", "redis://127.0.0.1:1/0")
     lecture = await create_lecture(user, sample_audio)
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    assert await notifications(lecture.id) == [
+        (NotificationKind.lecture, NotificationOutcome.ready)
+    ]
 
 
 async def test_interrupted_ready_event_keeps_lecture_ready(user, sample_audio, monkeypatch):

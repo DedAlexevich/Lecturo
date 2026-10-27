@@ -7,6 +7,7 @@ export type WebApp = {
   onEvent: (event: string, callback: () => void) => void;
   offEvent: (event: string, callback: () => void) => void;
   openLink: (url: string) => void;
+  openTelegramLink?: (url: string) => void;
   BackButton: {
     show: () => void;
     hide: () => void;
