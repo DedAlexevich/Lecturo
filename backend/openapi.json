@@ -3574,6 +3574,18 @@
               }
             ],
             "title": "Return Url"
+          },
+          "receipt_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Email"
           }
         },
         "type": "object",
