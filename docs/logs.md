@@ -1,6 +1,6 @@
 # Логи
 
-Каждый сервис пишет логи в файл `data/logs/<сервис>.log` (папка внутри `DATA_DIR`, см. [data.md](data.md)) и продолжает выводить их в stdout, поэтому `docker compose logs` работает как раньше. Файлы переживают пересоздание контейнеров и `docker compose down -v`.
+Каждый сервис пишет логи в файл `data/logs/<сервис>.log` (папка внутри `DATA_DIR`, см. [data.md](data.md)) и продолжает выводить их в stdout, поэтому `docker compose logs` работает как раньше. Исключение: access-лог Caddy пишется только в файл. Файлы переживают пересоздание контейнеров и `docker compose down -v`.
 
 | Файл | Сервис | Что внутри |
 |---|---|---|
@@ -21,7 +21,7 @@
 
 ## Ротация
 
-Файл `api`, `worker` и `bot` ротируется средствами Python (`RotatingFileHandler`), `caddy`, `tusd` и `mail` пишутся через `infra/log-to-file.sh` с тем же правилом. Когда файл достигает `LOG_MAX_MB` мегабайт (по умолчанию 10), он переименовывается в `<сервис>.log.1`, прежние копии сдвигаются, а самая старая сверх `LOG_BACKUP_COUNT` (по умолчанию 5) удаляется. На каждый сервис уходит не больше `LOG_MAX_MB * (LOG_BACKUP_COUNT + 1)` МБ.
+Файл `api`, `worker` и `bot` ротируется средствами Python (`RotatingFileHandler`), `caddy` встроенной ротацией Caddy (`roll_size`, `roll_keep` в `infra/Caddyfile`), `tusd` и `mail` пишутся через `infra/log-to-file.sh` с тем же правилом. Когда файл достигает `LOG_MAX_MB` мегабайт (по умолчанию 10), он переименовывается в `<сервис>.log.1`, прежние копии сдвигаются, а самая старая сверх `LOG_BACKUP_COUNT` (по умолчанию 5) удаляется. На каждый сервис уходит не больше `LOG_MAX_MB * (LOG_BACKUP_COUNT + 1)` МБ.
 
 Запасной вариант: json-логи Docker для всех сервисов ограничены `max-size: 10m` и `max-file: 3`.
 
@@ -37,4 +37,4 @@ docker compose logs -f api worker
 
 ## Как это устроено
 
-Для `api`, `worker` и `bot` путь и имя файла задают переменные `LOG_DIR` и `LOG_SERVICE` из `docker-compose.yml`. Без `LOG_DIR` (например, при запуске тестов или `uvicorn` на хосте) логи идут только в stdout. Для `caddy` и `tusd` `docker-compose.yml` заменяет точку входа на `infra/log-to-file.sh`: скрипт запускает сервис, копирует его вывод и в stdout, и в файл и ротирует файл.
+Для `api`, `worker` и `bot` путь и имя файла задают переменные `LOG_DIR` и `LOG_SERVICE` из `docker-compose.yml`. Без `LOG_DIR` (например, при запуске тестов или `uvicorn` на хосте) логи идут только в stdout. Caddy пишет файл сам: путь, размер и число копий заданы в блоках `log` файла `infra/Caddyfile` (размер и число копий берутся из `LOG_MAX_MB` и `LOG_BACKUP_COUNT`). Для `tusd` и `mail` точка входа заменена на `infra/log-to-file.sh`: скрипт запускает сервис, копирует его вывод и в stdout, и в файл, держит файл открытым и ротирует его по размеру в байтах.
