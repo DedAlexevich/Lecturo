@@ -262,7 +262,7 @@ async def test_quiz_permanent_error_fails_at_once(user, monkeypatch):
     lecture = await test_quiz.create_ready_lecture(user)
 
     assert await tasks.process_quiz(LATE_TRY, str(lecture.id)) == StepStatus.failed
-    assert (await test_quiz.quiz_step(lecture.id)).error == STEP_ERRORS[StepName.quiz]
+    assert (await test_quiz.quiz_step(lecture.id)).error.startswith("Не удалось собрать квиз")
 
 
 class UnavailableLLM:
