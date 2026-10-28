@@ -80,20 +80,34 @@ def is_public_ip(address: str) -> bool:
 
 
 def public_address(host: str, port: int) -> str:
-    try:
-        addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror:
-        return host
-    ips = [sockaddr[0] for *_, sockaddr in addresses]
-    if not ips or not all(is_public_ip(ip) for ip in ips):
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    if not addresses or not all(is_public_ip(sockaddr[0]) for *_, sockaddr in addresses):
         raise BlockedAddress(INTERNAL_NETWORK)
-    return next((a[4][0] for a in addresses if a[0] == socket.AF_INET), ips[0])
+    ipv4 = [sockaddr[0] for family, *_, sockaddr in addresses if family == socket.AF_INET]
+    return ipv4[0] if ipv4 else addresses[0][4][0]
 
 
 class PublicHTTPConnection(urllib3.connection.HTTPConnection):
     def _new_conn(self):
-        self._dns_host = public_address(self._dns_host, self.port)
-        return super()._new_conn()
+        try:
+            address = public_address(self._dns_host, self.port)
+        except socket.gaierror as error:
+            raise urllib3.exceptions.NameResolutionError(self.host, self, error) from error
+        try:
+            return urllib3.util.connection.create_connection(
+                (address, self.port),
+                self.timeout,
+                source_address=self.source_address,
+                socket_options=self.socket_options,
+            )
+        except TimeoutError as error:
+            raise urllib3.exceptions.ConnectTimeoutError(
+                self, f"Connection to {self.host} timed out"
+            ) from error
+        except OSError as error:
+            raise urllib3.exceptions.NewConnectionError(
+                self, f"Failed to establish a new connection: {error}"
+            ) from error
 
 
 class PublicHTTPSConnection(PublicHTTPConnection, urllib3.connection.HTTPSConnection):

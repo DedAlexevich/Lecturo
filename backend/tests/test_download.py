@@ -718,6 +718,57 @@ def test_real_download_stops_on_size_limit(media_hosts, monkeypatch, tmp_path):
         download.fetch_audio(media_hosts + "/lecture.wav", tmp_path / "downloaded", {})
 
 
+def test_public_connection_keeps_host_name(monkeypatch):
+    hosts = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hosts.append(self.headers["Host"])
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.2", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_port
+    resolved = []
+    real_getaddrinfo = download.socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        resolved.append(host)
+        if host == "files.lecturo.test":
+            host = "127.0.0.2"
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(download.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(download, "is_public_ip", lambda address: address == "127.0.0.2")
+    try:
+        pool = download.PublicHTTPConnectionPool("files.lecturo.test", port)
+        response = pool.request("GET", "/")
+        connection = download.PublicHTTPSConnection("files.lecturo.test", port)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert response.status == 200
+    assert hosts == [f"files.lecturo.test:{port}"]
+    assert resolved[0] == "files.lecturo.test"
+    assert connection.host == "files.lecturo.test"
+
+
+def test_public_connection_rejects_unresolved_host(monkeypatch):
+    def getaddrinfo(*args, **kwargs):
+        raise download.socket.gaierror("нет такого хоста")
+
+    monkeypatch.setattr(download.socket, "getaddrinfo", getaddrinfo)
+
+    with pytest.raises(download.urllib3.exceptions.NameResolutionError):
+        download.PublicHTTPConnection("files.lecturo.test", 80)._new_conn()
+
+
 def redirect_transport(routes: dict[str, httpx.Response]) -> httpx.MockTransport:
     return httpx.MockTransport(lambda request: routes[str(request.url)])
 
