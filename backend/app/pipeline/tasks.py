@@ -32,7 +32,15 @@ from app.pipeline.jobs import (
     regeneration_job_id,
     video_job_id,
 )
-from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
+from app.pipeline.runner import (
+    PROCESSING_FAILED,
+    StepDeferred,
+    StepFailed,
+    StepHandler,
+    deferral_delay,
+    get_step,
+    run_step,
+)
 from app.services import maintenance, quota
 from app.services.account import lecture_files, remove_files
 
@@ -69,15 +77,23 @@ AFTER_READY_STEPS = sorted({name for names in AFTER_READY.values() for name in n
 
 LECTURE_STEPS = [name for name in StepName if name != StepName.quiz]
 
+LLM_STEPS = frozenset({StepName.summarize, StepName.quiz})
+
+
+def llm_defer_delay(ctx: dict, name: StepName) -> int | None:
+    return deferral_delay(ctx) if name in LLM_STEPS else None
+
 
 async def process_lecture(ctx: dict, lecture_id: str) -> str:
     await maintenance.hold_job_while_active()
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         async with asyncio.timeout(LECTURE_TIMEOUT_SEC):
-            return await run_plan(lecture_uuid)
+            return await run_plan(lecture_uuid, ctx)
     except quota.QuotaExceeded:
         return LectureStatus.waiting_quota
+    except StepDeferred as deferred:
+        raise Retry(defer=deferred.delay) from deferred
     except StepFailed:
         await refund(lecture_uuid)
         return LectureStatus.failed
@@ -168,7 +184,9 @@ async def process_regeneration(ctx: dict, lecture_id: str) -> str:
     try:
         async with asyncio.timeout(REGENERATION_TIMEOUT_SEC):
             await reset_regeneration_steps(lecture_uuid)
-            return await run_regeneration(lecture_uuid)
+            return await run_regeneration(lecture_uuid, ctx)
+    except StepDeferred as deferred:
+        raise Retry(defer=deferred.delay) from deferred
     except asyncio.CancelledError:
         raise
     except BaseException:
@@ -176,7 +194,7 @@ async def process_regeneration(ctx: dict, lecture_id: str) -> str:
         raise
 
 
-async def run_regeneration(lecture_id: uuid.UUID) -> str:
+async def run_regeneration(lecture_id: uuid.UUID, ctx: dict) -> str:
     async with SessionLocal() as session:
         lecture = await session.get(Lecture, lecture_id)
         if lecture is None:
@@ -185,7 +203,14 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         error: str | None = None
         try:
             for name in REGENERATION_STEPS:
-                await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
+                await run_step(
+                    session,
+                    lecture,
+                    name,
+                    HANDLERS[name],
+                    fails_lecture=False,
+                    defer_delay=llm_defer_delay(ctx, name),
+                )
         except StepFailed as failure:
             outcome = StepStatus.failed
             failed = await get_step(session, lecture.id, failure.args[0])
@@ -278,7 +303,10 @@ async def process_quiz(ctx: dict, lecture_id: str) -> str:
                 quiz.build_quiz,
                 fails_lecture=False,
                 notify=NotificationKind.quiz,
+                defer_delay=llm_defer_delay(ctx, StepName.quiz),
             )
+        except StepDeferred as deferred:
+            raise Retry(defer=deferred.delay) from deferred
         except StepFailed:
             return StepStatus.failed
         return StepStatus.done
@@ -291,7 +319,7 @@ async def purge_if_deleted(lecture_id: uuid.UUID) -> None:
         await asyncio.to_thread(remove_files, lecture_files(lecture_id, []))
 
 
-async def run_plan(lecture_id: uuid.UUID) -> str:
+async def run_plan(lecture_id: uuid.UUID, ctx: dict) -> str:
     async with SessionLocal() as session:
         lecture = await session.get(Lecture, lecture_id)
         if lecture is None:
@@ -301,7 +329,9 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
             for name in PLANS[lecture.source_type]:
-                await run_step(session, lecture, name, HANDLERS[name])
+                await run_step(
+                    session, lecture, name, HANDLERS[name], defer_delay=llm_defer_delay(ctx, name)
+                )
             for name in AFTER_READY.get(lecture.source_type, []):
                 await get_step(session, lecture.id, name)
             lecture.status = LectureStatus.ready

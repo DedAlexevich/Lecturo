@@ -1,9 +1,10 @@
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from arq import create_pool
+from arq import Retry, create_pool
 from arq.jobs import Job, JobStatus
 from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
@@ -14,11 +15,14 @@ from app.core.db import SessionLocal
 from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
 from app.pipeline.jobs import queue_settings
+from app.pipeline.runner import TRANSIENT_ERRORS, deferral_delay
 from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
 from app.pipeline.tasks import enqueue
 from app.providers import LLM, get_llm
 from app.services import maintenance
 from app.services.consents import ai_transfer_given
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -191,7 +195,16 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
                 session, course_uuid, draft, [lecture.lecture_id for lecture in notes]
             )
             await session.commit()
-        except Exception:
+        except Exception as error:
+            delay = deferral_delay(ctx) if isinstance(error, TRANSIENT_ERRORS) else None
+            if delay is not None:
+                logger.warning(
+                    "Памятка курса %s отложена на %s с из-за временной ошибки провайдера: %s",
+                    course_uuid,
+                    delay,
+                    error,
+                )
+                raise Retry(defer=delay) from error
             await mark_exam_sheet_failed(course_uuid)
             raise
         return "ready"
