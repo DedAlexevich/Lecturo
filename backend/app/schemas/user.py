@@ -94,6 +94,7 @@ class TelegramWebAppIn(Schema):
 class ProvidersOut(Schema):
     vk: bool
     yandex: bool
+    telegram_bot_id: int | None = None
 
 
 class VkStartIn(Schema):

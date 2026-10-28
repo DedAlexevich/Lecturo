@@ -8321,6 +8321,17 @@
           "yandex": {
             "type": "boolean",
             "title": "Yandex"
+          },
+          "telegram_bot_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Bot Id"
           }
         },
         "type": "object",

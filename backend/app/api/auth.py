@@ -145,7 +145,11 @@ async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOu
 @router.get("/providers")
 async def providers() -> ProvidersOut:
     settings = get_settings()
-    return ProvidersOut(vk=settings.vk_enabled, yandex=settings.yandex_oauth_enabled)
+    return ProvidersOut(
+        vk=settings.vk_enabled,
+        yandex=settings.yandex_oauth_enabled,
+        telegram_bot_id=settings.telegram_bot_id,
+    )
 
 
 @router.post(

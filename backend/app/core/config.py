@@ -186,6 +186,11 @@ class Settings(BaseSettings):
     def vk_enabled(self) -> bool:
         return bool(self.vk_client_id and self.vk_redirect_uri)
 
+    @property
+    def telegram_bot_id(self) -> int | None:
+        prefix = self.telegram_bot_token.partition(":")[0]
+        return int(prefix) if prefix.isdecimal() and int(prefix) > 0 else None
+
 
 @lru_cache
 def get_settings() -> Settings:

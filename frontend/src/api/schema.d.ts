@@ -2650,6 +2650,8 @@ export interface components {
             vk: boolean;
             /** Yandex */
             yandex: boolean;
+            /** Telegram Bot Id */
+            telegram_bot_id?: number | null;
         };
         /** PublicCourseOut */
         PublicCourseOut: {

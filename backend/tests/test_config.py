@@ -37,3 +37,11 @@ def test_public_url_accepts_strong_key() -> None:
     settings = Settings(public_url="https://lecturo.example", secret_key=STRONG_KEY)
 
     assert settings.secret_key == STRONG_KEY
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [("123456789:AAEhBP0av28", 123456789), ("", None), ("no-colon", None), ("0:abc", None)],
+)
+def test_telegram_bot_id_from_token(token: str, expected: int | None) -> None:
+    assert Settings(telegram_bot_token=token).telegram_bot_id == expected

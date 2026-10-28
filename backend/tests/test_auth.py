@@ -175,3 +175,10 @@ async def test_register_ip_limit_counts_only_failures(client, email, monkeypatch
             await session.execute(delete(User).where(User.email == second))
             await session.commit()
     assert statuses == [201, 201, 409, 409, 429]
+
+
+async def test_providers_expose_telegram_bot_id(client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "telegram_bot_token", "123456789:AAEhBP0av28")
+    assert (await client.get("/api/v1/auth/providers")).json()["telegram_bot_id"] == 123456789
+    monkeypatch.setattr(get_settings(), "telegram_bot_token", "")
+    assert (await client.get("/api/v1/auth/providers")).json()["telegram_bot_id"] is None
