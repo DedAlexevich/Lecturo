@@ -86,7 +86,10 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
 async def process_regeneration(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
+        await reset_regeneration_steps(lecture_uuid)
         return await run_regeneration(lecture_uuid)
+    except asyncio.CancelledError:
+        raise
     except BaseException:
         await restore_ready(lecture_uuid, REGENERATION_FAILED)
         raise
@@ -102,9 +105,9 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         try:
             for name in REGENERATION_STEPS:
                 await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
-        except StepFailed:
+        except StepFailed as failure:
             outcome = StepStatus.failed
-            failed = await get_step(session, lecture.id, StepName.summarize)
+            failed = await get_step(session, lecture.id, failure.args[0])
             error = failed.error
             await session.execute(
                 update(ProcessingStep)
@@ -126,6 +129,19 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         await session.commit()
         await publish_status(lecture.id, lecture.owner_id, lecture.status, error)
         return outcome
+
+
+async def reset_regeneration_steps(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+            )
+            .values(status=StepStatus.pending, progress=0.0, stage=None, error=None)
+        )
+        await session.commit()
 
 
 async def restore_ready(lecture_id: uuid.UUID, error: str) -> None:
