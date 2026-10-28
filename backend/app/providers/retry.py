@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 INTERNAL_ERROR_CODE = 13
 JITTER_RATIO = 0.2
+UNSENT_ERRORS = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.PoolTimeout,
+    httpx.WriteError,
+    httpx.WriteTimeout,
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,7 @@ async def request_with_retry(
     provider: str,
     action: str,
     error_cls: type[Exception],
+    retry_unsent_only: bool = False,
 ) -> httpx.Response:
     attempt = 0
     while True:
@@ -70,6 +78,11 @@ async def request_with_retry(
         except httpx.TransportError as error:
             failure = error
             reason = type(error).__name__
+            if retry_unsent_only and not isinstance(error, UNSENT_ERRORS):
+                raise error_cls(
+                    f"{provider}: {action}: ответ не получен ({reason}), "
+                    "повтор не выполняется, чтобы не запустить операцию дважды"
+                ) from error
         else:
             if not is_retryable_response(response):
                 return response

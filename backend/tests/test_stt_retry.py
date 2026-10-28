@@ -90,13 +90,13 @@ async def test_yandex_start_retries_code_13_with_other_status(
     assert len(calls["start"]) == 2
 
 
-async def test_yandex_start_retries_network_errors(tmp_path: Path, retry_pauses: list[float]):
+async def test_yandex_start_retries_unsent_requests(tmp_path: Path, retry_pauses: list[float]):
     request = httpx.Request("POST", RECOGNIZE_URL)
     calls: dict = {}
     provider = yandex_provider(
         [
-            httpx.ReadTimeout("slow", request=request),
-            httpx.RemoteProtocolError("closed", request=request),
+            httpx.ConnectTimeout("slow", request=request),
+            httpx.WriteError("broken pipe", request=request),
             started(),
         ],
         calls,
@@ -104,6 +104,22 @@ async def test_yandex_start_retries_network_errors(tmp_path: Path, retry_pauses:
     await provider.transcribe(make_audio(tmp_path))
     assert len(calls["start"]) == 3
     assert len(retry_pauses) == 2
+
+
+@pytest.mark.parametrize("error", [httpx.ReadTimeout, httpx.ReadError, httpx.RemoteProtocolError])
+async def test_yandex_start_is_not_repeated_when_answer_is_lost(
+    tmp_path: Path, retry_pauses: list[float], error: type[httpx.TransportError]
+):
+    request = httpx.Request("POST", RECOGNIZE_URL)
+    calls: dict = {}
+    provider = yandex_provider([error("lost", request=request), started()], calls)
+
+    with pytest.raises(YandexSpeechKitError, match="повтор не выполняется"):
+        await provider.transcribe(make_audio(tmp_path))
+
+    assert len(calls["start"]) == 1
+    assert retry_pauses == []
+    assert len(calls["DELETE"]) == 1
 
 
 async def test_yandex_start_gives_up_after_all_attempts(tmp_path: Path, retry_pauses: list[float]):
