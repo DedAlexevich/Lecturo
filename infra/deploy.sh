@@ -1,6 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+compose_up() {
+  docker compose up -d --remove-orphans --wait --wait-timeout 300
+}
+
+alembic_revision() {
+  docker compose run --rm --no-deps -T migrate alembic "$1" 2>/dev/null | awk '$1 ~ /^[0-9A-Za-z_]+$/ {print $1; exit}'
+}
+
+restore_code() {
+  git reset --quiet --hard "$1"
+  docker compose build || echo "rebuild of $(git rev-parse --short HEAD) failed" >&2
+}
+
+rollback() {
+  local previous=$1 previous_revision=$2 dump=$3
+  docker compose logs --tail 100 migrate api worker bot || true
+  echo "deploy failed, rolling back to $previous" >&2
+  if [ -n "$dump" ]; then
+    echo "database dump before deploy: $dump" >&2
+  fi
+  if [ -n "$previous_revision" ]; then
+    if ! docker compose run --rm --no-deps -T migrate alembic downgrade "$previous_revision"; then
+      echo "alembic downgrade to $previous_revision failed, code stays at $(git rev-parse --short HEAD)" >&2
+      exit 1
+    fi
+  fi
+  restore_code "$previous"
+  compose_up
+  exit 1
+}
+
 main() {
   local target="${1:-origin/main}"
   cd "$(dirname "$0")/.."
@@ -16,21 +47,38 @@ main() {
     exit 0
   fi
 
-  local previous previous_revision
+  local previous previous_revision new_head dump=""
   previous=$(git rev-parse HEAD)
-  previous_revision=$(docker compose exec -T api alembic current 2>/dev/null | awk 'NR==1 {print $1}' || true)
   git reset --quiet --hard "$target"
-  echo "deploying $(git rev-parse --short HEAD), previous $(git rev-parse --short "$previous") at revision ${previous_revision:-none}"
 
-  if ! docker compose up -d --build --remove-orphans --wait --wait-timeout 300; then
-    docker compose logs --tail 100 api worker
-    echo "deploy failed, rolling back to $previous" >&2
-    if [ -n "$previous_revision" ]; then
-      docker compose run --rm --no-deps api alembic downgrade "$previous_revision"
-    fi
-    git reset --quiet --hard "$previous"
-    docker compose up -d --build --remove-orphans --wait --wait-timeout 300
+  if ! docker compose build; then
+    echo "build failed, code returned to $previous" >&2
+    restore_code "$previous"
     exit 1
+  fi
+
+  previous_revision=$(alembic_revision current || true)
+  if ! new_head=$(alembic_revision heads) || [ -z "$new_head" ]; then
+    echo "cannot read alembic heads, code returned to $previous" >&2
+    restore_code "$previous"
+    exit 1
+  fi
+  echo "deploying $(git rev-parse --short HEAD), previous $(git rev-parse --short "$previous") at revision ${previous_revision:-none}, new head $new_head"
+
+  if [ -n "$previous_revision" ] && [ "$new_head" != "$previous_revision" ]; then
+    if ! dump=$(infra/backup/backup.sh --no-wait | tee /dev/stderr | sed -n 's/^saved \(.*\) (.*)$/\1/p') || [ -z "$dump" ]; then
+      echo "backup failed, code returned to $previous" >&2
+      restore_code "$previous"
+      exit 1
+    fi
+    echo "database saved to $dump before migration"
+  fi
+
+  if ! docker compose run --rm -T migrate; then
+    rollback "$previous" "$previous_revision" "$dump"
+  fi
+  if ! compose_up; then
+    rollback "$previous" "$previous_revision" "$dump"
   fi
 
   docker image prune -f >/dev/null
