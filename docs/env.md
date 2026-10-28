@@ -168,6 +168,7 @@ docker compose exec worker python -m app.pipeline.reindex
 | `SMTP_USER` | Логин. Если пуст, авторизация не выполняется | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_PASSWORD` | Пароль. Для Яндекса и Gmail нужен пароль приложения | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_FROM` | Адрес в поле «От». Локально при пустом значении берётся `SMTP_USER`, на сервере подставляется `noreply@<домен>`, поэтому для внешнего SMTP там его нужно заполнить | на сервере с внешним SMTP | пусто, на сервере `Lecturo <noreply@<домен>>` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
+| `COMPLAINTS_EMAIL` | Адрес, на который приходит письмо о каждой новой жалобе на публичную ссылку. Пусто: жалоба только сохраняется в базе и пишется в лог | нет | пусто | `backend/app/api/shares.py` |
 | `MAIL_DOMAIN` | Домен, от имени которого `mail` отправляет и подписывает письма. Только один домен без схемы и порта, например `lecturo.example`. Если в `SITE_ADDRESS` несколько адресов или схема, задайте `MAIL_DOMAIN` явно, иначе `mail` не запустится | нет | значение `SITE_ADDRESS` | `infra/compose.prod.yml`, `infra/mail` |
 
 Яндекс Почта:

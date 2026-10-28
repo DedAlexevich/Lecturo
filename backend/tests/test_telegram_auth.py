@@ -6,11 +6,14 @@ from collections.abc import AsyncIterator
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import AuthIdentity, AuthProvider, User
 from app.services.legal import read_document
+from app.services.telegram_auth import get_or_create_telegram_user
 
 BOT_TOKEN = "123456:test-bot-token"
 CONSENTS = {"accept_terms": True, "accept_personal_data": True}
@@ -136,3 +139,37 @@ async def test_login_disabled_without_bot_token(client, monkeypatch, telegram_id
     payload = signed("", id=telegram_id, first_name="Иван", auth_date=int(time.time()))
     response = await client.post("/api/v1/auth/telegram", json=payload)
     assert response.status_code == 503
+
+
+async def test_chat_id_conflict_keeps_profile(monkeypatch, telegram_id):
+    async with SessionLocal() as session:
+        user = await get_or_create_telegram_user(
+            session, telegram_id, {"first_name": "Иван"}, **CONSENTS
+        )
+        user.telegram_chat_id = None
+        await session.commit()
+        user_id = user.id
+
+    commit = AsyncSession.commit
+
+    async def failing_commit(self):
+        if any(isinstance(item, User) for item in self.dirty):
+            raise IntegrityError("UPDATE users", {}, Exception("telegram_chat_id"))
+        await commit(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", failing_commit)
+    async with SessionLocal() as session:
+        with pytest.raises(IntegrityError):
+            await get_or_create_telegram_user(session, telegram_id, {"first_name": "Пётр"})
+    monkeypatch.setattr(AsyncSession, "commit", commit)
+
+    async with SessionLocal() as session:
+        identity = await session.scalar(
+            select(AuthIdentity).where(
+                AuthIdentity.provider == AuthProvider.telegram,
+                AuthIdentity.provider_user_id == str(telegram_id),
+            )
+        )
+        stored = await session.get(User, user_id)
+    assert identity.data == {"first_name": "Иван"}
+    assert stored.telegram_chat_id is None

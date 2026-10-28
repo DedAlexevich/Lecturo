@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    complaints_email: str = ""
 
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
