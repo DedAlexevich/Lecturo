@@ -5,21 +5,18 @@ import { nextClipIndex, parseStoredIndex, parseStoredMode } from "./rotation";
 const modeKey = "lecturo-zoomer";
 const clipKey = "lecturo-zoomer-clip";
 
-const missingKey = "lecturo-zoomer-missing";
-
-function readStorage(key: string, session = false): string | null {
+function readStorage(key: string): string | null {
   try {
-    return (session ? sessionStorage : localStorage).getItem(key);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-function writeStorage(key: string, value: string | null, session = false) {
+function writeStorage(key: string, value: string | null) {
   try {
-    const storage = session ? sessionStorage : localStorage;
-    if (value === null) storage.removeItem(key);
-    else storage.setItem(key, value);
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     return;
   }
@@ -37,8 +34,8 @@ function pickClip(clips: string[]): string | null {
 }
 
 export function useZoomerMode(allowed: boolean) {
-  const [missing, setMissing] = useState(() => readStorage(missingKey, true) !== null);
-  const [enabled, setEnabled] = useState(() => !missing && parseStoredMode(readStorage(modeKey)));
+  const [missing, setMissing] = useState(false);
+  const [enabled, setEnabled] = useState(() => parseStoredMode(readStorage(modeKey)));
   const [clips, setClips] = useState<string[] | null>(null);
   const [clip, setClip] = useState<string | null>(null);
   const [autoplay, setAutoplay] = useState(() => !prefersReducedMotion());
@@ -64,7 +61,6 @@ export function useZoomerMode(allowed: boolean) {
   useEffect(() => {
     if (!enabled || clips === null) return;
     if (clips.length === 0) {
-      writeStorage(missingKey, "1", true);
       setMissing(true);
       disable();
       return;
