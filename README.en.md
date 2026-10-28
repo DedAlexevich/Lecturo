@@ -129,10 +129,6 @@ The same `docker compose` setup runs on a server. Put your domain into `SITE_ADD
 
 The index is [docs/README.md](docs/README.md). The documents are in Russian.
 
-## Contributing
-
-Tasks and bugs live in [issues](https://github.com/DedAlexevich/Lecturo/issues), code is discussed in pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first PR.
-
 ## Team
 
 [@DedAlexevich](https://github.com/DedAlexevich) (owner), [@AxellorWave](https://github.com/AxellorWave), [@aaaa24](https://github.com/aaaa24), [@vamaria06-ux](https://github.com/vamaria06-ux), [@elizazha](https://github.com/elizazha).
