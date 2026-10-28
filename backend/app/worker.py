@@ -19,6 +19,7 @@ from app.pipeline.tasks import (
     process_video,
     resume_interrupted_lectures,
 )
+from app.pipeline.zoomer import ZOOMER_TIMEOUT_SEC, process_zoomer_video
 from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleUnavailable
 from app.providers.yandex import YandexEmbeddings
@@ -62,6 +63,7 @@ class WorkerSettings:
         process_quiz,
         process_regeneration,
         build_exam_sheet,
+        func(process_zoomer_video, timeout=ZOOMER_TIMEOUT_SEC, max_tries=3),
     ]
     on_startup = startup
     on_shutdown = shutdown
