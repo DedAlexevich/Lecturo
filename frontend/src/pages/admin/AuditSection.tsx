@@ -28,6 +28,8 @@ const actionLabels: Record<AdminAction, string> = {
   user_blocked: "Заблокировал аккаунт",
   user_unblocked: "Разблокировал аккаунт",
   alert_settings_changed: "Изменил свои настройки алертов",
+  promo_created: "Создал промокод",
+  promo_disabled: "Отключил промокод",
 };
 
 const sourceLabels: Record<string, string> = {
