@@ -1669,6 +1669,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/zoomer/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Zoomer Videos */
+        get: operations["list_zoomer_videos_api_v1_admin_zoomer_videos_get"];
+        put?: never;
+        /** Upload Zoomer Video */
+        post: operations["upload_zoomer_video_api_v1_admin_zoomer_videos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/zoomer/videos/{video_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Zoomer Video */
+        delete: operations["delete_zoomer_video_api_v1_admin_zoomer_videos__video_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Zoomer Video */
+        patch: operations["update_zoomer_video_api_v1_admin_zoomer_videos__video_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/zoomer/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Reorder Zoomer Videos */
+        put: operations["reorder_zoomer_videos_api_v1_admin_zoomer_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/zoomer/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Zoomer Clips */
+        get: operations["list_zoomer_clips_api_v1_zoomer_videos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1685,7 +1755,7 @@ export interface components {
          * AdminAction
          * @enum {string}
          */
-        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked" | "alert_settings_changed" | "promo_created" | "promo_disabled";
+        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked" | "alert_settings_changed" | "promo_created" | "promo_disabled" | "zoomer_video_uploaded" | "zoomer_video_rejected" | "zoomer_video_updated" | "zoomer_video_deleted" | "zoomer_videos_reordered";
         /** AdminGrantIn */
         AdminGrantIn: {
             /** Identifier */
@@ -3207,6 +3277,79 @@ export interface components {
             /** Nonce */
             nonce: string;
         };
+        /** ZoomerClipOut */
+        ZoomerClipOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** Poster Url */
+            poster_url: string;
+            /** Duration Sec */
+            duration_sec: number | null;
+        };
+        /** ZoomerOrderIn */
+        ZoomerOrderIn: {
+            /** Ids */
+            ids: string[];
+        };
+        /** ZoomerVideoOut */
+        ZoomerVideoOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Source */
+            source: string;
+            status: components["schemas"]["ZoomerVideoStatus"];
+            /** Error */
+            error: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Position */
+            position: number;
+            /** Duration Sec */
+            duration_sec: number | null;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /** Size Bytes */
+            size_bytes: number | null;
+            /** Vertical */
+            vertical: boolean | null;
+            /** Poster Url */
+            poster_url: string | null;
+            /** Video Url */
+            video_url: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ZoomerVideoPatch */
+        ZoomerVideoPatch: {
+            /** Title */
+            title?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /**
+         * ZoomerVideoStatus
+         * @enum {string}
+         */
+        ZoomerVideoStatus: "processing" | "ready" | "failed";
     };
     responses: never;
     parameters: never;
@@ -7104,6 +7247,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_zoomer_videos_api_v1_admin_zoomer_videos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoomerVideoOut"][];
+                };
+            };
+        };
+    };
+    upload_zoomer_video_api_v1_admin_zoomer_videos_post: {
+        parameters: {
+            query: {
+                title: string;
+                source: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "video/mp4": string;
+                "video/webm": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoomerVideoOut"];
+                };
+            };
+            /** @description Файл слишком большой */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Нужен ролик MP4 (H.264) или WebM */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Очередь обработки недоступна, попробуйте позже */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_zoomer_video_api_v1_admin_zoomer_videos__video_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ролик не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_zoomer_video_api_v1_admin_zoomer_videos__video_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                video_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoomerVideoPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoomerVideoOut"];
+                };
+            };
+            /** @description Ролик не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_zoomer_videos_api_v1_admin_zoomer_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoomerOrderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoomerVideoOut"][];
+                };
+            };
+            /** @description Порядок должен перечислять все ролики ровно по одному разу */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_zoomer_clips_api_v1_zoomer_videos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoomerClipOut"][];
                 };
             };
         };
