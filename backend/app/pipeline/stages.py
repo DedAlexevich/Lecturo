@@ -105,10 +105,13 @@ def object_keys(external: dict | None) -> list[str]:
     return [state["object_key"] for state in operations.values() if state.get("object_key")]
 
 
-async def lock_operation_objects(session: AsyncSession, lecture_id: uuid.UUID) -> list[str]:
+async def lock_operation_objects(session: AsyncSession, lecture_ids: list[uuid.UUID]) -> list[str]:
     rows = await session.scalars(
         select(ProcessingStep.external)
-        .where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.step == StepName.transcribe)
+        .where(
+            ProcessingStep.lecture_id.in_(lecture_ids),
+            ProcessingStep.step == StepName.transcribe,
+        )
         .with_for_update()
     )
     return [key for external in rows for key in object_keys(external)]

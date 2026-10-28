@@ -350,7 +350,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     if not started and lecture.status in (LectureStatus.queued, LectureStatus.waiting_quota):
         await quota.refund_lecture(session, lecture_id)
     files = lecture_files(lecture_id, [lecture.video_path, lecture.audio_path])
-    stt_objects = await lock_operation_objects(session, lecture_id)
+    stt_objects = await lock_operation_objects(session, [lecture_id])
     await session.execute(delete(Lecture).where(Lecture.id == lecture_id))
     await session.commit()
 

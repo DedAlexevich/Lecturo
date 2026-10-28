@@ -100,10 +100,11 @@ async def delete_account(session: AsyncSession, user: User) -> None:
         )
     )
     files: set[Path] = set()
-    stt_objects: list[str] = []
+    lecture_ids = []
     for lecture_id, video_path, audio_path in rows.all():
         files |= lecture_files(lecture_id, [video_path, audio_path])
-        stt_objects += await lock_operation_objects(session, lecture_id)
+        lecture_ids.append(lecture_id)
+    stt_objects = await lock_operation_objects(session, lecture_ids)
     user_id = user.id
     await session.execute(update(Payment).where(Payment.user_id == user_id).values(raw={}))
     await session.execute(delete(User).where(User.id == user_id))
