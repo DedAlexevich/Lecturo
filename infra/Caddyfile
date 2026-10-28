@@ -1,6 +1,17 @@
 {
 	log {
+		output file /var/log/lecturo/caddy.log {
+			roll_size {$LOG_MAX_MB:10}MiB
+			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
+			mode 0640
+		}
 		format console
+	}
+	log stdout {
+		output stdout
+		format console
+		exclude http.log.access
 	}
 }
 
@@ -12,6 +23,12 @@
 	encode zstd gzip
 
 	log {
+		output file /var/log/lecturo/caddy.log {
+			roll_size {$LOG_MAX_MB:10}MiB
+			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
+			mode 0640
+		}
 		format filter {
 			wrap console
 			request>uri query {

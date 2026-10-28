@@ -67,7 +67,7 @@ Workflow `Deploy` запускается после зелёного CI на `ma
 
 ## Данные на сервере
 
-База и файлы лежат в `/opt/lecturo/data` (переменная `DATA_DIR`), подробности в [data.md](data.md). `infra/deploy.sh` эту папку не трогает. Если сервер раньше работал на именованных томах Docker, перед первым деплоем с этой версией остановите проект и перенесите данные: `cd /opt/lecturo && docker compose down && ./scripts/migrate-volumes.sh`, иначе проект стартует с пустой базой (старые тома при этом остаются).
+База и файлы лежат в `/opt/lecturo/data` (переменная `DATA_DIR`), подробности в [data.md](data.md). `infra/deploy.sh` эту папку не трогает.
 
 ## Почта
 
@@ -142,6 +142,8 @@ infra/status.sh
 1. Напишите боту `/start` с аккаунта владельца, иначе Telegram не даст боту писать первым.
 2. Узнайте свой числовой id: для личного чата `chat_id` совпадает с id пользователя Telegram. Если вы входили на сайт через Telegram, он есть в базе: `docker compose exec db psql -U lecturo -c "select email, telegram_chat_id from users where telegram_chat_id is not null"`.
 3. Впишите его в `/opt/lecturo/.env`: `ALERT_TELEGRAM_CHAT_ID=<id>`.
+
+Тот же скрипт следит за местом на диске: если раздел с `/`, `DATA_DIR` или `BACKUP_DIR` занят на 85% и больше, приходит сообщение со списком разделов, а когда место освободится, ещё одно. Чаще всего место занимают видео, логи и брошенные загрузки. Незавершённые загрузки tusd старше `UPLOAD_STALE_HOURS` (по умолчанию сутки) воркер удаляет из `data/storage/uploads` раз в час.
 
 `infra/server-setup.sh` ставит таймер сам. На сервере, настроенном раньше, поставьте его вручную под root: `bash /opt/lecturo/infra/install-monitoring.sh`. Повторный запуск `server-setup.sh` для этого не нужен, он заодно перевыпустит ключ деплоя.
 
