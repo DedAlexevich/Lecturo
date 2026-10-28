@@ -37,7 +37,7 @@ dump_database() {
   local target=$1
   local part
   part="$(dirname "$target")/.$(basename "$target").part"
-  umask 077
+  umask 007
   mkdir -p "$(dirname "$target")"
   rm -rf "$(dirname "$target")"/.*.dump.part "$(dirname "$target")"/.stage-*
   if ! db_exec sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$part"; then

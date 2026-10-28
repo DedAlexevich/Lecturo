@@ -5,12 +5,15 @@ domain=${MAIL_DOMAIN:?MAIL_DOMAIN is not set}
 selector=${DKIM_SELECTOR:-mail}
 keys=/etc/opendkim/keys
 tls=/etc/postfix/tls
-networks="127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
 
 if ! echo "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; then
   echo "MAIL_DOMAIN must be a single domain like example.ru, got '$domain'. Set MAIL_DOMAIN in .env" >&2
   exit 1
 fi
+
+postconf -X mynetworks
+postconf -e "compatibility_level = 3.6" "inet_protocols = ipv4" "mynetworks_style = subnet"
+networks=$(postconf -h mynetworks)
 
 mkdir -p "$keys" "$tls"
 if [ ! -f "$keys/$selector.private" ]; then
@@ -43,7 +46,6 @@ if [ ! -f "$tls/cert.pem" ]; then
 fi
 
 postconf -e \
-  "compatibility_level = 3.6" \
   "myhostname = $domain" \
   "mydomain = $domain" \
   "myorigin = $domain" \
@@ -53,7 +55,6 @@ postconf -e \
   "alias_database =" \
   "inet_interfaces = all" \
   "inet_protocols = ipv4" \
-  "mynetworks = $networks" \
   "smtpd_relay_restrictions = permit_mynetworks, reject" \
   "smtpd_recipient_restrictions = permit_mynetworks, reject" \
   "local_header_rewrite_clients = permit_mynetworks" \

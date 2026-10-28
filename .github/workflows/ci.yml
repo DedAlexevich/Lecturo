@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 20
     services:
       db:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.7-pg16-bookworm@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
         env:
           POSTGRES_USER: lecturo
           POSTGRES_PASSWORD: lecturo
@@ -30,7 +30,7 @@ jobs:
           --health-interval 5s
           --health-retries 10
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.11-alpine@sha256:d9436322172a5b482c187bf1f363d3c4fea086fcca6b9c8a94de8f0f39ed3193
         ports:
           - 6379:6379
         options: >-
@@ -49,7 +49,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: backend/requirements.lock
       - uses: actions/cache@v4
         with:
           path: ~/apt-archives
@@ -62,7 +62,7 @@ jobs:
           sudo chown -R "$USER" ~/apt-archives
       - run: sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y && sudo apt-get install -y --no-install-recommends postgresql-client-16
       - run: echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
-      - run: pip install -e ".[dev]"
+      - run: pip install -c requirements.lock -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python ../scripts/check_comments.py . ../scripts
@@ -82,7 +82,7 @@ jobs:
     timeout-minutes: 20
     services:
       db:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:0.8.7-pg16-bookworm@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
         env:
           POSTGRES_USER: lecturo
           POSTGRES_PASSWORD: lecturo
@@ -109,17 +109,17 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: |
-            bot/pyproject.toml
-            backend/pyproject.toml
+            bot/requirements.lock
+            backend/requirements.lock
       - name: Apply backend migrations
         working-directory: backend
         env:
           DATABASE_URL: postgresql+asyncpg://lecturo@localhost:5432/lecturo
         run: |
           python -m venv "$RUNNER_TEMP/backend"
-          "$RUNNER_TEMP/backend/bin/pip" install -e .
+          "$RUNNER_TEMP/backend/bin/pip" install -c requirements.lock -e .
           "$RUNNER_TEMP/backend/bin/alembic" upgrade head
-      - run: pip install -e ".[dev]"
+      - run: pip install -c requirements.lock -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python ../scripts/check_comments.py . ../scripts
