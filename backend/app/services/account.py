@@ -8,10 +8,13 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.models import AuthIdentity, AuthProvider, Lecture, Payment, User
+from app.models import AuthIdentity, AuthProvider, BusinessEventKind, Lecture, Payment, User
 from app.pipeline.jobs import cancel_lecture_jobs
 from app.pipeline.stages import discard_operation_objects, lock_operation_objects
 from app.schemas.user import AccountDeleteIn
+from app.services import business_events
+from app.services.admin import user_label
+from app.services.admin_logs import mask_text
 from app.services.auth import hash_password, verify_password
 from app.services.auth_tokens import bump_token_version, revoke_unused_tokens
 from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
@@ -107,9 +110,13 @@ async def delete_account(session: AsyncSession, user: User) -> None:
         lecture_ids.append(lecture_id)
     stt_objects = await lock_operation_objects(session, lecture_ids)
     user_id = user.id
+    label = mask_text(user_label(user))
     await session.execute(update(Payment).where(Payment.user_id == user_id).values(raw={}))
     await session.execute(delete(User).where(User.id == user_id))
     await session.commit()
     await cancel_lecture_jobs(lecture_ids)
+    await business_events.record_event(
+        BusinessEventKind.account_deleted, user_id=user_id, label=label
+    )
     await asyncio.to_thread(remove_files, files, user_id)
     await discard_operation_objects(stt_objects)

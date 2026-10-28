@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
+from app.models import BusinessEventKind, Payment, PaymentKind, PaymentStatus
 from app.pipeline.events import publish_status
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.billing import (
@@ -19,7 +20,7 @@ from app.schemas.billing import (
     WaitingLectureOut,
     WaitingOut,
 )
-from app.services import quota, yookassa
+from app.services import business_events, quota, yookassa
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
@@ -92,6 +93,14 @@ async def create_payment(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Не удалось создать платёж, попробуйте позже"
         ) from error
+    await business_events.record_event(
+        BusinessEventKind.payment_created,
+        user,
+        payment_kind=payment.kind,
+        product=payment.product_code,
+        amount_kopecks=payment.amount_kopecks,
+        yookassa_id=payment.yookassa_id,
+    )
     return yookassa.payment_out(payment)
 
 
@@ -101,6 +110,36 @@ async def list_payments(user: CurrentUser, session: SessionDep) -> list[PaymentO
     return [yookassa.payment_out(payment) for payment in payments]
 
 
+OUTCOME_EVENTS = {
+    PaymentStatus.succeeded: BusinessEventKind.payment_succeeded,
+    PaymentStatus.canceled: BusinessEventKind.payment_canceled,
+    PaymentStatus.refunded: BusinessEventKind.payment_refunded,
+}
+
+
+async def record_payment_outcome(payment: Payment | None) -> None:
+    kind = OUTCOME_EVENTS.get(payment.status) if payment else None
+    if payment is None or kind is None:
+        return
+    details = {
+        "payment_kind": payment.kind,
+        "product": payment.product_code,
+        "amount_kopecks": payment.amount_kopecks,
+        "yookassa_id": payment.yookassa_id,
+    }
+    await business_events.record_event(kind, user_id=payment.user_id, **details)
+    if kind == BusinessEventKind.payment_succeeded and payment.kind == PaymentKind.subscription:
+        await business_events.record_event(
+            BusinessEventKind.subscription_granted, user_id=payment.user_id, **details
+        )
+
+
+async def reject_webhook(yookassa_id: str | None, reason: str) -> None:
+    await business_events.record_event(
+        BusinessEventKind.webhook_rejected, yookassa_id=yookassa_id, reason=reason
+    )
+
+
 @router.post("/webhook", include_in_schema=False)
 async def yookassa_webhook(
     body: dict[str, Any], session: SessionDep, yookassa_factory: YooKassaFactory
@@ -108,29 +147,38 @@ async def yookassa_webhook(
     try:
         yookassa_id = yookassa.notification_payment_id(body)
     except yookassa.NotificationError as error:
+        await reject_webhook(None, str(error))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
     refund = yookassa.is_refund(body)
     if not await yookassa.awaits_payment(session, yookassa_id, refund):
         return {"status": "ok"}
+    await business_events.record_event(
+        BusinessEventKind.webhook_received, event=body.get("event"), yookassa_id=yookassa_id
+    )
     process = yookassa.process_refund if refund else yookassa.process_notification
     try:
         client = yookassa_factory()
     except ValueError as error:
+        await reject_webhook(yookassa_id, "Оплата недоступна")
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Оплата недоступна") from error
     try:
-        await process(session, client, yookassa_id, get_settings())
+        payment = await process(session, client, yookassa_id, get_settings())
     except yookassa.NotificationError as error:
+        await reject_webhook(yookassa_id, str(error))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
     except yookassa.PaymentError as error:
         logger.error("Не удалось начислить оплату %s: %s", yookassa_id, error)
+        await reject_webhook(yookassa_id, str(error))
         raise HTTPException(422, str(error)) from error
     except yookassa.YooKassaError as error:
+        await reject_webhook(yookassa_id, str(error))
         if error.rejected:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Платёж не найден в ЮKassa") from error
         logger.error("Не удалось проверить платёж %s в ЮKassa: %s", yookassa_id, error)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "ЮKassa недоступна, повторите позже"
         ) from error
+    await record_payment_outcome(payment)
     return {"status": "ok"}
 
 

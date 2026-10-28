@@ -33,7 +33,7 @@ from app.pipeline.jobs import (
     video_job_id,
 )
 from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
-from app.services import quota
+from app.services import maintenance, quota
 from app.services.account import lecture_files, remove_files
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,7 @@ LECTURE_STEPS = [name for name in StepName if name != StepName.quiz]
 
 
 async def process_lecture(ctx: dict, lecture_id: str) -> str:
+    await maintenance.hold_job_while_active()
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         async with asyncio.timeout(LECTURE_TIMEOUT_SEC):
@@ -162,6 +163,7 @@ async def schedule_after_ready(session: AsyncSession, lecture: Lecture) -> None:
 
 
 async def process_regeneration(ctx: dict, lecture_id: str) -> str:
+    await maintenance.hold_job_while_active()
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         async with asyncio.timeout(REGENERATION_TIMEOUT_SEC):
@@ -263,6 +265,7 @@ async def restore_ready(lecture_id: uuid.UUID, error: str) -> None:
 
 
 async def process_quiz(ctx: dict, lecture_id: str) -> str:
+    await maintenance.hold_job_while_active()
     async with SessionLocal() as session:
         lecture = await session.get(Lecture, uuid.UUID(lecture_id))
         if lecture is None:

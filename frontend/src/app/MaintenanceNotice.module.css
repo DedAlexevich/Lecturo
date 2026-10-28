@@ -1,0 +1,9 @@
+.notice {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--color-on-accent);
+}

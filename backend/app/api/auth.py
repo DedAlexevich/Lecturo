@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
-from app.models import AuthTokenKind, User
+from app.models import AuthTokenKind, BusinessEventKind, User
 from app.schemas.user import (
     EmailIn,
     LoginIn,
@@ -27,7 +27,8 @@ from app.schemas.user import (
     YandexStartIn,
     YandexStartOut,
 )
-from app.services import yandex_auth
+from app.services import business_events, yandex_auth
+from app.services.admin_logs import mask_text
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
 from app.services.auth_tokens import (
     bump_token_version,
@@ -79,6 +80,7 @@ async def register(body: RegisterIn, session: SessionDep, request: Request) -> T
     except (HTTPException, RequestValidationError):
         await count_failure(settings.redis_url, ip_key, settings.register_rate_window_seconds)
         raise
+    await business_events.record_event(BusinessEventKind.register, user, provider="email")
     return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
@@ -103,8 +105,12 @@ async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOu
         user = await authenticate(session, body.email, body.password)
     except HTTPException:
         await count_failure(settings.redis_url, ip_key, settings.login_rate_window_seconds)
+        await business_events.record_event(
+            BusinessEventKind.login_failed, label=mask_text(body.email), provider="email"
+        )
         raise
     await reset_rate_limit(settings.redis_url, email_key)
+    await business_events.record_event(BusinessEventKind.login, user, provider="email")
     return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
@@ -120,6 +126,7 @@ async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOu
     user = await get_or_create_telegram_user(
         session, body.id, profile, body.accept_terms, body.accept_personal_data
     )
+    await business_events.record_event(BusinessEventKind.login, user, provider="telegram")
     return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
@@ -170,6 +177,7 @@ async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep)
     user = await get_or_create_vk_user(
         session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
+    await business_events.record_event(BusinessEventKind.login, user, provider="vk")
     return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
@@ -216,6 +224,7 @@ async def login_yandex(
     user = await yandex_auth.get_or_create_yandex_user(
         session, yandex_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
+    await business_events.record_event(BusinessEventKind.login, user, provider="yandex")
     return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 

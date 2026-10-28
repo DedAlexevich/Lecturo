@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     log_service: str = "app"
     log_max_mb: int = 10
     log_backup_count: int = 5
+    log_stream_limit: int = 3
+
+    backup_dir: Path = Path("/backups")
+    backup_max_upload_mb: int = 2048
+    restore_idle_wait_seconds: int = 300
 
     stt_provider: str = "stub"
     yandex_speechkit_api_key: str = ""
