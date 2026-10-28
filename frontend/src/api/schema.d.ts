@@ -1053,6 +1053,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/promo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Promo */
+        post: operations["apply_promo_api_v1_billing_promo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/waiting": {
         parameters: {
             query?: never;
@@ -1600,6 +1617,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/promo-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Promo Codes */
+        get: operations["list_promo_codes_api_v1_admin_promo_codes_get"];
+        put?: never;
+        /** Create Promo Code */
+        post: operations["create_promo_code_api_v1_admin_promo_codes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promo-codes/{promo_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable Promo Code */
+        post: operations["disable_promo_code_api_v1_admin_promo_codes__promo_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/promo-codes/{promo_id}/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Promo Redemptions */
+        get: operations["list_promo_redemptions_api_v1_admin_promo_codes__promo_id__redemptions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1616,7 +1685,7 @@ export interface components {
          * AdminAction
          * @enum {string}
          */
-        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked" | "alert_settings_changed";
+        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked" | "alert_settings_changed" | "promo_created" | "promo_disabled";
         /** AdminGrantIn */
         AdminGrantIn: {
             /** Identifier */
@@ -2308,6 +2377,8 @@ export interface components {
             return_url?: string | null;
             /** Receipt Email */
             receipt_email?: string | null;
+            /** Promo Code */
+            promo_code?: string | null;
         };
         /**
          * PaymentKind
@@ -2326,6 +2397,11 @@ export interface components {
             product_code: string;
             /** Amount Kopecks */
             amount_kopecks: number;
+            /**
+             * Discount Kopecks
+             * @default 0
+             */
+            discount_kopecks: number;
             status: components["schemas"]["PaymentStatus"];
             /** Confirmation Url */
             confirmation_url?: string | null;
@@ -2392,6 +2468,111 @@ export interface components {
         ProfileUpdateIn: {
             /** Display Name */
             display_name: string;
+        };
+        /** PromoCodeOut */
+        PromoCodeOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Code */
+            code: string;
+            kind: components["schemas"]["PromoKind"];
+            /** Hours */
+            hours: number | null;
+            /** Days */
+            days: number | null;
+            /** Discount Percent */
+            discount_percent: number | null;
+            /** Discount Kopecks */
+            discount_kopecks: number | null;
+            /** Max Redemptions */
+            max_redemptions: number | null;
+            /** Valid Until */
+            valid_until: string | null;
+            /** Disabled At */
+            disabled_at: string | null;
+            /** Note */
+            note: string;
+            /** Redeemed */
+            redeemed: number;
+        };
+        /** PromoCreateIn */
+        PromoCreateIn: {
+            /** Code */
+            code?: string | null;
+            kind: components["schemas"]["PromoKind"];
+            /** Hours */
+            hours?: number | null;
+            /** Days */
+            days?: number | null;
+            /** Discount Percent */
+            discount_percent?: number | null;
+            /** Discount Kopecks */
+            discount_kopecks?: number | null;
+            /** Max Redemptions */
+            max_redemptions?: number | null;
+            /** Valid Until */
+            valid_until?: string | null;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** PromoIn */
+        PromoIn: {
+            /** Code */
+            code: string;
+        };
+        /**
+         * PromoKind
+         * @enum {string}
+         */
+        PromoKind: "hours" | "subscription_days" | "discount";
+        /** PromoOut */
+        PromoOut: {
+            /** Code */
+            code: string;
+            kind: components["schemas"]["PromoKind"];
+            /** Hours */
+            hours: number | null;
+            /** Days */
+            days: number | null;
+            /** Discount Percent */
+            discount_percent: number | null;
+            /** Discount Kopecks */
+            discount_kopecks: number | null;
+            /** Applied */
+            applied: boolean;
+            /** Message */
+            message: string;
+        };
+        /** PromoRedemptionOut */
+        PromoRedemptionOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** User Label */
+            user_label: string;
+            payment_status: components["schemas"]["PaymentStatus"] | null;
+            /** Payment Amount Kopecks */
+            payment_amount_kopecks: number | null;
+            /** Discount Kopecks */
+            discount_kopecks: number | null;
         };
         /** ProvidersOut */
         ProvidersOut: {
@@ -5565,6 +5746,44 @@ export interface operations {
             };
         };
     };
+    apply_promo_api_v1_billing_promo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoOut"];
+                };
+            };
+            /** @description Промокод не подходит */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Слишком много попыток */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_waiting_api_v1_billing_waiting_get: {
         parameters: {
             query?: never;
@@ -6730,6 +6949,149 @@ export interface operations {
             };
             /** @description Неверный период */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_promo_codes_api_v1_admin_promo_codes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeOut"][];
+                };
+            };
+        };
+    };
+    create_promo_code_api_v1_admin_promo_codes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeOut"];
+                };
+            };
+            /** @description Такой промокод уже есть */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_promo_code_api_v1_admin_promo_codes__promo_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeOut"];
+                };
+            };
+            /** @description Промокод не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Промокод уже отключён */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_promo_redemptions_api_v1_admin_promo_codes__promo_id__redemptions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promo_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoRedemptionOut"][];
+                };
+            };
+            /** @description Промокод не найден */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
