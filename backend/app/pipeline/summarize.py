@@ -36,6 +36,7 @@ SECTION_CONCURRENCY = 3
 RAW_PART_CHAR_LIMIT = 6000
 DIGEST_CACHE_TTL_SECONDS = 3 * 24 * 3600
 LATEX_BACKSLASH = re.compile(r"\\\\|\\(?=([A-Za-z]{2,}))")
+CODE_FENCE = re.compile(r"```[A-Za-z]*\n(.*)\n```", re.DOTALL)
 JSON_ESCAPE_LETTERS = "bfnrtu"
 LATEX_COMMANDS_LIKE_ESCAPES = frozenset(
     {
@@ -479,6 +480,11 @@ def chapters_markdown(chapters: list[ChapterDraft]) -> str:
     return "\n\n".join(f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters)
 
 
+def strip_code_fence(content: str) -> str:
+    match = CODE_FENCE.fullmatch(content.strip())
+    return (match.group(1) if match else content).strip()
+
+
 async def write_section(
     llm: LLM, system: str, request: str, group: list[ChapterDraft], limit: asyncio.Semaphore
 ) -> str:
@@ -492,7 +498,7 @@ async def write_section(
                 int(group[-1].end),
             )
             return chapters_markdown(group)
-    return content.strip() or chapters_markdown(group)
+    return strip_code_fence(content) or chapters_markdown(group)
 
 
 async def write_sections(
@@ -504,13 +510,14 @@ async def write_sections(
 ) -> str:
     system = render_prompt("reduce_section", duration=format_duration(duration))
     limit = asyncio.Semaphore(SECTION_CONCURRENCY)
-    sections = await asyncio.gather(
-        *(
-            write_section(llm, system, section_request(title, group, digests), group, limit)
+    async with asyncio.TaskGroup() as tasks:
+        sections = [
+            tasks.create_task(
+                write_section(llm, system, section_request(title, group, digests), group, limit)
+            )
             for group in group_chapters(chapters)
-        )
-    )
-    return "\n\n".join(sections)
+        ]
+    return "\n\n".join(section.result() for section in sections)
 
 
 def snap_to_segment(start: float, segment_starts: list[float]) -> float:
