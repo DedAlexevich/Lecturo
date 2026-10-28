@@ -37,9 +37,10 @@
 }
 
 .resultRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2) var(--space-4);
   padding: var(--space-3) 0;
   border-top: 1px solid var(--color-border);
@@ -50,6 +51,7 @@
 }
 
 .result {
+  flex: 1 1 18rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px var(--space-3);
@@ -99,6 +101,10 @@
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.resultActions {
+  flex: 0 1 auto;
 }
 
 .resultActions,
@@ -160,7 +166,7 @@
 
 .blocks {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--space-4);
 }
 
@@ -446,17 +452,7 @@
   color: var(--color-text);
 }
 
-@media (max-width: 900px) {
-  .blocks {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 640px) {
-  .resultRow {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .resultActions,
   .cardActions {
     justify-content: flex-start;
