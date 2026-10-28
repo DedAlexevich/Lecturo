@@ -35,6 +35,8 @@ services:
     image: pgvector/pgvector:0.8.7-pg16-bookworm@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
     security_opt:
       - no-new-privileges:true
+    group_add:
+      - "1500"
     entrypoint: ["/bin/sh", "/schedule.sh"]
     environment:
       PGHOST: db
@@ -74,7 +76,7 @@ services:
   data-owner:
     image: tusproject/tusd:v2.6.0@sha256:b00c762725d6840394541f2bfcb3c1ca8072070d3d207be9885aac5e78d32710
     user: "0:0"
-    entrypoint: ["/bin/sh", "/data-owner.sh", "/data/storage", "/var/log/lecturo"]
+    entrypoint: ["/bin/sh", "/data-owner.sh", "/backups", "/data/storage", "/var/log/lecturo"]
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -82,7 +84,9 @@ services:
     cap_add:
       - CHOWN
       - DAC_READ_SEARCH
+      - FOWNER
     volumes:
+      - ${BACKUP_DIR:-${DATA_DIR:-./data}/backups}:/backups
       - ${DATA_DIR:-./data}/storage:/data/storage
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
       - ./infra/data-owner.sh:/data-owner.sh:ro
@@ -92,6 +96,8 @@ services:
     <<: *unprivileged
     build: ./backend
     mem_limit: 768m
+    group_add:
+      - "1500"
     env_file:
       - path: .env
         required: false
