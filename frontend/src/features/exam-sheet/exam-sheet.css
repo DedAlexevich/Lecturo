@@ -410,6 +410,17 @@
     background: none;
   }
 
+  .exam-print .summary-callout {
+    padding: 1mm 0 1mm 3mm;
+    background: none;
+    break-inside: avoid;
+    print-color-adjust: exact;
+  }
+
+  .exam-print .katex-display {
+    overflow: visible;
+  }
+
   .exam-print .exam-sheet__none {
     padding: 0;
     color: #000;

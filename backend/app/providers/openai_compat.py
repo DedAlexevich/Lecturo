@@ -13,6 +13,10 @@ class OpenAICompatibleError(RuntimeError):
     pass
 
 
+class OpenAICompatibleUnavailable(OpenAICompatibleError):
+    pass
+
+
 class OpenAICompatibleClient:
     def __init__(
         self,
@@ -32,34 +36,41 @@ class OpenAICompatibleClient:
         self.timeout = timeout
         self.transport = transport
         self.headers = headers or {"Authorization": f"Bearer {api_key}"}
+        self._http: httpx.AsyncClient | None = None
+
+    @property
+    def http(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(timeout=self.timeout, transport=self.transport)
+        return self._http
 
     async def post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
-            for attempt in range(1, self.attempts + 1):
-                try:
-                    response = await client.post(
-                        f"{self.base_url}{path}", json=body, headers=self.headers
+        client = self.http
+        for attempt in range(1, self.attempts + 1):
+            try:
+                response = await client.post(
+                    f"{self.base_url}{path}", json=body, headers=self.headers
+                )
+            except httpx.TransportError as error:
+                if attempt == self.attempts:
+                    raise OpenAICompatibleUnavailable(f"{path}: нет ответа от API") from error
+                await asyncio.sleep(self._delay(attempt, None))
+                continue
+            if response.status_code == 429 or response.is_server_error:
+                if attempt == self.attempts:
+                    raise OpenAICompatibleUnavailable(
+                        f"{path}: API ответил {response.status_code} после {attempt} попыток"
                     )
-                except httpx.TransportError as error:
-                    if attempt == self.attempts:
-                        raise OpenAICompatibleError(f"{path}: нет ответа от API") from error
-                    await asyncio.sleep(self._delay(attempt, None))
-                    continue
-                if response.status_code == 429 or response.is_server_error:
-                    if attempt == self.attempts:
-                        raise OpenAICompatibleError(
-                            f"{path}: API ответил {response.status_code} после {attempt} попыток"
-                        )
-                    await asyncio.sleep(self._delay(attempt, response))
-                    continue
-                if response.is_error:
-                    raise OpenAICompatibleError(
-                        f"{path}: API ответил {response.status_code}: {response.text[:500]}"
-                    )
-                try:
-                    return response.json()
-                except ValueError as error:
-                    raise OpenAICompatibleError(f"{path}: ответ API не в формате JSON") from error
+                await asyncio.sleep(self._delay(attempt, response))
+                continue
+            if response.is_error:
+                raise OpenAICompatibleError(
+                    f"{path}: API ответил {response.status_code}: {response.text[:500]}"
+                )
+            try:
+                return response.json()
+            except ValueError as error:
+                raise OpenAICompatibleError(f"{path}: ответ API не в формате JSON") from error
         raise OpenAICompatibleError(f"{path}: не было ни одной попытки запроса")
 
     def _delay(self, attempt: int, response: httpx.Response | None) -> float:
@@ -93,6 +104,8 @@ class OpenAICompatibleLLM:
             "LLM",
         )
         self.model = settings.llm_model
+        self.max_tokens = settings.llm_max_tokens
+        options.setdefault("timeout", settings.llm_timeout)
         self.client = OpenAICompatibleClient(
             settings.llm_base_url, settings.llm_api_key, transport=transport, **options
         )
@@ -104,14 +117,21 @@ class OpenAICompatibleLLM:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
+            "max_tokens": self.max_tokens,
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         response = await self.client.post("/chat/completions", body)
         try:
-            content = response["choices"][0]["message"]["content"]
+            choice = response["choices"][0]
+            content = choice["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
             raise OpenAICompatibleError("/chat/completions: в ответе нет текста") from error
+        if choice.get("finish_reason") == "length":
+            raise OpenAICompatibleError(
+                f"/chat/completions: ответ обрезан на лимите {self.max_tokens} токенов, "
+                "увеличьте LLM_MAX_TOKENS или сократите запрос"
+            )
         if not content:
             raise OpenAICompatibleError("/chat/completions: модель вернула пустой ответ")
         return content

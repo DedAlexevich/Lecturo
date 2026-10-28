@@ -57,6 +57,10 @@ class StubLLM:
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
         if json_mode and '"questions"' in system:
             return stub_quiz(user)
+        if json_mode and '"descriptions"' in system:
+            chunks = json.loads(user).get("chunks", [])
+            descriptions = [{"id": chunk["id"], "text": chunk["text"][:80]} for chunk in chunks]
+            return json.dumps({"descriptions": descriptions}, ensure_ascii=False)
         if json_mode:
             if '"source_ids"' in system:
                 sources = json.loads(user).get("sources", [])

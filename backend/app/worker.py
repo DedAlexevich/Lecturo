@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import httpx
@@ -6,8 +7,9 @@ from arq.connections import RedisSettings
 
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.core.redis import close_redis
 from app.pipeline.exam import build_exam_sheet
-from app.pipeline.retention import delete_expired_videos
+from app.pipeline.retention import delete_expired_videos, delete_stale_uploads
 from app.pipeline.tasks import (
     LECTURE_TIMEOUT_SEC,
     process_lecture,
@@ -16,9 +18,11 @@ from app.pipeline.tasks import (
     resume_interrupted_lectures,
 )
 from app.providers import get_embeddings, get_llm
-from app.providers.openai_compat import OpenAICompatibleEmbeddings
+from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleUnavailable
 from app.providers.yandex import YandexEmbeddings
 from app.services.legal_notices import process_legal_revisions
+
+logger = logging.getLogger(__name__)
 
 STARTUP_CHECK_TIMEOUT_SECONDS = 15
 
@@ -32,7 +36,10 @@ async def check_providers(
         probe = type(embeddings)(
             settings, attempts=1, timeout=STARTUP_CHECK_TIMEOUT_SECONDS, transport=transport
         )
-        await probe.embed_query("проверка")
+        try:
+            await probe.embed_query("проверка")
+        except OpenAICompatibleUnavailable as error:
+            logger.error("API эмбеддингов недоступно, поиск по лекциям не заработает: %s", error)
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -41,15 +48,22 @@ async def startup(ctx: dict[str, Any]) -> None:
     await resume_interrupted_lectures(ctx["redis"])
 
 
+async def shutdown(ctx: dict[str, Any]) -> None:
+    await close_redis()
+
+
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
     on_startup = startup
+    on_shutdown = shutdown
+    max_jobs = get_settings().worker_max_jobs
     job_timeout = LECTURE_TIMEOUT_SEC + 600
     max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
+        cron(delete_stale_uploads, minute=30),
         cron(process_legal_revisions, minute=set(range(0, 60, 10))),
     ]

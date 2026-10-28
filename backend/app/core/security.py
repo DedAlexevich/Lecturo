@@ -23,20 +23,29 @@ class ExportGrant:
     export_format: str
 
 
-def create_access_token(user_id: uuid.UUID) -> str:
+@dataclass(frozen=True)
+class AccessGrant:
+    user_id: uuid.UUID
+    version: int
+
+
+def create_access_token(user_id: uuid.UUID, version: int) -> str:
     settings = get_settings()
     expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_ttl_minutes)
-    payload = {"sub": str(user_id), "exp": expires}
+    payload = {"sub": str(user_id), "ver": version, "exp": expires}
     return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> uuid.UUID | None:
+def decode_access_token(token: str) -> AccessGrant | None:
     try:
         payload = jwt.decode(token, get_settings().secret_key, algorithms=[ALGORITHM])
         if "scope" in payload:
             return None
-        return uuid.UUID(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        version = payload.get("ver", 0)
+        if type(version) is not int:
+            return None
+        return AccessGrant(user_id=uuid.UUID(payload["sub"]), version=version)
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         return None
 
 

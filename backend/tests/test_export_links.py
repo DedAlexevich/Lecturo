@@ -185,7 +185,7 @@ async def test_access_token_is_not_accepted_in_query(client, user):
 
     response = await client.get(
         f"/api/v1/lectures/{lecture.id}/export.srt",
-        params={"token": create_access_token(user.id)},
+        params={"token": create_access_token(user.id, user.token_version)},
     )
 
     assert response.status_code == 401

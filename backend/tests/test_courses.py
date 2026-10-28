@@ -132,7 +132,9 @@ async def test_foreign_course_and_lecture_hidden(client, user, auth_headers):
         stranger = User(display_name="Чужой")
         session.add(stranger)
         await session.commit()
-    stranger_headers = {"Authorization": f"Bearer {create_access_token(stranger.id)}"}
+    stranger_headers = {
+        "Authorization": f"Bearer {create_access_token(stranger.id, stranger.token_version)}"
+    }
     try:
         (foreign_lecture,) = await create_lectures(stranger.id, "Чужая лекция")
         foreign = await create_course(client, stranger_headers, "Чужой курс")

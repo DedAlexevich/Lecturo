@@ -56,7 +56,7 @@ async def create_user(
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 async def notifications_state(client, user: User) -> str:
@@ -114,7 +114,10 @@ async def test_unlink_telegram_resets_state(client, cleanup):
             )
         )
         await session.commit()
-    assert await notifications_state(client, user) == "start_required"
+    fresh = {"Authorization": f"Bearer {response.headers['X-Access-Token']}"}
+    me = await client.get("/api/v1/me", headers=fresh)
+    assert me.status_code == 200
+    assert me.json()["telegram_notifications"] == "start_required"
 
 
 async def create_event(user: User) -> tuple[uuid.UUID, uuid.UUID]:
