@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, engine
 
 BACKEND = Path(__file__).resolve().parents[1]
 FK_INDEXES = {
@@ -28,6 +28,7 @@ async def alembic(*args: str) -> None:
     await asyncio.to_thread(
         subprocess.run, [sys.executable, "-m", "alembic", *args], cwd=BACKEND, check=True
     )
+    await engine.dispose()
 
 
 async def schema_state() -> tuple[set[str], bool]:
