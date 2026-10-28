@@ -13,6 +13,21 @@ notify() {
   infra/notify.sh "$1"
 }
 
+service_problems() {
+  local states service
+  states=$(docker compose ps --all --format '{{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}' 2>&1) || {
+    echo "docker compose ps: $states"
+    return
+  }
+  while read -r service; do
+    grep -q "^$service"$'\t' <<<"$states" || echo "$service: no container"
+  done < <(docker compose config --services)
+  awk -F '\t' '
+    $1 == "migrate" && $2 == "exited" && $4 == "0" { next }
+    $2 != "running" || ($3 != "" && $3 != "healthy") { print $1 ": " $2 " " $3 }
+  ' <<<"$states"
+}
+
 exec 9<.git
 if ! flock -n 9; then
   echo "deploy in progress, skipping"
@@ -55,7 +70,8 @@ public_url=$(env_value PUBLIC_URL)
 url="${public_url:-http://localhost}/api/v1/health"
 failures=$(cat "$failures_file" 2>/dev/null || echo 0)
 
-if curl -fsS -m 10 -o /dev/null "$url"; then
+problems=$(service_problems)
+if curl -fsS -m 10 -o /dev/null "$url" && [ -z "$problems" ]; then
   echo 0 > "$failures_file"
   if [ -f "$alerted_file" ] && notify "Lecturo снова работает: $url отвечает"; then
     rm -f "$alerted_file"
@@ -66,10 +82,11 @@ fi
 failures=$((failures + 1))
 echo "$failures" > "$failures_file"
 echo "health check failed $failures time(s) in a row"
+[ -z "$problems" ] || printf '%s\n' "$problems"
 
 if [ "$failures" -ge "$failures_to_alert" ] && [ ! -f "$alerted_file" ]; then
   services=$(docker compose ps --all --format '{{.Service}}: {{.Status}}' 2>&1 || true)
-  if notify "$(printf 'Lecturo не отвечает: %s, проверок подряд: %s\n\n%s' "$url" "$failures" "$services")"; then
+  if notify "$(printf 'Lecturo не отвечает: %s, проверок подряд: %s\n\n%s\n\n%s' "$url" "$failures" "${problems:-сервисы в порядке}" "$services")"; then
     touch "$alerted_file"
   fi
 fi

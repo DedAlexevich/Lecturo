@@ -73,8 +73,8 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 
 if [ ! -d "$app_dir/.git" ]; then
   git clone "$repo_url" "$app_dir"
+  chown -R deploy:deploy "$app_dir"
 fi
-chown -R deploy:deploy "$app_dir"
 install -d -m 700 -o deploy "$app_dir/backups"
 sh "$app_dir/infra/data-owner.sh" "$app_dir/backups" "$app_dir/data/logs" "$app_dir/data/storage"
 
