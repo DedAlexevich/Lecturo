@@ -216,10 +216,6 @@ bubblewrap build --skipPwaValidation
 
 Сайт подтверждает приложение файлом `frontend/public/.well-known/assetlinks.json`, он отдаётся по https://lecturo.ru/.well-known/assetlinks.json. В нём записан SHA-256 отпечаток сертификата. Если ключ сменился или приложение подписывает Google Play (Play App Signing), возьмите новый отпечаток (`keytool -list -v -keystore android/lecturo-release.keystore -alias lecturo` или Play Console → Целостность приложения) и замените его в `assetlinks.json` и в `fingerprints` в `twa-manifest.json`. Отпечатков может быть несколько. Без совпадающего отпечатка приложение откроется с адресной строкой.
 
-## Как внести вклад
-
-Задачи и баги ведём в [issues](https://github.com/DedAlexevich/Lecturo/issues), код обсуждаем в pull request. Перед первым PR прочитайте [CONTRIBUTING.md](CONTRIBUTING.md): там про ветки, формат коммитов и проверки CI.
-
 ## Команда
 
 | Участник | |
