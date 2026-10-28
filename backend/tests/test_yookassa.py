@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings
 from app.core.db import SessionLocal
+from app.core.security import create_access_token
 from app.main import app
 from app.models import Payment, PaymentKind, PaymentStatus, User
 from app.services import yookassa
@@ -95,7 +96,9 @@ async def test_create_payment_returns_confirmation_url(client, user, auth_header
 
     [request] = fake.requests
     assert str(request.url) == "https://yookassa.test/v3/payments"
-    assert request.headers["Idempotence-Key"] == "key-create"
+    assert request.headers["Idempotence-Key"] == yookassa.yookassa_idempotence_key(
+        user.id, "key-create"
+    )
     assert request.headers["Authorization"].startswith("Basic ")
     body = json.loads(request.content)
     assert body["amount"] == {"value": "199.00", "currency": "RUB"}
@@ -116,6 +119,12 @@ async def test_create_payment_returns_confirmation_url(client, user, auth_header
         assert payment.status == PaymentStatus.pending
         assert payment.yookassa_id == "yk-1"
         assert payment.idempotence_key == "key-create"
+        assert payment.raw == {
+            "id": "yk-1",
+            "status": "pending",
+            "amount": {"value": "199.00", "currency": "RUB"},
+            "confirmation": {"confirmation_url": CONFIRMATION_URL},
+        }
 
 
 async def test_same_key_does_not_create_second_payment(client, user, auth_headers, fake):
@@ -129,6 +138,40 @@ async def test_same_key_does_not_create_second_payment(client, user, auth_header
     assert first.json()["id"] == second.json()["id"]
     assert len(fake.requests) == 1
     assert await count_payments(user) == 1
+
+
+async def test_same_key_of_two_users_creates_two_payments(client, user, auth_headers, fake):
+    request = {"product_code": "hours_5", "accept_offer": True}
+    async with SessionLocal() as session:
+        other = User(display_name="Другой", email=f"other-{user.id}@lecturo.test")
+        session.add(other)
+        await session.commit()
+        await session.refresh(other)
+    token = create_access_token(other.id, other.token_version)
+    other_headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        first = await client.post(
+            "/api/v1/billing/payments",
+            json=request,
+            headers={**auth_headers, "Idempotence-Key": "key-shared"},
+        )
+        second = await client.post(
+            "/api/v1/billing/payments",
+            json=request,
+            headers={**other_headers, "Idempotence-Key": "key-shared"},
+        )
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Payment).where(Payment.user_id == other.id))
+            await session.delete(await session.get(User, other.id))
+            await session.commit()
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["id"] != second.json()["id"]
+    sent_keys = {sent.headers["Idempotence-Key"] for sent in fake.requests}
+    assert len(sent_keys) == 2
+    assert "key-shared" not in sent_keys
 
 
 async def test_same_key_for_other_product_is_conflict(client, user, auth_headers, fake):
@@ -361,7 +404,8 @@ async def test_payment_uses_receipt_email_without_account_email(client, user, au
     assert json.loads(request.content)["metadata"]["receipt_email"] == "buyer@example.org"
     async with SessionLocal() as session:
         payment = await session.get(Payment, response.json()["id"])
-        assert payment.raw["metadata"]["receipt_email"] == "buyer@example.org"
+        assert "metadata" not in payment.raw
+        assert "buyer@example.org" not in json.dumps(payment.raw)
         assert (await session.get(User, user.id)).email is None
 
 

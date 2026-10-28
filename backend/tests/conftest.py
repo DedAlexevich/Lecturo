@@ -1,10 +1,12 @@
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -58,6 +60,27 @@ async def reset_auth_rate_limits() -> AsyncIterator[None]:
 @pytest.fixture
 def auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
+
+
+SessionAction = Callable[[AsyncSession], Awaitable]
+
+
+@pytest.fixture
+def race() -> Callable[..., Awaitable[list]]:
+    async def run(*actions: SessionAction) -> list:
+        start = asyncio.Barrier(len(actions))
+
+        async def in_own_session(action: SessionAction):
+            async with SessionLocal() as session:
+                await session.connection()
+                await start.wait()
+                return await action(session)
+
+        return await asyncio.gather(
+            *(in_own_session(action) for action in actions), return_exceptions=True
+        )
+
+    return run
 
 
 @pytest.fixture(autouse=True)
