@@ -70,6 +70,7 @@ class WorkerSettings:
     max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
+    health_check_interval = 30
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
         cron(delete_stale_uploads, minute=30),

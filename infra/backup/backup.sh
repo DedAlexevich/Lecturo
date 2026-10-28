@@ -6,7 +6,9 @@ source "$(dirname "$0")/common.sh"
 backup_keep=$(env_value BACKUP_KEEP 7)
 
 check_keep "$backup_keep"
-wait_for_deploy
+if [ "${1:-}" != --no-wait ]; then
+  wait_for_deploy
+fi
 name="lecturo-$(date -u +%Y%m%d-%H%M%S)"
 dump="$backup_dir/$name.dump"
 dump_database "$dump"

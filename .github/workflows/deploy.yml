@@ -17,8 +17,24 @@ jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
+    permissions:
+      actions: read
     steps:
+      - name: Commit to deploy
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          sha=${RUN_SHA:-$(gh api "repos/$REPO/commits/main" --jq .sha)}
+          conclusion=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$sha&event=push&per_page=1" --jq '.workflow_runs[0].conclusion // "none"')
+          if [ "$conclusion" != success ]; then
+            echo "CI for $sha is $conclusion, not deploying" >&2
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: SSH key
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
@@ -31,7 +47,7 @@ jobs:
       - name: Deploy
         env:
           SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          SHA: ${{ steps.commit.outputs.sha }}
         run: ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$SSH_TARGET" "$SHA"
       - name: Health check
         env:

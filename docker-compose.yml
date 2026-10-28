@@ -60,6 +60,10 @@ services:
       - no-new-privileges:true
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
     logging: *default-logging
     restart: unless-stopped
 
@@ -70,6 +74,10 @@ services:
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
     volumes:
       - ${DATA_DIR:-./data}/bot-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
     logging: *default-logging
     restart: unless-stopped
 
@@ -92,6 +100,22 @@ services:
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
       - ./infra/data-owner.sh:/data-owner.sh:ro
     logging: *default-logging
+
+  migrate:
+    <<: *unprivileged
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:-lecturo}@db:5432/lecturo
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *default-logging
+    restart: "no"
 
   api:
     <<: *unprivileged
@@ -117,13 +141,16 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 5s
       retries: 20
+      start_period: 60s
     depends_on:
       data-owner:
+        condition: service_completed_successfully
+      migrate:
         condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     logging: *default-logging
     restart: unless-stopped
 
@@ -143,11 +170,21 @@ services:
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
+    healthcheck:
+      test: ["CMD", "arq", "--check", "app.worker.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     depends_on:
       data-owner:
         condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy
     logging: *default-logging
     restart: unless-stopped
 
@@ -190,10 +227,19 @@ services:
       LOG_SERVICE: bot
     volumes:
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.heartbeat"]
+      interval: 30s
+      retries: 3
+      start_period: 30s
     depends_on:
       data-owner:
         condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
       db:
+        condition: service_healthy
+      bot-redis:
         condition: service_healthy
     logging: *default-logging
     restart: unless-stopped
