@@ -232,9 +232,9 @@ jobs:
           docker compose stop api
           status=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Referer: https://lecturo.test/reset-password?token=referer-secret' 'http://localhost/api/v1/health?token=query-secret&signature=signature-secret&share=share-secret')
           test "$status" = 502
-          timeout 10 sh -c 'until grep -Eq "http.log.error|reverseproxy" data/logs/caddy.log; do sleep 1; done'
+          timeout 10 sh -c 'until docker compose exec -T caddy grep -Eq "http.log.error|reverseproxy" /var/log/lecturo/caddy.log; do sleep 1; done'
           docker_logs=$(docker compose logs --no-color caddy)
-          if grep -E 'query-secret|signature-secret|share-secret|referer-secret' data/logs/caddy.log || printf '%s\n' "$docker_logs" | grep -E 'query-secret|signature-secret|share-secret|referer-secret'; then
+          if docker compose exec -T caddy grep -E 'query-secret|signature-secret|share-secret|referer-secret' /var/log/lecturo/caddy.log || printf '%s\n' "$docker_logs" | grep -E 'query-secret|signature-secret|share-secret|referer-secret'; then
             exit 1
           fi
           docker compose up -d --wait --wait-timeout 180 api
