@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
-import { detailOf } from "../../api/errors";
 
 export type ExamSheet = components["schemas"]["ExamSheetOut"];
 

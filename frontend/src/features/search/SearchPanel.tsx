@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { plural } from "../../lib/plural";
 import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
@@ -8,7 +9,6 @@ import { HitSummary } from "./HitSummary";
 import { buildMatcher } from "./matcher";
 import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
-import { plural } from "../../lib/plural";
 
 export function momentsCount(count: number) {
   return `${count} ${plural(count, "момент", "момента", "моментов")}`;

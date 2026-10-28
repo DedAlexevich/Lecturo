@@ -1,11 +1,11 @@
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { formatDuration } from "../../lib/duration";
 import { Button } from "../../ui/Button";
 import { Checkbox } from "../../ui/Checkbox";
 import { Dialog } from "../../ui/Dialog";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { formatDuration } from "../../lib/duration";
 import { formatDate } from "../home/format";
 import { useLectures, type Lecture } from "../home/queries";
 

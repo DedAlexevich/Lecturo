@@ -1,5 +1,5 @@
-import { ApiError } from "../../app/queryClient";
 import { detailOf } from "../../api/errors";
+import { ApiError } from "../../app/queryClient";
 
 export type FieldErrors = Partial<Record<string, string>>;
 

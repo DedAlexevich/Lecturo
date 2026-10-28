@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router";
+import { plural } from "../../lib/plural";
 import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { fromQuizState, momentLink } from "./moment";
 import { clearProgress, emptyProgress, loadProgress, saveProgress, type QuizAnswer, type QuizProgress } from "./progress";
 import type { QuizQuestion } from "./queries";
-import { plural } from "../../lib/plural";
 
 type QuizRunnerProps = {
   lectureId: string;

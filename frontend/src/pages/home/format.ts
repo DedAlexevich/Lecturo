@@ -1,6 +1,6 @@
 import type { components } from "../../api/schema";
-import type { LectureProgress, LectureStatus } from "./queries";
 import { plural } from "../../lib/plural";
+import type { LectureProgress, LectureStatus } from "./queries";
 
 type StepName = components["schemas"]["StepName"];
 

@@ -1,6 +1,6 @@
 import { api } from "../../api/client";
-import type { ExportFormat, LinkResult } from "../lecture/ExportActions";
 import { detailOf } from "../../api/errors";
+import type { ExportFormat, LinkResult } from "../lecture/ExportActions";
 
 export type CopyResult =
   | { kind: "saved"; created: boolean; lectureId: string | null; courseId: string | null }

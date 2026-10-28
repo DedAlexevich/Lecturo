@@ -1,8 +1,8 @@
 import { useId } from "react";
+import { formatDuration } from "../../lib/duration";
 import { Progress } from "../../ui/Progress";
 import styles from "./AccountPage.module.css";
 import { useQuota, type Quota } from "./billing";
-import { formatDuration } from "../../lib/duration";
 import { formatDate, formatDateTime, formatRelative } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 

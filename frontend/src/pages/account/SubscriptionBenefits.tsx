@@ -1,8 +1,8 @@
 import { useState } from "react";
+import { formatDuration } from "../../lib/duration";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { useQuota, type Product } from "./billing";
-import { formatDuration } from "../../lib/duration";
 import { formatDays, formatRubles } from "./format";
 import { freePlan, subscriptionPlan } from "./plans";
 import styles from "./SubscriptionBenefits.module.css";

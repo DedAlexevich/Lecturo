@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, tokenStorage } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { meQueryKey } from "../../app/useMe";
-import { detailOf } from "../../api/errors";
 
 export type Me = components["schemas"]["UserOut"];
 export type Provider = components["schemas"]["IdentityOut"]["provider"];
