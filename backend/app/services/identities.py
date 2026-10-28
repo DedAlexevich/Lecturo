@@ -49,6 +49,7 @@ async def user_out(session: AsyncSession, user: User) -> UserOut:
         else None,
         identities=[IdentityOut.model_validate(identity) for identity in user.identities],
         telegram_notifications=telegram_notifications(user.identities),
+        is_admin=user.is_admin,
     )
 
 
@@ -154,6 +155,7 @@ async def link_telegram(session: AsyncSession, user: User, telegram_id: int, pro
 
 
 async def link_vk(session: AsyncSession, user: User, vk_id: str, profile: dict) -> None:
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     existing = await find_identity(session, AuthProvider.vk, vk_id)
     if existing is not None and existing.user_id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, VK_TAKEN)
@@ -176,6 +178,7 @@ async def link_vk(session: AsyncSession, user: User, vk_id: str, profile: dict) 
 
 
 async def link_yandex(session: AsyncSession, user: User, yandex_id: str, profile: dict) -> None:
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
     existing = await find_identity(session, AuthProvider.yandex, yandex_id)
     if existing is not None and existing.user_id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, YANDEX_TAKEN)

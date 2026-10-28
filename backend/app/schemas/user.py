@@ -46,6 +46,7 @@ class UserOut(Schema):
     ai_transfer_accepted_at: datetime | None
     identities: list[IdentityOut]
     telegram_notifications: TelegramNotifications
+    is_admin: bool
 
 
 class TelegramLoginIn(Schema):

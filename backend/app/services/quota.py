@@ -11,7 +11,9 @@ from app.models import (
     HourPackage,
     Lecture,
     LectureStatus,
+    Payment,
     PaymentKind,
+    PaymentStatus,
     ProcessingStep,
     StepName,
     StepStatus,
@@ -21,6 +23,7 @@ from app.models import (
     User,
 )
 from app.schemas.billing import ProductOut
+from app.services.durations import format_duration
 
 WEEK = timedelta(days=7)
 CHARGED_SOURCES = (UsageSource.weekly, UsageSource.package)
@@ -93,13 +96,13 @@ async def get_quota(
 ) -> Quota:
     settings = settings or get_settings()
     now = now or datetime.now(UTC)
-    user.quota_week_start = current_week_start(user.quota_week_start, now)
+    week_start = current_week_start(user.quota_week_start, now)
     until = await subscription_until(session, user.id, now)
     weekly_used = await session.scalar(
         select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
             UsageEntry.user_id == user.id,
             UsageEntry.source == UsageSource.weekly,
-            UsageEntry.created_at >= user.quota_week_start,
+            UsageEntry.created_at >= week_start,
         )
     )
     package_left = await session.scalar(
@@ -113,7 +116,7 @@ async def get_quota(
         ),
         weekly_used_sec=weekly_used,
         package_left_sec=package_left,
-        resets_at=user.quota_week_start + WEEK,
+        resets_at=week_start + WEEK,
         subscription_until=until,
     )
 
@@ -143,6 +146,7 @@ async def charge_lecture(
     if await is_charged(session, lecture_id):
         return True
     seconds = math.ceil(duration_sec)
+    user.quota_week_start = current_week_start(user.quota_week_start, now)
     quota = await get_quota(session, user, now, settings)
     if seconds > quota.available_sec:
         return False
@@ -202,8 +206,15 @@ async def refund_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> int:
             .with_for_update()
         )
     }
+    refunded_packages = set(
+        await session.scalars(
+            select(HourPackage.id)
+            .join(Payment, Payment.id == HourPackage.payment_id)
+            .where(HourPackage.id.in_(package_ids), Payment.status == PaymentStatus.refunded)
+        )
+    )
     for entry in entries:
-        if entry.package_id is not None:
+        if entry.package_id is not None and entry.package_id not in refunded_packages:
             packages[entry.package_id].seconds_left += entry.seconds
         await session.delete(entry)
     await session.flush()
@@ -290,9 +301,11 @@ async def plan_queue(
     )
     if not await can_process(session, user, needed, now, settings):
         quota = await get_quota(session, user, now, settings)
+        needed_text = format_duration(needed, round_up=True)
+        left_text = format_duration(quota.available_sec, round_up=True)
         raise PlanExceedsQuota(
-            f"Выбранные лекции длятся {format_duration(needed)}, "
-            f"а осталось {format_duration(quota.available_sec)}. Уберите часть лекций из плана"
+            f"Выбранные лекции длятся {needed_text}, "
+            f"а осталось {left_text}. Уберите часть лекций из плана"
         )
     for lecture in planned:
         if lecture.duration_sec is not None:
@@ -307,18 +320,6 @@ async def return_to_waiting(session: AsyncSession, lectures: list[Lecture]) -> N
         await refund_lecture(session, lecture.id)
         lecture.status = LectureStatus.waiting_quota
     await session.flush()
-
-
-def format_duration(seconds: int) -> str:
-    hours, rest = divmod(seconds, 3600)
-    minutes = math.ceil(rest / 60)
-    if minutes == 60:
-        hours, minutes = hours + 1, 0
-    if hours and minutes:
-        return f"{hours} ч {minutes} мин"
-    if hours:
-        return f"{hours} ч"
-    return f"{minutes} мин"
 
 
 def list_products(settings: Settings | None = None) -> list[ProductOut]:

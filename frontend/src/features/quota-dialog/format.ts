@@ -1,3 +1,5 @@
+import { plural } from "../../lib/plural";
+
 const resetTime = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 const relative = new Intl.RelativeTimeFormat("ru-RU", { numeric: "auto" });
 
@@ -25,10 +27,5 @@ export function formatReset(value: string, now = Date.now()) {
 }
 
 export function lecturesWord(count: number) {
-  const tens = count % 100;
-  const ones = count % 10;
-  if (tens >= 11 && tens <= 14) return "лекций";
-  if (ones === 1) return "лекция";
-  if (ones >= 2 && ones <= 4) return "лекции";
-  return "лекций";
+  return plural(count, "лекция", "лекции", "лекций");
 }

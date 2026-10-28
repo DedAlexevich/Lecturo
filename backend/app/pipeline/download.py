@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import re
 import socket
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +22,7 @@ from app.core.config import get_settings
 from app.models import Lecture
 from app.pipeline import media
 from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC, make_mono
-from app.pipeline.runner import Report
+from app.pipeline.runner import Report, UserFacingError
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ BASE_OPTIONS: dict[str, Any] = {
 }
 
 
-class LinkError(Exception):
+class LinkError(UserFacingError):
     pass
 
 
@@ -131,6 +132,10 @@ class PublicRequestsRH(RequestsRH):
                 "https": PublicHTTPSConnectionPool,
             }
         return session
+
+
+class DownloadStopped(Exception):
+    pass
 
 
 class PublicYoutubeDL(YoutubeDL):
@@ -299,7 +304,7 @@ def extract_info(url: str) -> dict[str, Any]:
         return ydl.extract_info(url, download=False)
 
 
-async def probe_duration(url: str) -> float | None:
+async def probe_remote_duration(url: str) -> float | None:
     process = await asyncio.create_subprocess_exec(
         "ffprobe",
         "-v",
@@ -352,7 +357,7 @@ async def inspect_link(url: str) -> LinkInfo:
         title, embed_url, duration = info.get("title"), build_embed_url(url), info.get("duration")
         media_url = info.get("url") or url
     if not duration:
-        duration = await probe_duration(await follow_redirects(media_url))
+        duration = await probe_remote_duration(await follow_redirects(media_url))
     if not duration:
         raise LinkError("Не удалось определить длительность видео")
     if duration > MAX_DURATION_SEC:
@@ -360,10 +365,15 @@ async def inspect_link(url: str) -> LinkInfo:
     return LinkInfo(title=title, duration=float(duration), embed_url=embed_url)
 
 
-def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
+def fetch_audio(url: str, target: Path, progress: dict[str, float], stop: threading.Event) -> Path:
     deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SEC
 
+    def check_stop(status: dict[str, Any]) -> None:
+        if stop.is_set():
+            raise DownloadStopped
+
     def on_progress(status: dict[str, Any]) -> None:
+        check_stop(status)
         if status["status"] != "downloading":
             return
         total = status.get("total_bytes") or status.get("total_bytes_estimate")
@@ -379,6 +389,7 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
         **ydl_options(url),
         "outtmpl": f"{target}.%(ext)s",
         "progress_hooks": [on_progress],
+        "postprocessor_hooks": [check_stop],
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": "opus", "preferredquality": "48"}
         ],
@@ -410,10 +421,17 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     await asyncio.to_thread(audio_dir.mkdir, parents=True, exist_ok=True)
     target = audio_dir / str(lecture.id)
     progress = {"fraction": 0.0}
-    fetching = asyncio.create_task(asyncio.to_thread(fetch_audio, url, target, progress))
-    while not fetching.done():
-        await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
-        await report(progress["fraction"])
+    stop = threading.Event()
+    fetching = asyncio.create_task(asyncio.to_thread(fetch_audio, url, target, progress, stop))
+    try:
+        while not fetching.done():
+            await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
+            await report(progress["fraction"])
+    except asyncio.CancelledError:
+        stop.set()
+        await asyncio.wait({fetching})
+        await asyncio.to_thread(remove_partial, target)
+        raise
     try:
         audio_path = fetching.result()
     except Exception as error:

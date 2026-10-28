@@ -14,12 +14,14 @@ class ShareLink(UUIDPk, CreatedAt, Base):
     )
 
     token: Mapped[str] = mapped_column(String(64), unique=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     lecture_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("lectures.id", ondelete="CASCADE")
+        ForeignKey("lectures.id", ondelete="CASCADE"), index=True
     )
     course_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("courses.id", ondelete="CASCADE")
+        ForeignKey("courses.id", ondelete="CASCADE"), index=True
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -27,7 +29,9 @@ class ShareLink(UUIDPk, CreatedAt, Base):
 class Complaint(UUIDPk, CreatedAt, Base):
     __tablename__ = "complaints"
 
-    lecture_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lectures.id", ondelete="CASCADE"))
+    lecture_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("lectures.id", ondelete="CASCADE"), index=True
+    )
     reporter_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )

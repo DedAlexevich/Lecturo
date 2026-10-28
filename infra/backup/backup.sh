@@ -3,6 +3,8 @@ set -euo pipefail
 
 source "$(dirname "$0")/common.sh"
 
+backup_keep=$(env_value BACKUP_KEEP 7)
+
 check_keep "$backup_keep"
 wait_for_deploy
 name="lecturo-$(date -u +%Y%m%d-%H%M%S)"

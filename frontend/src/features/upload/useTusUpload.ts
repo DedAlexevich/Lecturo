@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, type DetailedError } from "tus-js-client";
 import { tokenStorage } from "../../api/client";
-import { detailOf } from "./errors";
+import { detailOf } from "../../api/errors";
+import { expireSession } from "../../app/session";
 
 export const MAX_FILE_BYTES = 2 * 1024 ** 3;
 
@@ -144,6 +145,7 @@ export function useTusUpload(userId: string | undefined) {
           if (isRejected(error)) {
             current.current = null;
             setState({ ...idle, error: messageOf(error) });
+            if (responseOf(error)?.getStatus() === 401 && "originalRequest" in error) expireSession(error.originalRequest.getHeader("Authorization"));
             return;
           }
           update(upload, (state) => ({

@@ -19,6 +19,7 @@ from app.models import (
     Payment,
     User,
 )
+from app.pipeline import tasks
 from app.services.legal import read_document
 
 
@@ -92,6 +93,14 @@ def retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 
     monkeypatch.setattr("app.providers.retry.sleep", record)
     return pauses
+
+
+@pytest.fixture(autouse=True)
+def video_in_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def run_now(lecture_id) -> None:
+        await tasks.process_video({}, str(lecture_id))
+
+    monkeypatch.setattr(tasks, "enqueue_video", run_now)
 
 
 async def notifications(lecture_id) -> list[tuple[NotificationKind, NotificationOutcome]]:

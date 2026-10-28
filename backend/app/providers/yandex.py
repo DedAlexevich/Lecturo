@@ -17,7 +17,7 @@ import httpx
 
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
-from app.pipeline.estimate import is_chunked, recognition_seconds
+from app.pipeline.estimate import LECTURE_TIMEOUT_SEC, is_chunked, recognition_seconds
 from app.providers.base import OperationStore, RecognitionProgress, Segment
 from app.providers.chunks import ChunkingError, Part, merge_segments, split_audio
 from app.providers.openai_compat import (
@@ -120,7 +120,7 @@ class YandexSpeechToText:
         settings: Settings,
         *,
         poll_interval: float | None = None,
-        timeout: float = 6 * 3600,
+        timeout: float = LECTURE_TIMEOUT_SEC,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         required = {

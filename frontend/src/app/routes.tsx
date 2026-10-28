@@ -21,6 +21,7 @@ const PublicSharePage = lazy(() =>
   import("../pages/public/PublicSharePage").then((module) => ({ default: module.PublicSharePage })),
 );
 const QuizPage = lazy(() => import("../features/quiz/QuizPage").then((module) => ({ default: module.QuizPage })));
+const AdminPage = lazy(() => import("../pages/admin/AdminPage").then((module) => ({ default: module.AdminPage })));
 const ExamSheetPage = lazy(() =>
   import("../features/exam-sheet/ExamSheetPage").then((module) => ({ default: module.ExamSheetPage })),
 );
@@ -49,4 +50,5 @@ export const privateRoutes: RouteObject[] = [
   { path: "/courses/:id", element: <CoursePage /> },
   { path: "/courses/:id/exam-sheet", element: <ExamSheetPage /> },
   { path: "/account", element: <AccountPage /> },
+  { path: "/admin/*", element: <AdminPage /> },
 ];

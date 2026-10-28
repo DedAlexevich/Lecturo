@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
-import { detailOf } from "../../features/upload/errors";
 import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { Progress } from "../../ui/Progress";

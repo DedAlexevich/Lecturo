@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     log_service: str = "app"
     log_max_mb: int = 10
     log_backup_count: int = 5
+    log_stream_limit: int = 3
+
+    backup_dir: Path = Path("/backups")
+    backup_max_upload_mb: int = 2048
+    restore_idle_wait_seconds: int = 300
 
     stt_provider: str = "stub"
     yandex_speechkit_api_key: str = ""
@@ -71,6 +76,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    complaints_email: str = ""
 
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
@@ -146,6 +152,8 @@ class Settings(BaseSettings):
     login_rate_window_seconds: int = 900
     register_rate_limit: int = 10
     register_rate_window_seconds: int = 3600
+
+    initial_admins: str = ""
 
     @property
     def is_local(self) -> bool:

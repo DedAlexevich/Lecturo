@@ -11,13 +11,12 @@ import { bindTheme, getWebApp } from "./sdk";
 import { TelegramIcon } from "./TelegramIcon";
 import "./TelegramBridge.css";
 
-const app = getWebApp();
 let automaticLoginDone = false;
 let automaticLogin: ReturnType<typeof authenticate> | undefined;
 
 async function authenticate(acceptTerms = false, acceptPersonalData = false) {
   const result = await api.POST("/api/v1/auth/telegram-webapp", {
-    body: { init_data: app!.initData, accept_terms: acceptTerms, accept_personal_data: acceptPersonalData },
+    body: { init_data: getWebApp()?.initData ?? "", accept_terms: acceptTerms, accept_personal_data: acceptPersonalData },
   });
   if (!result.data) throw new ApiError(result.response.status, result.error);
   return result.data;
@@ -32,8 +31,10 @@ export function TelegramBridge() {
   const [personalData, setPersonalData] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
+    const app = getWebApp();
     if (!app) return;
     const cleanup = bindTheme(app);
     app.ready();
@@ -42,6 +43,7 @@ export function TelegramBridge() {
   }, []);
 
   useEffect(() => {
+    const app = getWebApp();
     if (!app) return;
     const back = () => navigate(-1);
     if ((window.history.state?.idx ?? 0) > 0) app.BackButton.show();
@@ -54,7 +56,7 @@ export function TelegramBridge() {
   }, [location.key, navigate]);
 
   useEffect(() => {
-    if (!app || token !== null || automaticLoginDone || wasSignedOutByUser()) return;
+    if (!getWebApp() || token !== null || automaticLoginDone || wasSignedOutByUser()) return;
     let active = true;
     automaticLogin ??= authenticate();
     automaticLogin.then(
@@ -75,7 +77,7 @@ export function TelegramBridge() {
     };
   }, [token]);
 
-  if (!app) return null;
+  if (!getWebApp()) return null;
 
   const submit = async () => {
     setBusy(true);
@@ -86,6 +88,7 @@ export function TelegramBridge() {
       automaticLoginDone = true;
       signIn(tokens.access_token);
       setConsent(false);
+      setDeclined(false);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 403) setConsent(true);
       else setError(messageOf(failure));
@@ -94,9 +97,15 @@ export function TelegramBridge() {
     }
   };
 
+  const decline = () => {
+    if (busy) return;
+    setConsent(false);
+    setDeclined(true);
+  };
+
   return (
     <>
-      {!consent && (error || (token === null && wasSignedOutByUser())) && (
+      {!consent && (error || (token === null && (declined || wasSignedOutByUser()))) && (
         <div className="telegram-login">
           {error && <p role="alert" className="telegram-login__error">Вход через Telegram: {error}</p>}
           <Button fullWidth loading={busy} onClick={submit}>
@@ -107,11 +116,11 @@ export function TelegramBridge() {
       )}
       <Dialog
         open={consent}
-        onClose={() => { if (!busy) setConsent(false); }}
+        onClose={decline}
         title="Создание аккаунта"
         actions={
           <>
-            <Button variant="ghost" disabled={busy} onClick={() => setConsent(false)}>Отмена</Button>
+            <Button variant="ghost" disabled={busy} onClick={decline}>Отмена</Button>
             <Button disabled={!terms || !personalData} loading={busy} onClick={submit}>Продолжить</Button>
           </>
         }

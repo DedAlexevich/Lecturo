@@ -8,7 +8,7 @@ from sqlalchemy import insert, update
 from app.core.db import SessionLocal
 from app.models import Course, Lecture, LectureStatus, ShareLink, SourceType, course_lectures
 from app.pipeline import video_access
-from app.pipeline.video_access import signed_video_url, video_signature
+from app.pipeline.video_access import media_signature, signed_video_url
 
 
 async def create_lecture(owner_id: uuid.UUID, video_path: str | None = "/data/video.mp4"):
@@ -71,7 +71,7 @@ async def test_access_with_wrong_signature_forbidden(client, user):
 async def test_expired_signature_forbidden(client, user):
     lecture_id = await create_lecture(user.id)
     expires = int(time.time()) - 1
-    signature = video_signature(lecture_id, expires, None)
+    signature = media_signature("video", lecture_id, expires, None)
     response = await client.get(
         f"/api/v1/lectures/{lecture_id}/video-access",
         params={"expires": expires, "signature": signature},

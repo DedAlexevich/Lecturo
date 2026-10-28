@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import SessionLocal
 from app.models import Lecture, ProcessingStep, StepName, TranscriptSegment, User
 from app.pipeline.media import probe_duration
-from app.pipeline.runner import Report, get_step
+from app.pipeline.runner import Report, UserFacingError, get_step
 from app.providers import get_speech_to_text
 from app.services.consents import AI_TRANSFER_REQUIRED, ai_transfer_given
 from app.services.quota import QuotaExceeded, charge_lecture
 
 
-class ConsentMissing(Exception):
+class ConsentMissing(UserFacingError):
     pass
 
 
@@ -75,6 +75,7 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
     await session.commit()
 
     step = await get_step(session, lecture.id, StepName.transcribe)
+    await session.commit()
     lock = asyncio.Lock()
 
     async def on_progress(stage: str, fraction: float) -> None:
