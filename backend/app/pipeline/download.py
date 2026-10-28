@@ -299,7 +299,7 @@ def extract_info(url: str) -> dict[str, Any]:
         return ydl.extract_info(url, download=False)
 
 
-async def probe_duration(url: str) -> float | None:
+async def probe_remote_duration(url: str) -> float | None:
     process = await asyncio.create_subprocess_exec(
         "ffprobe",
         "-v",
@@ -352,7 +352,7 @@ async def inspect_link(url: str) -> LinkInfo:
         title, embed_url, duration = info.get("title"), build_embed_url(url), info.get("duration")
         media_url = info.get("url") or url
     if not duration:
-        duration = await probe_duration(await follow_redirects(media_url))
+        duration = await probe_remote_duration(await follow_redirects(media_url))
     if not duration:
         raise LinkError("Не удалось определить длительность видео")
     if duration > MAX_DURATION_SEC:
