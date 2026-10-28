@@ -24,6 +24,8 @@ const dateTime = new Intl.DateTimeFormat("ru-RU", {
   minute: "2-digit",
 });
 
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function isAction(value: string | null): value is AdminAction {
   return value !== null && value in actionLabels;
 }
@@ -42,7 +44,8 @@ export function AuditSection() {
   const [params, setParams] = useSearchParams();
   const actionParam = params.get("action");
   const action = isAction(actionParam) ? actionParam : null;
-  const actor = params.get("actor");
+  const actorParam = params.get("actor");
+  const actor = actorParam !== null && uuidPattern.test(actorParam) ? actorParam : null;
   const page = Math.max(1, Number(params.get("page")) || 1);
   const { data, isPending, isError, isFetching, refetch } = useAudit({ action, actorId: actor, page });
   const { data: admins = [] } = useAdmins();
@@ -67,7 +70,7 @@ export function AuditSection() {
         </h2>
         {data && (
           <p className={styles.muted}>
-            {data.total === 0 ? "Записей нет" : `${first}–${last} из ${data.total}`}
+            {data.items.length === 0 ? "Записей нет" : `${first}–${last} из ${data.total}`}
           </p>
         )}
       </div>
@@ -123,7 +126,10 @@ export function AuditSection() {
       )}
       {data && data.items.length === 0 && (
         <p className={styles.empty}>
-          {filtered ? "По этим условиям записей нет." : "Действий пока не было. Здесь появятся назначения и снятия администраторов."}
+          {page > 1
+            ? "На этой странице записей нет."
+            : filtered
+              ? "По этим условиям записей нет." : "Действий пока не было. Здесь появятся назначения и снятия администраторов."}
         </p>
       )}
       {data && data.items.length > 0 && (
@@ -153,13 +159,13 @@ export function AuditSection() {
           </tbody>
         </table>
       )}
-      {data && data.total > auditPageSize && (
+      {data && (data.total > auditPageSize || page > 1) && (
         <div className={styles.pager}>
           <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setFilter("page", String(page - 1))}>
             Назад
           </Button>
           <span className={styles.muted}>
-            Страница {page} из {Math.ceil(data.total / auditPageSize)}
+            Страница {page} из {Math.max(1, Math.ceil(data.total / auditPageSize))}
           </span>
           <Button
             variant="secondary"
