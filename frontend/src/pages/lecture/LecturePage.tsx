@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { cameFromQuiz } from "../../features/quiz/moment";
+import { formatDuration } from "../../lib/duration";
 import { ChatPanel } from "./ChatPanel";
 import { QuizButton } from "../../features/quiz/QuizButton";
 import { TelegramNotice } from "../../features/telegram-notice/TelegramNotice";
@@ -23,7 +24,7 @@ import { VideoPlayer } from "./players/VideoPlayer";
 import { usePlayer, videoIdentity } from "./players/player";
 import { localNotes } from "./localNotes";
 import { Processing } from "./Processing";
-import { formatDuration, parseSection, parseStartTime } from "./time";
+import { parseSection, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
 import { awaitsVideo, fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
 import "./lecture.css";
@@ -166,6 +167,7 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
     return (
       <div className="lecture">
         <EmptyState
+          level={1}
           title="Лекция не найдена"
           description="Возможно, её удалили или ссылка открыта не из того аккаунта."
           action={<Link to="/">К списку лекций</Link>}
@@ -191,6 +193,7 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
 export function LecturePage() {
   const { id = "" } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { key: locationKey, state: locationState } = useLocation();
   const startAt = parseStartTime(searchParams.get("t"));
   const section = parseSection(searchParams.get("section"));
@@ -334,7 +337,7 @@ export function LecturePage() {
             <QuizButton lecture={data} />
             {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
             <ZoomerToggle mode={zoomer} />
-            <LectureActions lecture={data} />
+            <LectureActions lecture={data} onDeleted={() => navigate("/", { replace: true })} />
           </div>
         </div>
         <LectureMeta lecture={data} />

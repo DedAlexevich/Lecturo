@@ -175,20 +175,22 @@ try {
     assert.equal(requests.length, 1);
     assert.equal(await page.getByRole("dialog").count(), 0);
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), "test-token");
+    assert.equal(await page.locator("header").getByRole("button", { name: "Выйти", exact: true }).count(), 0);
+    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).click();
     await page.getByRole("button", { name: "Выйти", exact: true }).click();
     await page.waitForURL(base + "/login");
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
     await page.getByRole("button", { name: "Войти через Telegram", exact: true }).waitFor();
     assert.equal(requests.length, 1);
     await page.getByRole("button", { name: "Войти через Telegram", exact: true }).click();
-    await page.waitForURL(base + "/");
+    await page.waitForFunction(() => localStorage.getItem("lecturo.token") === "test-token");
     assert.equal(requests.length, 2);
     assert.deepEqual(errors, []);
     await context.close();
   }
   {
     const { context, page, requests, errors } = await setup("ios", 200, true);
-    await page.goto(base + "/");
+    await page.goto(base + "/account");
     await page.getByRole("button", { name: "Выйти", exact: true }).click();
     await page.waitForURL(base + "/login");
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), null);
@@ -227,7 +229,7 @@ try {
   {
     const { context, page, requests, errors } = await setup("android", 200, true, false, true);
     await page.goto(base + "/");
-    await page.getByRole("button", { name: "Выйти", exact: true }).waitFor();
+    await page.locator("nav:visible").getByRole("link", { name: "Кабинет", exact: true }).waitFor();
     assert.equal(requests.length, 1);
     assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), "test-token");
     assert.deepEqual(errors, []);

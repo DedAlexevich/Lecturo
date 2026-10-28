@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 
@@ -14,10 +15,6 @@ const pollInterval = 4000;
 
 export function examSheetQueryKey(courseId: string) {
   return ["exam-sheet", courseId];
-}
-
-function detailOf(body: unknown): unknown {
-  return typeof body === "object" && body !== null && "detail" in body ? body.detail : undefined;
 }
 
 export function errorCode(error: Error | null) {

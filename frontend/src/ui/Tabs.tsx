@@ -53,7 +53,7 @@ export function Tabs({ items, label, value, onChange }: TabsProps) {
             role="tab"
             id={`${baseId}-tab-${item.id}`}
             aria-selected={item.id === current}
-            aria-controls={`${baseId}-panel-${item.id}`}
+            aria-controls={item.id === current ? `${baseId}-panel-${item.id}` : undefined}
             tabIndex={item.id === current ? 0 : -1}
             className="tabs__tab"
             onClick={() => select(item.id)}
