@@ -1,4 +1,5 @@
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+#!/usr/bin/env bash
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 
 fail() {
   echo "error: $*" >&2
@@ -18,7 +19,6 @@ env_value() {
 }
 
 backup_dir=$(env_value BACKUP_DIR ./backups)
-backup_keep=$(env_value BACKUP_KEEP 7)
 db_service=$(env_value BACKUP_DB_SERVICE db)
 db_container=$(env_value BACKUP_DB_CONTAINER "")
 age_recipient=$(env_value BACKUP_AGE_RECIPIENT "")
