@@ -234,8 +234,16 @@ jobs:
           test "$status" = 502
           timeout 10 sh -c 'until docker compose exec -T caddy grep -Eq "http.log.error|reverseproxy" /var/log/lecturo/caddy.log; do sleep 1; done'
           docker_logs=$(docker compose logs --no-color caddy)
-          if docker compose exec -T caddy grep -E 'query-secret|signature-secret|share-secret|referer-secret' /var/log/lecturo/caddy.log || printf '%s\n' "$docker_logs" | grep -E 'query-secret|signature-secret|share-secret|referer-secret'; then
+          docker compose exec -T caddy test -r /var/log/lecturo/caddy.log
+          if docker compose exec -T caddy grep -E 'query-secret|signature-secret|share-secret|referer-secret' /var/log/lecturo/caddy.log; then
             exit 1
+          else
+            test "$?" -eq 1
+          fi
+          if printf '%s\n' "$docker_logs" | grep -E 'query-secret|signature-secret|share-secret|referer-secret'; then
+            exit 1
+          else
+            test "$?" -eq 1
           fi
           docker compose up -d --wait --wait-timeout 180 api
       - run: curl -fsS http://localhost/api/v1/health
