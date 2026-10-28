@@ -3,7 +3,7 @@ import hmac
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -31,10 +31,11 @@ from app.models import (
 )
 from app.schemas.billing import ProductOut
 from app.services.durations import format_duration
-from app.services.legal import read_document, today
+from app.services.legal import today
 
 WEEK = timedelta(days=7)
 CHARGED_SOURCES = (UsageSource.weekly, UsageSource.package)
+CARRYOVER_FROM = date(2026, 11, 6)
 
 
 class QuotaExceeded(Exception):
@@ -359,7 +360,7 @@ def identity_hash(provider: AuthProvider, provider_user_id: str) -> str:
 
 
 async def keep_weekly_usage(session: AsyncSession, user: User, now: datetime | None = None) -> None:
-    if today() < read_document("privacy").effective_date:
+    if today() < CARRYOVER_FROM:
         return
     quota = await get_quota(session, user, now)
     if not quota.weekly_used_sec:

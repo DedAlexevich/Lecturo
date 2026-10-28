@@ -77,6 +77,6 @@ class WorkerSettings:
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
         cron(delete_stale_uploads, minute=30),
-        cron(delete_expired_carryovers, minute=15),
+        cron(delete_expired_carryovers, minute=set(range(5, 60, 10))),
         cron(process_legal_revisions, minute=set(range(0, 60, 10))),
     ]
