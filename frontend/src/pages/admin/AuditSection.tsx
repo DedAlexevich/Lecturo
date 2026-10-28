@@ -30,6 +30,11 @@ const actionLabels: Record<AdminAction, string> = {
   alert_settings_changed: "Изменил свои настройки алертов",
   promo_created: "Создал промокод",
   promo_disabled: "Отключил промокод",
+  zoomer_video_uploaded: "Загрузил ролик зумера",
+  zoomer_video_rejected: "Ролик зумера отклонён",
+  zoomer_video_updated: "Изменил ролик зумера",
+  zoomer_video_deleted: "Удалил ролик зумера",
+  zoomer_videos_reordered: "Изменил порядок роликов зумера",
 };
 
 const sourceLabels: Record<string, string> = {

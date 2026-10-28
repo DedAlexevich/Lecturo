@@ -30,6 +30,10 @@ const AdminAlertsPage = lazy(() =>
   import("./alerts/AdminAlertsPage").then((module) => ({ default: module.AdminAlertsPage })),
 );
 
+const AdminZoomerPage = lazy(() =>
+  import("./zoomer/AdminZoomerPage").then((module) => ({ default: module.AdminZoomerPage })),
+);
+
 const sections = [
   { to: "/admin/users", label: "Пользователи" },
   { to: "/admin/stats", label: "Статистика" },
@@ -39,6 +43,7 @@ const sections = [
   { to: "/admin/logs", label: "Логи и ошибки" },
   { to: "/admin/backups", label: "Бэкапы" },
   { to: "/admin/alerts", label: "Алерты" },
+  { to: "/admin/zoomer", label: "Ролики зумера" },
 ];
 
 export function AdminPage() {
@@ -74,6 +79,7 @@ export function AdminPage() {
             <Route path="logs" element={<AdminLogsPage />} />
             <Route path="backups" element={<AdminBackupsPage />} />
             <Route path="alerts" element={<AdminAlertsPage />} />
+            <Route path="zoomer" element={<AdminZoomerPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>
