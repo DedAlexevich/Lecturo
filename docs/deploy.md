@@ -186,10 +186,9 @@ infra/status.sh
 groupadd -g 1500 lecturo-backups
 usermod -aG lecturo-backups deploy
 chgrp 1500 /opt/lecturo/backups && chmod 2770 /opt/lecturo/backups
-grep -q '^BACKUP_DIR=.' /opt/lecturo/.env || sed -i 's|^BACKUP_DIR=.*|BACKUP_DIR=./backups|' /opt/lecturo/.env
 ```
 
-`BACKUP_DIR=./backups` нужен, чтобы `api` монтировал ту же папку, в которую пишет `backup.sh`: без него compose берёт `data/backups`. Если строки `BACKUP_DIR` в `.env` нет совсем, допишите её.
+В `infra/compose.prod.yml` `api` и `data-owner` по умолчанию монтируют `./backups`, ту же папку, в которую пишет `backup.sh`, поэтому `BACKUP_DIR` в `.env` можно не задавать.
 
 Членство в группе подхватывается при следующем входе `deploy`, таймеры systemd получают его сразу. Старые дампы с правами `600` остаются доступны только `deploy`, пока их не вытеснят новые.
 - Пока идёт деплой, бэкап ждёт его окончания (та же блокировка, что в `infra/deploy.sh`).
