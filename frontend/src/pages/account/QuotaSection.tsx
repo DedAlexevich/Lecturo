@@ -31,7 +31,7 @@ function QuotaDetails({ quota }: { quota: Quota }) {
     <div className={styles.quota}>
       <div className={styles.quotaLead}>
         <p className={styles.figureLabel}>Доступно сейчас</p>
-        <p className={styles.figure}>{formatDuration(available)}</p>
+        <p className={styles.figure}>{formatDuration(available, "down")}</p>
         <p>
           Недельный лимит обновится {formatDateTime(quota.resets_at)}, {formatRelative(quota.resets_at)}.
         </p>
@@ -46,7 +46,7 @@ function QuotaDetails({ quota }: { quota: Quota }) {
           <dt>На этой неделе</dt>
           <dd>
             <Progress
-              label={`${formatDuration(quota.weekly_used_sec)} из ${formatDuration(quota.weekly_limit_sec)}`}
+              label={`${formatDuration(quota.weekly_used_sec, "down")} из ${formatDuration(quota.weekly_limit_sec, "down")}`}
               value={usedShare}
               showValue={false}
             />
@@ -55,7 +55,7 @@ function QuotaDetails({ quota }: { quota: Quota }) {
         <div className={styles.fact}>
           <dt>Пакеты</dt>
           <dd>
-            <span className={styles.factValue}>{formatDuration(quota.package_left_sec)}</span>
+            <span className={styles.factValue}>{formatDuration(quota.package_left_sec, "down")}</span>
             <span className={styles.muted}>Тратятся после недельного лимита и не сгорают</span>
           </dd>
         </div>

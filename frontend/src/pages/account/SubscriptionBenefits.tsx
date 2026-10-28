@@ -20,7 +20,7 @@ export function SubscriptionBenefits({ products, onChoose }: { products: Product
   const subscriptionWeekly = quota && subscribed ? quota.weekly_limit_sec : subscriptionPlan.weeklySeconds;
 
   const rows: Row[] = [
-    { label: "Недельный лимит", free: formatDuration(freeWeekly), subscription: formatDuration(subscriptionWeekly) },
+    { label: "Недельный лимит", free: formatDuration(freeWeekly, "down"), subscription: formatDuration(subscriptionWeekly, "down") },
     { label: "Квиз по лекции", free: null, subscription: "Есть" },
     { label: "Памятка к экзамену", free: null, subscription: "Есть" },
     { label: "Чат по лекции", free: null, subscription: "Есть" },

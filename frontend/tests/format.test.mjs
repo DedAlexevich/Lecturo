@@ -17,6 +17,13 @@ test("formatDuration switches to hours", () => {
   assert.equal(formatDuration(36000), "10 ч");
 });
 
+test("formatDuration can round down so the remaining quota is not overstated", () => {
+  assert.equal(formatDuration(3570, "down"), "59 мин");
+  assert.equal(formatDuration(119, "down"), "1 мин");
+  assert.equal(formatDuration(30, "down"), "меньше минуты");
+  assert.equal(formatDuration(36000, "down"), "10 ч");
+});
+
 test("formatDuration handles missing and empty time", () => {
   assert.equal(formatDuration(null), "—");
   assert.equal(formatDuration(0), "0 мин");
