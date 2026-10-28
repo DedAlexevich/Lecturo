@@ -6,7 +6,10 @@ export function RequireAuth() {
   const token = useToken();
   const location = useLocation();
 
-  if (token === null) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (token === null) {
+    const hash = location.hash.includes("tgWebAppData") ? "" : location.hash;
+    return <Navigate to="/login" replace state={{ from: { ...location, hash } }} />;
+  }
   return <Outlet />;
 }
 

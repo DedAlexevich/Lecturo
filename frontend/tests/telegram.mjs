@@ -273,9 +273,10 @@ try {
       created_at: "2026-10-27T00:00:00Z", video_url: null, audio_only: false, audio_url: null, steps: [],
       segments: [{ start: 0, end: 2, text: "Первая фраза." }], chapters: [], summary: { content_md: "Конспект" },
     } }));
-    await page.goto(base + `/lectures/${lectureId}`);
+    await page.goto(base + `/lectures/${lectureId}#tgWebAppData=query_id%3D1&tgWebAppVersion=8.0`);
     await page.getByRole("heading", { name: "Лекция из уведомления" }).waitFor();
     assert.equal(new URL(page.url()).pathname, `/lectures/${lectureId}`);
+    assert.equal(new URL(page.url()).hash, "");
     assert.equal(requests.length, 1);
     assert.deepEqual(errors, []);
     await context.close();
