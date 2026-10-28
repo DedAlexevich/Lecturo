@@ -2,7 +2,8 @@ import { useId } from "react";
 import { Progress } from "../../ui/Progress";
 import styles from "./AccountPage.module.css";
 import { useQuota, type Quota } from "./billing";
-import { formatDate, formatDateTime, formatDuration, formatRelative } from "./format";
+import { formatDuration } from "../../lib/duration";
+import { formatDate, formatDateTime, formatRelative } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 
 export function QuotaSection() {

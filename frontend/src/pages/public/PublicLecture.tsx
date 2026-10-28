@@ -8,7 +8,7 @@ import { EmbedPlayer } from "../lecture/players/EmbedPlayer";
 import { resolveEmbed } from "../lecture/players/embed";
 import { VideoPlayer } from "../lecture/players/VideoPlayer";
 import { usePlayer, videoIdentity } from "../lecture/players/player";
-import { formatDuration } from "../lecture/time";
+import { formatDuration } from "../../lib/duration";
 import { Transcript } from "../lecture/Transcript";
 import { localNotes } from "../lecture/localNotes";
 import { SummaryMarkdown } from "../lecture/SummaryMarkdown";

@@ -4,16 +4,6 @@ const shortDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "sho
 const relative = new Intl.RelativeTimeFormat("ru-RU", { numeric: "auto" });
 const rubles = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2, minimumFractionDigits: 0 });
 
-export function formatDuration(seconds: number) {
-  const minutes = Math.max(0, Math.floor(seconds / 60));
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (minutes === 0) return "0 ч";
-  if (hours === 0) return `${rest} мин`;
-  if (rest === 0) return `${hours} ч`;
-  return `${hours} ч ${rest} мин`;
-}
-
 export function formatDateTime(value: string) {
   return dateTime.format(new Date(value)).replace(",", " в");
 }

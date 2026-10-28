@@ -1,7 +1,8 @@
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
 import { Link } from "react-router";
 import { Progress } from "../../ui/Progress";
-import { formatDate, formatDuration, runningStep, statusLabels } from "./format";
+import { formatDuration } from "../../lib/duration";
+import { formatDate, runningStep, statusLabels } from "./format";
 import { useProgress, type Lecture, type LectureProgress } from "./queries";
 
 const sourceLabels: Record<Lecture["source_type"], string> = {

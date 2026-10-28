@@ -5,6 +5,7 @@ import { Button } from "../../ui/Button";
 import { fromQuizState, momentLink } from "./moment";
 import { clearProgress, emptyProgress, loadProgress, saveProgress, type QuizAnswer, type QuizProgress } from "./progress";
 import type { QuizQuestion } from "./queries";
+import { plural } from "../../lib/plural";
 
 type QuizRunnerProps = {
   lectureId: string;
@@ -58,12 +59,7 @@ function Moment({ lectureId, seconds, onMoment, className, children, label, titl
 }
 
 function answersWord(count: number) {
-  const tens = count % 100;
-  const ones = count % 10;
-  if (tens >= 11 && tens <= 14) return "ответов";
-  if (ones === 1) return "ответ";
-  if (ones >= 2 && ones <= 4) return "ответа";
-  return "ответов";
+  return plural(count, "ответ", "ответа", "ответов");
 }
 
 export function QuizRunner({ lectureId, questions, duration, onRegenerate, regenerating, onMoment }: QuizRunnerProps) {

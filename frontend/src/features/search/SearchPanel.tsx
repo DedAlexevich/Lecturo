@@ -8,14 +8,10 @@ import { HitSummary } from "./HitSummary";
 import { buildMatcher } from "./matcher";
 import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
+import { plural } from "../../lib/plural";
 
 export function momentsCount(count: number) {
-  const tens = count % 100;
-  const ones = count % 10;
-  if (tens >= 11 && tens <= 14) return `${count} моментов`;
-  if (ones === 1) return `${count} момент`;
-  if (ones >= 2 && ones <= 4) return `${count} момента`;
-  return `${count} моментов`;
+  return `${count} ${plural(count, "момент", "момента", "моментов")}`;
 }
 
 type SearchPanelProps = {
