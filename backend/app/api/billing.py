@@ -96,7 +96,7 @@ async def create_payment(
     await business_events.record_event(
         BusinessEventKind.payment_created,
         user,
-        kind=payment.kind,
+        payment_kind=payment.kind,
         product=payment.product_code,
         amount_kopecks=payment.amount_kopecks,
         yookassa_id=payment.yookassa_id,
@@ -122,7 +122,7 @@ async def record_payment_outcome(payment: Payment | None) -> None:
     if payment is None or kind is None:
         return
     details = {
-        "kind": payment.kind,
+        "payment_kind": payment.kind,
         "product": payment.product_code,
         "amount_kopecks": payment.amount_kopecks,
         "yookassa_id": payment.yookassa_id,
