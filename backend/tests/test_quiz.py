@@ -591,13 +591,13 @@ async def test_provider_error_does_not_stop_after_first_attempt(user, monkeypatc
 
 async def test_quiz_fails_when_provider_keeps_failing(user, monkeypatch):
     failure = OpenAICompatibleError("/chat/completions: API ответил 400")
-    llm = ScriptedProvider(failure, failure, failure)
+    llm = ScriptedProvider(*[failure] * 20)
     monkeypatch.setattr(quiz, "get_llm", lambda: llm)
     lecture = await create_ready_lecture(user)
 
     assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.failed
 
-    assert len(llm.requests) == quiz.QUIZ_ATTEMPTS
+    assert len(llm.requests) == quiz.QUIZ_ATTEMPTS + 2 * quiz.PART_ATTEMPTS
 
 
 def test_long_transcript_request_fits_in_both_variants():
@@ -608,3 +608,79 @@ def test_long_transcript_request_fits_in_both_variants():
     assert len(transcript_excerpt(segments)) <= quiz.TRANSCRIPT_CHAR_LIMIT
     half = quiz.TRANSCRIPT_CHAR_LIMIT // 2
     assert len(transcript_excerpt(segments, half)) <= half
+
+
+async def no_progress(_: float) -> None:
+    return None
+
+
+async def test_single_request_cut_off_falls_back_to_parts(user, monkeypatch):
+    stuck = OpenAICompatibleTruncated("/chat/completions: ответ обрезан", "")
+    first = answer([make_question(n) for n in range(0, 3)])
+    second = answer([make_question(n) for n in range(3, 6)])
+    llm = ScriptedProvider(stuck, stuck, stuck, first, second)
+    monkeypatch.setattr(quiz, "get_llm", lambda: llm)
+    lecture = await create_ready_lecture(user)
+
+    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.done
+
+    assert len((await saved_quiz(lecture.id)).questions) == 6
+    assert llm.limits[-2:] == [quiz.PART_MAX_TOKENS, quiz.PART_MAX_TOKENS]
+
+
+async def test_parts_ask_each_part_for_a_few_questions():
+    llm = ScriptedProvider(
+        answer([make_question(n) for n in range(0, 4)]),
+        answer([make_question(n) for n in range(4, 8)]),
+    )
+
+    questions = await quiz.generate_by_parts(llm, "Лекция", [], SEGMENTS, 100.0, no_progress)
+
+    assert len(llm.requests) == 2
+    assert all("ровно 4 вопроса" in system for system in llm.systems)
+    assert [question["question"] for question in questions] == [f"Вопрос {n}" for n in range(8)]
+
+
+async def test_part_that_keeps_failing_is_skipped():
+    stuck = OpenAICompatibleTruncated("/chat/completions: ответ обрезан", "мусор")
+    llm = ScriptedProvider(
+        answer([make_question(n) for n in range(0, 4)]),
+        stuck,
+        stuck,
+    )
+
+    with pytest.raises(InvalidQuiz):
+        await quiz.generate_by_parts(llm, "Лекция", [], SEGMENTS, 100.0, no_progress)
+
+    assert len(llm.requests) == 1 + quiz.PART_ATTEMPTS
+
+
+async def test_unfinished_part_answer_keeps_finished_questions():
+    llm = ScriptedProvider(
+        cut_off([make_question(n) for n in range(0, 3)]),
+        answer([make_question(n) for n in range(3, 7)]),
+    )
+
+    questions = await quiz.generate_by_parts(llm, "Лекция", [], SEGMENTS, 100.0, no_progress)
+
+    assert len(questions) == 7
+
+
+def test_pick_questions_limits_and_removes_duplicates():
+    first = [make_question(n) for n in range(0, 8)]
+    second = [make_question(n) for n in range(4, 12)]
+
+    picked = quiz.pick_questions([first, second])
+
+    assert len(picked) == quiz.MAX_QUESTIONS
+    assert len({question["question"] for question in picked}) == len(picked)
+    assert [question["timestamp"] for question in picked] == sorted(
+        question["timestamp"] for question in picked
+    )
+
+
+def test_split_by_time_makes_requested_number_of_parts():
+    parts = quiz.split_by_time(SEGMENTS, 2)
+
+    assert [len(part) for part in parts] == [5, 5]
+    assert quiz.part_count(SEGMENTS) == 2
