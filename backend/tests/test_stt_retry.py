@@ -55,11 +55,11 @@ def test_settings_defaults():
     assert settings.stt_retry_base_seconds == 2.0
 
 
-async def test_yandex_start_recovers_after_internal_error(
+async def test_yandex_start_recovers_after_rate_limit(
     tmp_path: Path, retry_pauses: list[float], caplog: pytest.LogCaptureFixture
 ):
     calls: dict = {}
-    provider = yandex_provider([httpx.Response(500, json=INTERNAL), started()], calls)
+    provider = yandex_provider([httpx.Response(429), started()], calls)
     with caplog.at_level(logging.WARNING, logger="app.providers.retry"):
         segments = await provider.transcribe(make_audio(tmp_path))
 
@@ -71,8 +71,8 @@ async def test_yandex_start_recovers_after_internal_error(
     assert "api-key" not in caplog.text
 
 
-@pytest.mark.parametrize("status", [429, 502, 503, 504])
-async def test_yandex_start_retries_transient_statuses(
+@pytest.mark.parametrize("status", [429, 503])
+async def test_yandex_start_retries_unprocessed_statuses(
     tmp_path: Path, retry_pauses: list[float], status: int
 ):
     calls: dict = {}
@@ -81,13 +81,25 @@ async def test_yandex_start_retries_transient_statuses(
     assert len(calls["start"]) == 2
 
 
-async def test_yandex_start_retries_code_13_with_other_status(
-    tmp_path: Path, retry_pauses: list[float]
+@pytest.mark.parametrize(
+    "reply",
+    [
+        httpx.Response(500, json=INTERNAL),
+        httpx.Response(502),
+        httpx.Response(504),
+        httpx.Response(400, json=INTERNAL),
+    ],
+)
+async def test_yandex_start_is_not_repeated_after_ambiguous_error(
+    tmp_path: Path, retry_pauses: list[float], reply: httpx.Response
 ):
     calls: dict = {}
-    provider = yandex_provider([httpx.Response(400, json=INTERNAL), started()], calls)
-    await provider.transcribe(make_audio(tmp_path))
-    assert len(calls["start"]) == 2
+    provider = yandex_provider([reply, started()], calls)
+    with pytest.raises(YandexSpeechKitError, match=f"вернула {reply.status_code}"):
+        await provider.transcribe(make_audio(tmp_path))
+    assert len(calls["start"]) == 1
+    assert retry_pauses == []
+    assert len(calls["DELETE"]) == 1
 
 
 async def test_yandex_start_retries_unsent_requests(tmp_path: Path, retry_pauses: list[float]):
@@ -124,8 +136,8 @@ async def test_yandex_start_is_not_repeated_when_answer_is_lost(
 
 async def test_yandex_start_gives_up_after_all_attempts(tmp_path: Path, retry_pauses: list[float]):
     calls: dict = {}
-    provider = yandex_provider([httpx.Response(500, json=INTERNAL)] * 5, calls)
-    with pytest.raises(YandexSpeechKitError, match="запуск распознавания вернула 500"):
+    provider = yandex_provider([httpx.Response(503)] * 5, calls)
+    with pytest.raises(YandexSpeechKitError, match="запуск распознавания вернула 503"):
         await provider.transcribe(make_audio(tmp_path))
 
     assert len(calls["start"]) == 5

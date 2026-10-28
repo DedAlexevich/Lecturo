@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 INTERNAL_ERROR_CODE = 13
 JITTER_RATIO = 0.2
+UNPROCESSED_STATUSES = frozenset({429, 503})
 UNSENT_ERRORS = (
     httpx.ConnectError,
     httpx.ConnectTimeout,
@@ -85,6 +86,8 @@ async def request_with_retry(
                 ) from error
         else:
             if not is_retryable_response(response):
+                return response
+            if retry_unsent_only and response.status_code not in UNPROCESSED_STATUSES:
                 return response
             reason = f"ответ {response.status_code}"
         if attempt >= policy.attempts:
