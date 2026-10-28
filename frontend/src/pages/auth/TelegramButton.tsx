@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { telegramBotId } from "../../telegram/bot";
+import { useTelegramBotId } from "../../telegram/bot";
 import { loadTelegramLogin, requestTelegramAuth, type TelegramLoginApi } from "../../telegram/login";
 import { ProviderButton } from "./ProviderButton";
 import type { TelegramUser } from "./useAuthRequests";
-
-export const telegramEnabled = telegramBotId !== undefined;
 
 type TelegramButtonProps = {
   label: string;
@@ -25,6 +23,7 @@ export function TelegramButton({
   onAuth,
   onError,
 }: TelegramButtonProps) {
+  const telegramBotId = useTelegramBotId();
   const [login, setLogin] = useState<TelegramLoginApi>();
   const [failure, setFailure] = useState<unknown>();
   const [attempt, setAttempt] = useState(0);
@@ -38,7 +37,7 @@ export function TelegramButton({
   }, []);
 
   useEffect(() => {
-    if (!telegramEnabled) return;
+    if (telegramBotId === undefined) return;
     let active = true;
     loadTelegramLogin().then(
       (api) => {
@@ -51,7 +50,7 @@ export function TelegramButton({
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [attempt, telegramBotId]);
 
   if (telegramBotId === undefined) return null;
   const botId = telegramBotId;

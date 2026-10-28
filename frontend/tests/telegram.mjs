@@ -17,7 +17,9 @@ async function setup(platform, status = 200, savedToken = false, waiting = false
     const path = new URL(route.request().url()).pathname;
     let body = [];
     let responseStatus = 200;
-    if (path.endsWith("telegram-webapp")) {
+    if (path.endsWith("/auth/providers")) {
+      body = { vk: false, yandex: false, telegram_bot_id: 1234567890 };
+    } else if (path.endsWith("telegram-webapp")) {
       const request = route.request().postDataJSON();
       requests.push(request);
       responseStatus = request.accept_terms && request.accept_personal_data ? 200 : status;
@@ -336,7 +338,7 @@ try {
     }));
     await page.route("**/api/v1/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
-      if (path === "/api/v1/auth/providers") return route.fulfill({ json: { vk: true, yandex: true } });
+      if (path === "/api/v1/auth/providers") return route.fulfill({ json: { vk: true, yandex: true, telegram_bot_id: 1234567890 } });
       if (path === "/api/v1/auth/telegram") {
         const request = route.request().postDataJSON();
         logins.push(request);
