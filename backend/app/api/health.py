@@ -1,11 +1,11 @@
 import asyncio
 
 from fastapi import APIRouter, Response, status
-from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.db import engine
+from app.core.redis import get_redis
 
 CHECK_TIMEOUT_SECONDS = 3
 
@@ -22,17 +22,11 @@ async def database_ready() -> bool:
 
 
 async def redis_ready() -> bool:
-    redis = Redis.from_url(
-        get_settings().redis_url,
-        socket_connect_timeout=CHECK_TIMEOUT_SECONDS,
-        socket_timeout=CHECK_TIMEOUT_SECONDS,
-    )
     try:
-        await redis.ping()
+        async with asyncio.timeout(CHECK_TIMEOUT_SECONDS):
+            await get_redis(get_settings().redis_url).ping()
     except Exception:
         return False
-    finally:
-        await redis.aclose()
     return True
 
 
