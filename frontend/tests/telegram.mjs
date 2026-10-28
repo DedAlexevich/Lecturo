@@ -309,16 +309,76 @@ try {
     const miniApp = await setup("android", 401);
     await miniApp.page.goto(base + path);
     await miniApp.page.getByRole("alert").filter({ hasText: "Вход через Telegram" }).waitFor();
-    assert.equal(await miniApp.page.locator(".auth-telegram").count(), 0);
+    assert.equal(await miniApp.page.getByRole("button", { name: "Войти через Telegram" }).count(), 0);
     assert.equal(await miniApp.page.getByRole("button", { name: "Повторить вход" }).count(), 1);
     assert.equal(await miniApp.page.getByRole("textbox", { name: "Почта" }).count(), 1);
     assert.deepEqual(miniApp.errors, []);
     await miniApp.context.close();
     const browserPage = await setup(undefined);
     await browserPage.page.goto(base + path);
-    await browserPage.page.locator(".auth-telegram").waitFor({ state: "attached" });
+    await browserPage.page.getByRole("button", { name: "Войти через Telegram" }).waitFor();
     assert.equal(browserPage.requests.length, 0);
     await browserPage.context.close();
+  }
+  for (const colorScheme of ["light", "dark"]) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme });
+    const page = await context.newPage();
+    const errors = [];
+    const logins = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("https://telegram.org/js/telegram-widget.js*", (route) => route.fulfill({
+      contentType: "text/javascript",
+      body: `window.Telegram = window.Telegram || {};
+        window.Telegram.Login = { auth: (options, callback) => {
+          window.telegramLoginOptions = options;
+          callback({ id: 7, first_name: "Анна", auth_date: 1700000000, hash: "abc" });
+        } };`,
+    }));
+    await page.route("**/api/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/v1/auth/providers") return route.fulfill({ json: { vk: true, yandex: true } });
+      if (path === "/api/v1/auth/telegram") {
+        const request = route.request().postDataJSON();
+        logins.push(request);
+        return request.accept_terms && request.accept_personal_data
+          ? route.fulfill({ json: { access_token: "web-token", token_type: "bearer" } })
+          : route.fulfill({ status: 403, json: { detail: "Нужно принять документы" } });
+      }
+      if (path === "/api/v1/me") return route.fulfill({ json: { id: "1", display_name: "Анна", email: null, plan: "free", identities: [], balance_seconds: 0 } });
+      return route.fulfill({ json: [] });
+    });
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(base + "/login");
+      const names = ["Войти через Telegram", "Войти через VK", "Войти через Яндекс"];
+      const buttons = names.map((name) => page.getByRole("button", { name }));
+      for (const button of buttons) await button.waitFor();
+      await page.waitForFunction(() => !document.querySelector(".provider-button[aria-busy]"));
+      const boxes = await Promise.all(buttons.map((button) => button.boundingBox()));
+      const logos = await Promise.all(buttons.map((button) => button.locator(".provider-logo").boundingBox()));
+      for (const box of boxes) {
+        assert.equal(Math.round(box.width), Math.round(boxes[0].width));
+        assert.equal(Math.round(box.height), Math.round(boxes[0].height));
+      }
+      logos.forEach((logo, index) => {
+        assert.equal(Math.round(logo.width), Math.round(logos[0].width));
+        assert.equal(Math.round(boxes[index].x + boxes[index].width - logo.x - logo.width), Math.round(boxes[0].x + boxes[0].width - logos[0].x - logos[0].width));
+      });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      if (process.env.SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.SCREENSHOT_DIR}/login-${colorScheme}-${width}.png`, fullPage: true });
+    }
+    await page.getByRole("button", { name: "Войти через Telegram" }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("dialog", { name: "Создание аккаунта" }).waitFor();
+    assert.deepEqual(await page.evaluate(() => window.telegramLoginOptions), { bot_id: 1234567890, request_access: "write", lang: "ru" });
+    for (const label of await page.getByRole("dialog").locator("label.checkbox").all()) await label.locator(".checkbox__box").click();
+    await page.getByRole("button", { name: "Продолжить" }).click();
+    await page.waitForURL((url) => url.pathname === "/");
+    assert.equal(logins.length, 2);
+    assert.deepEqual(logins[0], { id: 7, first_name: "Анна", auth_date: 1700000000, hash: "abc", accept_terms: false, accept_personal_data: false });
+    assert.equal(logins[1].accept_terms, true);
+    assert.deepEqual(errors, []);
+    await context.close();
   }
   for (const platform of ["android", undefined]) {
     const { context, page, errors } = await setup(platform, 200, !platform);
