@@ -146,7 +146,9 @@ async def test_same_key_of_two_users_creates_two_payments(client, user, auth_hea
         other = User(display_name="Другой", email=f"other-{user.id}@lecturo.test")
         session.add(other)
         await session.commit()
-    other_headers = {"Authorization": f"Bearer {create_access_token(other.id)}"}
+        await session.refresh(other)
+    token = create_access_token(other.id, other.token_version)
+    other_headers = {"Authorization": f"Bearer {token}"}
 
     try:
         first = await client.post(
