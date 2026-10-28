@@ -204,7 +204,7 @@ async def test_inspect_link_probes_duration_of_direct_file(public_host, monkeypa
     async def follow(url):
         return "https://cdn.lecturo.test/lecture.mp4"
 
-    monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "probe_remote_duration", probe)
     monkeypatch.setattr(download, "follow_redirects", follow)
 
     link = await inspect_link("https://files.lecturo.test/lecture.mp4")
@@ -224,7 +224,7 @@ async def test_inspect_link_rejects_unknown_duration(public_host, monkeypatch):
     async def follow(url):
         return url
 
-    monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "probe_remote_duration", probe)
     monkeypatch.setattr(download, "follow_redirects", follow)
 
     with pytest.raises(LinkError, match="длительность"):
@@ -258,14 +258,14 @@ async def test_inspect_link_checks_media_url_before_probe(monkeypatch, media_url
         probed.append(url)
         return 60.0
 
-    monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "probe_remote_duration", probe)
 
     with pytest.raises(LinkError, match=message):
         await inspect_link("http://93.184.216.34/lecture")
     assert probed == []
 
 
-async def test_probe_duration_does_not_read_local_files(tmp_path):
+async def test_probe_remote_duration_does_not_read_local_files(tmp_path):
     path = tmp_path / "lecture.wav"
     with wave.open(str(path), "wb") as audio:
         audio.setnchannels(1)
@@ -273,8 +273,8 @@ async def test_probe_duration_does_not_read_local_files(tmp_path):
         audio.setframerate(8000)
         audio.writeframes(b"\0\0" * 8000)
 
-    assert await download.probe_duration(str(path)) is None
-    assert await download.probe_duration(f"file:{path}") is None
+    assert await download.probe_remote_duration(str(path)) is None
+    assert await download.probe_remote_duration(f"file:{path}") is None
 
 
 async def test_download_step_rejects_internal_link():
@@ -383,7 +383,7 @@ async def test_inspect_link_for_yandex_disk(public_host, monkeypatch):
     async def follow(url):
         return url
 
-    monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "probe_remote_duration", probe)
     monkeypatch.setattr(download, "follow_redirects", follow)
 
     link = await inspect_link(DISK_URL)

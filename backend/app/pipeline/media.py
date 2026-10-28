@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import Lecture, User
-from app.pipeline.runner import Report
+from app.pipeline.runner import Report, UserFacingError
 from app.services import quota
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ LOCAL_PROTOCOLS = "file,pipe"
 PLAYER_PROFILES = {"Constrained Baseline", "Baseline", "Main", "High"}
 
 
-class MediaError(Exception):
+class MediaError(UserFacingError):
     pass
 
 

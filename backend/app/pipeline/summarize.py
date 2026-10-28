@@ -258,6 +258,15 @@ def parse_json(content: str) -> dict[str, Any]:
     return data
 
 
+async def complete_json(llm: LLM, system: str, user: str, attempts: int) -> dict[str, Any]:
+    for _ in range(attempts):
+        try:
+            return parse_json(await llm.complete(system, user, json_mode=True))
+        except ValueError:
+            continue
+    return {}
+
+
 def parse_start(value: Any) -> float | None:
     try:
         return float(value)
@@ -298,21 +307,16 @@ def raw_part_summary(part: list[TranscriptSegment]) -> str:
 async def request_digest(
     llm: LLM, part: list[TranscriptSegment], short: bool = False
 ) -> PartDigest | None:
-    system = map_prompt(part, short)
-    for _ in range(MAP_ATTEMPTS):
-        try:
-            data = parse_json(await llm.complete(system, format_part(part), json_mode=True))
-        except ValueError:
-            continue
-        summary = str(data.get("summary") or "").strip()
-        if summary:
-            return PartDigest(
-                start=part[0].start,
-                end=part[-1].end,
-                summary=summary,
-                topics=parse_topics(data.get("topics")),
-            )
-    return None
+    data = await complete_json(llm, map_prompt(part, short), format_part(part), MAP_ATTEMPTS)
+    summary = str(data.get("summary") or "").strip()
+    if not summary:
+        return None
+    return PartDigest(
+        start=part[0].start,
+        end=part[-1].end,
+        summary=summary,
+        topics=parse_topics(data.get("topics")),
+    )
 
 
 def raw_digest(part: list[TranscriptSegment]) -> PartDigest:

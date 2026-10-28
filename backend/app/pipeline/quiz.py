@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Chapter, Lecture, Quiz, TranscriptSegment
-from app.pipeline.runner import Report
+from app.pipeline.runner import Report, UserFacingError
 from app.pipeline.stages import load_segments, require_ai_transfer
 from app.pipeline.summarize import (
     format_part,
@@ -30,7 +30,7 @@ TRANSCRIPT_CHAR_LIMIT = 60_000
 logger = logging.getLogger(__name__)
 
 
-class InvalidQuiz(ValueError):
+class InvalidQuiz(UserFacingError, ValueError):
     pass
 
 

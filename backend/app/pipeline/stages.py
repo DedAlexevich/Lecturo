@@ -8,13 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import SessionLocal
 from app.models import Lecture, ProcessingStep, StepName, TranscriptSegment, User
 from app.pipeline.media import probe_duration
-from app.pipeline.runner import Report, get_step
+from app.pipeline.runner import Report, UserFacingError, get_step
 from app.providers import get_speech_to_text
 from app.services.consents import AI_TRANSFER_REQUIRED, ai_transfer_given
 from app.services.quota import QuotaExceeded, charge_lecture
 
 
-class ConsentMissing(Exception):
+class ConsentMissing(UserFacingError):
     pass
 
 

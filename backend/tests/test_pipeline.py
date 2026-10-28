@@ -44,9 +44,11 @@ from app.models import (
     TranscriptSegment,
     UsageEntry,
 )
-from app.pipeline import download, events, media, stages, tasks
+from app.pipeline import download, events, media, runner, stages, tasks
 from app.pipeline.runner import run_step
+from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import STUB_PHRASES
+from app.providers.yandex import YandexSpeechKitError
 from app.services.quota import QuotaExceeded
 from tests.conftest import notifications
 
@@ -500,7 +502,7 @@ async def test_failed_step_retries_without_repeating_done_steps(
     assert failed.status == LectureStatus.failed
     assert steps[StepName.transcribe].status == StepStatus.done
     assert steps[StepName.summarize].status == StepStatus.failed
-    assert steps[StepName.summarize].error == "LLM недоступна"
+    assert steps[StepName.summarize].error == "Сервис конспектов недоступен, попробуйте позже"
     assert StepName.embed not in steps
 
     enqueued = []
@@ -980,8 +982,48 @@ async def test_failed_step_publishes_error(user, sample_audio, received, monkeyp
         "lecture_id": str(lecture.id),
         "user_id": str(user.id),
         "status": "failed",
-        "error": "сбой распознавания",
+        "error": "Сервис распознавания недоступен, попробуйте позже",
     }
+
+
+@pytest.mark.parametrize(
+    ("step", "error", "message"),
+    [
+        (
+            StepName.transcribe,
+            YandexSpeechKitError(
+                'загрузка аудио в Object Storage: 403 <?xml version="1.0"?><Error>'
+                "<Code>AccessDenied</Code><BucketName>lecturo-audio</BucketName></Error>"
+            ),
+            "Сервис распознавания недоступен, попробуйте позже",
+        ),
+        (
+            StepName.summarize,
+            OpenAICompatibleError(
+                '/chat/completions: API ответил 402: {"error": {"code": "insufficient_quota"}}'
+            ),
+            "Сервис конспектов недоступен, попробуйте позже",
+        ),
+    ],
+    ids=["stt", "llm"],
+)
+async def test_status_hides_provider_response(
+    user, sample_audio, client, auth_headers, monkeypatch, step, error, message
+):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken(session, lecture, report):
+        raise error
+
+    monkeypatch.setitem(tasks.HANDLERS, step, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
+
+    failed = [item for item in response.json()["steps"] if item["status"] == "failed"]
+    assert [item["error"] for item in failed] == [message]
+    for raw in ("lecturo-audio", "AccessDenied", "insufficient_quota", "API ответил"):
+        assert raw not in response.text
 
 
 async def test_error_outside_step_publishes_failed(user, sample_audio, received, monkeypatch):
@@ -995,7 +1037,7 @@ async def test_error_outside_step_publishes_failed(user, sample_audio, received,
         await tasks.process_lecture({}, str(lecture.id))
 
     last = (await received(lecture))[-1]
-    assert (last["status"], last["error"]) == ("failed", "база недоступна")
+    assert (last["status"], last["error"]) == ("failed", runner.PROCESSING_FAILED)
 
 
 async def test_ready_lecture_records_notification(user, sample_audio):
