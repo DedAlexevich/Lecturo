@@ -44,7 +44,7 @@ from app.models import (
     TranscriptSegment,
     UsageEntry,
 )
-from app.pipeline import download, events, media, runner, stages, tasks
+from app.pipeline import download, events, jobs, media, runner, stages, tasks
 from app.pipeline.runner import run_step
 from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import STUB_PHRASES
@@ -1118,7 +1118,7 @@ async def test_cancelled_job_is_not_started():
     async def fake_process(ctx, job_lecture_id):
         calls.append(job_lecture_id)
 
-    job_id = tasks.lecture_job_id(lecture_id)
+    job_id = jobs.lecture_job_id(lecture_id)
     redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     worker = Worker(
         functions=[arq_func(fake_process, name="process_lecture")],
@@ -1129,9 +1129,9 @@ async def test_cancelled_job_is_not_started():
         poll_delay=0.1,
     )
     try:
-        assert not await tasks.cancel_lecture_job(lecture_id)
+        assert not await jobs.abort_job(job_id)
         await tasks.enqueue_lecture(lecture_id)
-        assert await tasks.cancel_lecture_job(lecture_id)
+        assert await jobs.abort_job(job_id)
         await worker.main()
     finally:
         await redis.delete(job_key_prefix + job_id)
@@ -1139,7 +1139,7 @@ async def test_cancelled_job_is_not_started():
         await redis.zrem(abort_jobs_ss, job_id)
         await worker.close()
     assert calls == []
-    assert not await tasks.cancel_lecture_job(lecture_id)
+    assert not await jobs.abort_job(job_id)
 
 
 async def interrupted_lecture(user, source: Path, step: StepName) -> Lecture:
@@ -1175,7 +1175,7 @@ async def arq_redis() -> AsyncIterator[ArqRedis]:
 
 async def test_orphaned_job_is_released_on_startup(user, sample_video, arq_redis):
     lecture = await interrupted_lecture(user, sample_video, StepName.audio)
-    job_id = tasks.lecture_job_id(lecture.id)
+    job_id = jobs.lecture_job_id(lecture.id)
     await arq_redis.enqueue_job("process_lecture", str(lecture.id), _job_id=job_id)
     await arq_redis.set(in_progress_key_prefix + job_id, b"1")
 
@@ -1194,7 +1194,7 @@ async def test_lost_job_is_enqueued_on_startup(user, sample_video, arq_redis):
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 1
 
-    job_id = tasks.lecture_job_id(lecture.id)
+    job_id = jobs.lecture_job_id(lecture.id)
     assert await Job(job_id, arq_redis).status() == JobStatus.queued
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
     steps = steps_by_name(await load(lecture.id))
@@ -1231,14 +1231,14 @@ async def test_finished_and_waiting_lectures_are_not_resumed(user, sample_audio,
 
 async def test_interrupted_regeneration_is_left_to_its_job(user, sample_audio, arq_redis):
     lecture = await interrupted_lecture(user, sample_audio, StepName.summarize)
-    job_id = tasks.regeneration_job_id(lecture.id)
+    job_id = jobs.regeneration_job_id(lecture.id)
     await arq_redis.enqueue_job("process_regeneration", str(lecture.id), _job_id=job_id)
     await arq_redis.set(in_progress_key_prefix + job_id, b"1")
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 0
 
     assert await Job(job_id, arq_redis).status() == JobStatus.queued
-    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).info() is None
+    assert await Job(jobs.lecture_job_id(lecture.id), arq_redis).info() is None
     assert (await load(lecture.id)).status == LectureStatus.processing
 
 
@@ -1251,4 +1251,4 @@ async def test_ready_lecture_with_pending_video_is_resumed(user, sample_video, a
         await session.commit()
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 1
-    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+    assert await Job(jobs.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued

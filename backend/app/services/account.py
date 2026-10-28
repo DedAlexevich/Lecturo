@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import AuthIdentity, AuthProvider, Lecture, Payment, User
+from app.pipeline.jobs import cancel_lecture_jobs
 from app.pipeline.stages import discard_operation_objects, lock_operation_objects
 from app.schemas.user import AccountDeleteIn
 from app.services.auth import hash_password, verify_password
@@ -109,5 +110,6 @@ async def delete_account(session: AsyncSession, user: User) -> None:
     await session.execute(update(Payment).where(Payment.user_id == user_id).values(raw={}))
     await session.execute(delete(User).where(User.id == user_id))
     await session.commit()
+    await cancel_lecture_jobs(lecture_ids)
     await asyncio.to_thread(remove_files, files, user_id)
     await discard_operation_objects(stt_objects)

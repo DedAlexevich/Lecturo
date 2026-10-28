@@ -4,13 +4,11 @@ import logging
 import uuid
 
 from arq import create_pool
-from arq.connections import ArqRedis, RedisSettings
-from arq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix
-from arq.jobs import Job, JobStatus
-from arq.utils import timestamp_ms
+from arq.connections import ArqRedis
+from arq.constants import default_queue_name, in_progress_key_prefix
+from arq.jobs import Job
 from sqlalchemy import or_, select, update
 
-from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import (
     Lecture,
@@ -24,6 +22,13 @@ from app.models import (
 )
 from app.pipeline import download, embed, media, quiz, stages, summarize
 from app.pipeline.events import add_notification, publish_status
+from app.pipeline.jobs import (
+    ACTIVE_JOB_STATUSES,
+    lecture_job_id,
+    queue_settings,
+    quiz_job_id,
+    regeneration_job_id,
+)
 from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
@@ -44,8 +49,6 @@ HANDLERS: dict[StepName, StepHandler] = {
 REGENERATION_STEPS = [StepName.summarize, StepName.embed]
 REGENERATION_FAILED = "Не удалось пересоздать главы и конспект, попробуйте позже"
 QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
-
-ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
 PLANS: dict[SourceType, list[StepName]] = {
     SourceType.upload: [StepName.audio, StepName.transcribe, StepName.summarize, StepName.embed],
@@ -316,12 +319,6 @@ async def refund(lecture_id: uuid.UUID) -> None:
         await session.commit()
 
 
-def queue_settings() -> RedisSettings:
-    settings = RedisSettings.from_dsn(get_settings().redis_url)
-    settings.conn_retries = 0
-    return settings
-
-
 async def enqueue(name: str, job_id: str, *args: str) -> None:
     redis = await create_pool(queue_settings())
     try:
@@ -330,24 +327,12 @@ async def enqueue(name: str, job_id: str, *args: str) -> None:
         await redis.aclose()
 
 
-def lecture_job_id(lecture_id: uuid.UUID) -> str:
-    return f"lecture:{lecture_id}"
-
-
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
     await enqueue("process_lecture", lecture_job_id(lecture_id), str(lecture_id))
 
 
-def regeneration_job_id(lecture_id: uuid.UUID) -> str:
-    return f"regenerate:{lecture_id}"
-
-
 async def enqueue_regeneration(lecture_id: uuid.UUID) -> None:
     await enqueue("process_regeneration", regeneration_job_id(lecture_id), str(lecture_id))
-
-
-def quiz_job_id(lecture_id: uuid.UUID) -> str:
-    return f"quiz:{lecture_id}"
 
 
 async def enqueue_quiz(lecture_id: uuid.UUID) -> None:
@@ -358,29 +343,5 @@ async def quiz_job_active(lecture_id: uuid.UUID) -> bool:
     redis = await create_pool(queue_settings())
     try:
         return await Job(quiz_job_id(lecture_id), redis).status() in ACTIVE_JOB_STATUSES
-    finally:
-        await redis.aclose()
-
-
-async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(lecture_job_id(lecture_id))
-
-
-async def cancel_quiz_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(quiz_job_id(lecture_id))
-
-
-async def cancel_regeneration_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(regeneration_job_id(lecture_id))
-
-
-async def abort_job(job_id: str) -> bool:
-    redis = await create_pool(queue_settings())
-    try:
-        job = Job(job_id, redis)
-        if await job.status() not in ACTIVE_JOB_STATUSES:
-            return False
-        await redis.zadd(abort_jobs_ss, {job.job_id: timestamp_ms()})
-        return True
     finally:
         await redis.aclose()

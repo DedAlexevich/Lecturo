@@ -13,8 +13,9 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
+from app.pipeline.jobs import queue_settings
 from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
-from app.pipeline.tasks import enqueue, queue_settings
+from app.pipeline.tasks import enqueue
 from app.providers import LLM, get_llm
 from app.services.consents import ai_transfer_given
 

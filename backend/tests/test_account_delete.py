@@ -5,6 +5,9 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
+from arq import create_pool
+from arq.connections import RedisSettings
+from arq.constants import abort_jobs_ss, default_queue_name, job_key_prefix
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
 
@@ -21,7 +24,7 @@ from app.models import (
     SourceType,
     User,
 )
-from app.pipeline import tasks
+from app.pipeline import jobs, tasks
 from app.services.auth import hash_password
 from tests.test_telegram_auth import BOT_TOKEN, signed
 from tests.test_telegram_webapp import init_data, webapp_fields
@@ -246,3 +249,39 @@ async def test_worker_removes_files_of_deleted_account(client, account, storage)
     assert await tasks.process_lecture({}, str(lecture.id)) == "missing"
 
     assert not any(file.exists() for file in files[:3])
+
+
+async def test_delete_cancels_jobs_of_all_lectures(client, account, storage):
+    first, _ = await add_lecture(account, storage)
+    second, _ = await add_lecture(account, storage)
+    job_ids = [
+        jobs.lecture_job_id(first.id),
+        jobs.video_job_id(first.id),
+        jobs.quiz_job_id(second.id),
+        jobs.regeneration_job_id(second.id),
+    ]
+    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    try:
+        for job_id in job_ids:
+            await redis.enqueue_job("process_lecture", job_id, _job_id=job_id)
+
+        response = await client.post(URL, json={"password": PASSWORD}, headers=headers(account))
+        assert response.status_code == 204
+
+        assert all([await redis.zscore(abort_jobs_ss, job_id) for job_id in job_ids])
+    finally:
+        for job_id in job_ids:
+            await redis.delete(job_key_prefix + job_id)
+            await redis.zrem(default_queue_name, job_id)
+            await redis.zrem(abort_jobs_ss, job_id)
+        await redis.aclose()
+
+
+async def test_delete_works_when_queue_is_down(client, account, storage, monkeypatch):
+    await add_lecture(account, storage)
+    monkeypatch.setattr(jobs, "queue_settings", lambda: RedisSettings(port=1, conn_retries=0))
+
+    response = await client.post(URL, json={"password": PASSWORD}, headers=headers(account))
+    assert response.status_code == 204
+    async with SessionLocal() as session:
+        assert await session.get(User, account.id) is None
