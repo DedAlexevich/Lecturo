@@ -366,7 +366,7 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
             return
         total = status.get("total_bytes") or status.get("total_bytes_estimate")
         downloaded = status.get("downloaded_bytes", 0)
-        if max(total or 0, downloaded) > MAX_DOWNLOAD_BYTES:
+        if max(status.get("total_bytes") or 0, downloaded) > MAX_DOWNLOAD_BYTES:
             raise LinkError("Файл по ссылке больше 2 ГБ")
         if time.monotonic() > deadline:
             raise LinkError("Скачивание по ссылке заняло больше часа")
