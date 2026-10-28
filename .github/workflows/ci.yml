@@ -9,9 +9,13 @@ concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -46,13 +50,26 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/pyproject.toml
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-inter fonts-dejavu-core
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-ffmpeg-pango-v1
+      - name: System packages
+        run: |
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives="$HOME/apt-archives" ffmpeg libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-inter fonts-dejavu-core postgresql-common
+          sudo chown -R "$USER" ~/apt-archives
+      - run: sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y && sudo apt-get install -y --no-install-recommends postgresql-client-16
+      - run: echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python ../scripts/check_comments.py . ../scripts
       - run: test "$(alembic heads | wc -l)" -eq 1
       - run: alembic upgrade head
+      - name: Migrations downgrade
+        run: alembic downgrade base && alembic upgrade head
       - run: alembic check
       - run: pytest
       - name: openapi.json up to date
@@ -62,6 +79,7 @@ jobs:
 
   bot:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -148,12 +166,63 @@ jobs:
           timeout 30 bash -c 'until curl -fsS http://127.0.0.1:5186/ >/dev/null; do sleep 1; done'
           npm run test:telegram
 
+  shellcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - run: shellcheck --version
+      - run: shellcheck -x -S warning infra/*.sh infra/backup/*.sh infra/mail/*.sh scripts/*.sh
+
   compose:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: lecturo
     steps:
       - uses: actions/checkout@v5
       - run: cp .env.example .env
-      - run: docker compose up -d --build --wait --wait-timeout 180 db redis api worker bot frontend tusd caddy db-backup
+      - name: Prod compose config
+        env:
+          SITE_ADDRESS: lecturo.test
+        run: docker compose -f docker-compose.yml -f infra/compose.prod.yml config -q
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          load: true
+          tags: lecturo-api,lecturo-worker,lecturo-migrate
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: bot
+          load: true
+          tags: lecturo-bot
+          cache-from: type=gha,scope=bot
+          cache-to: type=gha,scope=bot,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          load: true
+          build-args: VITE_TELEGRAM_BOT_USERNAME=
+          tags: lecturo-frontend
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: infra/mail
+          load: true
+          tags: lecturo-mail
+          cache-from: type=gha,scope=mail
+          cache-to: type=gha,scope=mail,mode=max
+      - name: Mail image starts
+        env:
+          SITE_ADDRESS: lecturo.test
+        run: |
+          docker compose -f docker-compose.yml -f infra/compose.prod.yml up -d --no-deps --wait --wait-timeout 120 mail
+          docker compose -f docker-compose.yml -f infra/compose.prod.yml rm -sf mail
+      - run: docker compose up -d --wait --wait-timeout 180 db redis api worker bot frontend tusd caddy db-backup
       - run: curl -fsS http://localhost/api/v1/health
       - run: curl -fsS http://localhost/ | grep -q Lecturo
       - name: Hooks endpoint closed from outside
@@ -175,6 +244,38 @@ jobs:
           infra/backup/backup.sh
           infra/backup/check.sh
           echo yes | infra/backup/restore.sh "$(ls backups/lecturo-*.dump)"
+          curl -fsS http://localhost/api/v1/health
+      - name: Encrypted backup, upload and restore
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends age
+          python3 -m venv "$RUNNER_TEMP/s3"
+          "$RUNNER_TEMP/s3/bin/pip" install -q "moto[server]==5.0.28"
+          "$RUNNER_TEMP/s3/bin/moto_server" -p 9000 > "$RUNNER_TEMP/s3.log" 2>&1 &
+          timeout 60 sh -c 'until curl -fsS -o /dev/null http://localhost:9000/; do sleep 1; done'
+          export BACKUP_S3_ACCESS_KEY_ID=backup-ci BACKUP_S3_SECRET_ACCESS_KEY="$(openssl rand -hex 16)"
+          export BACKUP_S3_ENDPOINT=http://localhost:9000 BACKUP_S3_REGION=us-east-1 BACKUP_S3_BUCKET=backups
+          printf 'user = "%s:%s"\n' "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" |
+            curl -fsS -o /dev/null -K - --aws-sigv4 "aws:amz:us-east-1:s3" -X PUT http://localhost:9000/backups
+          age-keygen -o "$RUNNER_TEMP/backup.key"
+          export BACKUP_AGE_RECIPIENT="$(age-keygen -y "$RUNNER_TEMP/backup.key")"
+          rm -f backups/lecturo-*
+          infra/backup/backup.sh
+          archive=$(ls backups/lecturo-*.tar.age)
+          test -z "$(ls backups/lecturo-*.dump 2>/dev/null)"
+          printf 'user = "%s:%s"\n' "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" |
+            curl -fsS -K - --aws-sigv4 "aws:amz:us-east-1:s3" -o "$RUNNER_TEMP/uploaded.tar.age" "http://localhost:9000/backups/daily/$(basename "$archive")"
+          cmp "$archive" "$RUNNER_TEMP/uploaded.tar.age"
+          age -d -i "$RUNNER_TEMP/backup.key" "$archive" | tar -tf - | grep -qx lecturo.dump
+          rm -f backups/pre-restore-*
+          for day in 01 02 03; do
+            age -d -i "$RUNNER_TEMP/backup.key" "$archive" | tar -xOf - lecturo.dump > "backups/pre-restore-202601$day-000000.dump"
+          done
+          echo yes | BACKUP_AGE_IDENTITY="$RUNNER_TEMP/backup.key" infra/backup/restore.sh "$archive"
+          test "$(ls backups/pre-restore-* | wc -l)" -eq 3
+          ls backups/pre-restore-*.tar.age
+          test ! -e backups/pre-restore-20260101-000000.dump
+          echo yes | BACKUP_AGE_IDENTITY="$RUNNER_TEMP/backup.key" infra/backup/restore.sh backups/pre-restore-20260102-000000.dump
+          test "$(ls backups/pre-restore-* | wc -l)" -eq 3
           curl -fsS http://localhost/api/v1/health
       - if: failure()
         run: docker compose logs

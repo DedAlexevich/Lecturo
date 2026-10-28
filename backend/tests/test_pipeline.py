@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from arq import create_pool
+from arq import Retry, create_pool
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import (
     abort_jobs_ss,
@@ -44,9 +44,15 @@ from app.models import (
     TranscriptSegment,
     UsageEntry,
 )
-from app.pipeline import download, events, media, stages, tasks
+from app.pipeline import download, events, jobs, media, runner, stages, tasks
+from app.pipeline.runner import run_step
+from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import STUB_PHRASES
+from app.providers.yandex import YandexSpeechKitError
+from app.services.quota import QuotaExceeded
 from tests.conftest import notifications
+
+ENQUEUE_VIDEO = tasks.enqueue_video
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -498,7 +504,7 @@ async def test_failed_step_retries_without_repeating_done_steps(
     assert failed.status == LectureStatus.failed
     assert steps[StepName.transcribe].status == StepStatus.done
     assert steps[StepName.summarize].status == StepStatus.failed
-    assert steps[StepName.summarize].error == "LLM недоступна"
+    assert steps[StepName.summarize].error == "Сервис конспектов недоступен, попробуйте позже"
     assert StepName.embed not in steps
 
     enqueued = []
@@ -659,6 +665,7 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
     async def fake_download(session, lecture, report):
         order.append(StepName.download)
         lecture.audio_path = f"/data/storage/audio/{lecture.id}.opus"
+        lecture.duration_sec = 600.0
 
     original = tasks.HANDLERS[StepName.transcribe]
 
@@ -692,7 +699,7 @@ async def test_link_lecture_charges_downloaded_duration(user, sample_audio, monk
     async def allow(url):
         pass
 
-    def fake_fetch(url, target, progress):
+    def fake_fetch(url, target, progress, stop):
         path = target.with_suffix(".opus")
         shutil.copy(sample_audio, path)
         return path
@@ -811,7 +818,7 @@ async def test_transcribe_waits_for_quota(user, sample_audio, monkeypatch):
     assert await charged_seconds(lecture.id) == 0
 
 
-async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
+async def test_transcribe_probes_missing_duration_before_charging(user, sample_audio):
     lecture = await create_lecture(user, sample_audio)
     async with SessionLocal() as session:
         stored = await session.get(Lecture, lecture.id)
@@ -820,8 +827,115 @@ async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
 
     await run_transcribe(lecture.id)
 
-    assert (await load(lecture.id)).duration_sec == 59.5
-    assert await charged_seconds(lecture.id) == 60
+    duration = (await load(lecture.id)).duration_sec
+    assert duration == pytest.approx(2.0, abs=0.1)
+    assert await charged_seconds(lecture.id) == math.ceil(duration)
+
+
+class RecordingSpeechToText:
+    async def discard(self, object_keys):
+        pass
+
+    def __init__(self, lecture_id, fail: bool = False) -> None:
+        self.lecture_id = lecture_id
+        self.fail = fail
+        self.charged_at_start: list[int] = []
+
+    async def transcribe(
+        self, audio_path, language="ru", *, duration=None, on_progress=None, operations=None
+    ):
+        self.charged_at_start.append(await charged_seconds(self.lecture_id))
+        if self.fail:
+            raise RuntimeError("SpeechKit недоступен")
+        return []
+
+
+async def test_transcribe_is_skipped_without_quota(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.duration_sec = 10_000_000.0
+        await session.commit()
+    stt = RecordingSpeechToText(lecture.id)
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+
+    with pytest.raises(QuotaExceeded):
+        await run_transcribe(lecture.id)
+
+    assert stt.charged_at_start == []
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def test_quota_is_charged_before_recognition_and_refunded_on_failure(
+    user, sample_audio, monkeypatch
+):
+    lecture = await create_lecture(user, sample_audio)
+    stt = RecordingSpeechToText(lecture.id, fail=True)
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, noop_step)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.video, noop_step)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    assert stt.charged_at_start == [2]
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def noop_step(session, lecture, report):
+    pass
+
+
+class InterruptedSpeechToText:
+    def __init__(self) -> None:
+        self.loaded: list[dict | None] = []
+        self.discarded: list[list[str]] = []
+
+    async def discard(self, object_keys):
+        self.discarded.append(object_keys)
+
+    async def transcribe(
+        self, audio_path, language="ru", *, duration=None, on_progress=None, operations=None
+    ):
+        state = await operations.load("full")
+        self.loaded.append(state)
+        if state is None:
+            await operations.save("full", {"object_key": "stt/a.opus", "operation_id": "op1"})
+            raise asyncio.CancelledError
+        return []
+
+
+async def test_saved_operation_survives_worker_restart(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    stt = InterruptedSpeechToText()
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_step_alone(lecture.id)
+    async with SessionLocal() as session:
+        step = await session.scalar(
+            select(ProcessingStep).where(
+                ProcessingStep.lecture_id == lecture.id, ProcessingStep.step == StepName.transcribe
+            )
+        )
+        assert step.external == {
+            "operations": {"full": {"object_key": "stt/a.opus", "operation_id": "op1"}}
+        }
+
+    await run_step_alone(lecture.id)
+
+    assert stt.loaded == [None, {"object_key": "stt/a.opus", "operation_id": "op1"}]
+    assert stt.discarded == [["stt/a.opus"]]
+    loaded = await load(lecture.id)
+    transcribe_step = steps_by_name(loaded)[StepName.transcribe]
+    assert transcribe_step.status == StepStatus.done
+    assert transcribe_step.external is None
+    assert await charged_seconds(lecture.id) == 2
+
+
+async def run_step_alone(lecture_id) -> None:
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        await run_step(session, lecture, StepName.transcribe, stages.transcribe)
 
 
 Received = Callable[[Lecture], Awaitable[list[dict]]]
@@ -870,8 +984,48 @@ async def test_failed_step_publishes_error(user, sample_audio, received, monkeyp
         "lecture_id": str(lecture.id),
         "user_id": str(user.id),
         "status": "failed",
-        "error": "сбой распознавания",
+        "error": "Сервис распознавания недоступен, попробуйте позже",
     }
+
+
+@pytest.mark.parametrize(
+    ("step", "error", "message"),
+    [
+        (
+            StepName.transcribe,
+            YandexSpeechKitError(
+                'загрузка аудио в Object Storage: 403 <?xml version="1.0"?><Error>'
+                "<Code>AccessDenied</Code><BucketName>lecturo-audio</BucketName></Error>"
+            ),
+            "Сервис распознавания недоступен, попробуйте позже",
+        ),
+        (
+            StepName.summarize,
+            OpenAICompatibleError(
+                '/chat/completions: API ответил 402: {"error": {"code": "insufficient_quota"}}'
+            ),
+            "Сервис конспектов недоступен, попробуйте позже",
+        ),
+    ],
+    ids=["stt", "llm"],
+)
+async def test_status_hides_provider_response(
+    user, sample_audio, client, auth_headers, monkeypatch, step, error, message
+):
+    lecture = await create_lecture(user, sample_audio)
+
+    async def broken(session, lecture, report):
+        raise error
+
+    monkeypatch.setitem(tasks.HANDLERS, step, broken)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    response = await client.get(f"/api/v1/lectures/{lecture.id}/status", headers=auth_headers)
+
+    failed = [item for item in response.json()["steps"] if item["status"] == "failed"]
+    assert [item["error"] for item in failed] == [message]
+    for raw in ("lecturo-audio", "AccessDenied", "insufficient_quota", "API ответил"):
+        assert raw not in response.text
 
 
 async def test_error_outside_step_publishes_failed(user, sample_audio, received, monkeypatch):
@@ -885,7 +1039,7 @@ async def test_error_outside_step_publishes_failed(user, sample_audio, received,
         await tasks.process_lecture({}, str(lecture.id))
 
     last = (await received(lecture))[-1]
-    assert (last["status"], last["error"]) == ("failed", "база недоступна")
+    assert (last["status"], last["error"]) == ("failed", runner.PROCESSING_FAILED)
 
 
 async def test_ready_lecture_records_notification(user, sample_audio):
@@ -966,7 +1120,7 @@ async def test_cancelled_job_is_not_started():
     async def fake_process(ctx, job_lecture_id):
         calls.append(job_lecture_id)
 
-    job_id = tasks.lecture_job_id(lecture_id)
+    job_id = jobs.lecture_job_id(lecture_id)
     redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
     worker = Worker(
         functions=[arq_func(fake_process, name="process_lecture")],
@@ -977,9 +1131,9 @@ async def test_cancelled_job_is_not_started():
         poll_delay=0.1,
     )
     try:
-        assert not await tasks.cancel_lecture_job(lecture_id)
         await tasks.enqueue_lecture(lecture_id)
-        assert await tasks.cancel_lecture_job(lecture_id)
+        await jobs.cancel_lecture_jobs([lecture_id])
+        assert await redis.zscore(abort_jobs_ss, job_id) is not None
         await worker.main()
     finally:
         await redis.delete(job_key_prefix + job_id)
@@ -987,7 +1141,6 @@ async def test_cancelled_job_is_not_started():
         await redis.zrem(abort_jobs_ss, job_id)
         await worker.close()
     assert calls == []
-    assert not await tasks.cancel_lecture_job(lecture_id)
 
 
 async def interrupted_lecture(user, source: Path, step: StepName) -> Lecture:
@@ -1023,7 +1176,7 @@ async def arq_redis() -> AsyncIterator[ArqRedis]:
 
 async def test_orphaned_job_is_released_on_startup(user, sample_video, arq_redis):
     lecture = await interrupted_lecture(user, sample_video, StepName.audio)
-    job_id = tasks.lecture_job_id(lecture.id)
+    job_id = jobs.lecture_job_id(lecture.id)
     await arq_redis.enqueue_job("process_lecture", str(lecture.id), _job_id=job_id)
     await arq_redis.set(in_progress_key_prefix + job_id, b"1")
 
@@ -1042,7 +1195,7 @@ async def test_lost_job_is_enqueued_on_startup(user, sample_video, arq_redis):
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 1
 
-    job_id = tasks.lecture_job_id(lecture.id)
+    job_id = jobs.lecture_job_id(lecture.id)
     assert await Job(job_id, arq_redis).status() == JobStatus.queued
     assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
     steps = steps_by_name(await load(lecture.id))
@@ -1079,14 +1232,14 @@ async def test_finished_and_waiting_lectures_are_not_resumed(user, sample_audio,
 
 async def test_interrupted_regeneration_is_left_to_its_job(user, sample_audio, arq_redis):
     lecture = await interrupted_lecture(user, sample_audio, StepName.summarize)
-    job_id = tasks.regeneration_job_id(lecture.id)
+    job_id = jobs.regeneration_job_id(lecture.id)
     await arq_redis.enqueue_job("process_regeneration", str(lecture.id), _job_id=job_id)
     await arq_redis.set(in_progress_key_prefix + job_id, b"1")
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 0
 
     assert await Job(job_id, arq_redis).status() == JobStatus.queued
-    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).info() is None
+    assert await Job(jobs.lecture_job_id(lecture.id), arq_redis).info() is None
     assert (await load(lecture.id)).status == LectureStatus.processing
 
 
@@ -1099,4 +1252,62 @@ async def test_ready_lecture_with_pending_video_is_resumed(user, sample_video, a
         await session.commit()
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 1
-    assert await Job(tasks.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+    assert await Job(jobs.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+
+
+async def test_video_is_compressed_by_separate_job(user, sample_video, arq_redis, monkeypatch):
+    monkeypatch.setattr(tasks, "enqueue_video", ENQUEUE_VIDEO)
+    lecture = await create_lecture(user, sample_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    assert steps_by_name(await load(lecture.id))[StepName.video].status == StepStatus.pending
+    assert await Job(jobs.video_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+
+    assert await tasks.process_video({}, str(lecture.id)) == StepStatus.done
+    compressed = await load(lecture.id)
+    assert steps_by_name(compressed)[StepName.video].status == StepStatus.done
+    assert compressed.video_path is not None
+
+
+async def test_video_has_own_timeout(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+
+    async def endless(session, lecture, report):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(tasks, "VIDEO_TIMEOUT_SEC", 0.5)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.video, endless)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    lecture = await load(lecture.id)
+    step = steps_by_name(lecture)[StepName.video]
+    assert lecture.status == LectureStatus.ready
+    assert (step.status, step.error) == (StepStatus.failed, tasks.VIDEO_TIMED_OUT)
+    assert not media.original_path(lecture.id).exists()
+
+
+async def test_temporary_video_error_keeps_original(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+
+    async def later(lecture_id):
+        pass
+
+    async def disk_error(args, target, duration, report, error):
+        raise OSError("нет места на диске")
+
+    monkeypatch.setattr(tasks, "enqueue_video", later)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    monkeypatch.setattr(media, "encode", disk_error)
+
+    with pytest.raises(Retry):
+        await tasks.process_video({"job_try": 1}, str(lecture.id))
+    assert media.original_path(lecture.id).exists()
+    step = steps_by_name(await load(lecture.id))[StepName.video]
+    assert (step.status, step.error) == (StepStatus.pending, None)
+
+    final = {"job_try": tasks.VIDEO_ATTEMPTS}
+    assert await tasks.process_video(final, str(lecture.id)) == StepStatus.failed
+    assert not media.original_path(lecture.id).exists()
+    assert (await load(lecture.id)).status == LectureStatus.ready

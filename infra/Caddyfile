@@ -46,6 +46,14 @@
 		respond 404
 	}
 
+	@backup_upload path /api/v1/admin/backups/upload
+	handle @backup_upload {
+		request_body {
+			max_size 2GB
+		}
+		reverse_proxy api:8000
+	}
+
 	handle /api/* {
 		request_body {
 			max_size 10MB

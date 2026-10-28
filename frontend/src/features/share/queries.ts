@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 
@@ -56,6 +57,6 @@ export function useRevokeShare() {
 
 export function errorDetail(error: unknown) {
   if (!(error instanceof ApiError)) return null;
-  const body = error.body as { detail?: unknown } | null;
-  return typeof body?.detail === "string" ? body.detail : null;
+  const detail = detailOf(error.body);
+  return typeof detail === "string" ? detail : null;
 }

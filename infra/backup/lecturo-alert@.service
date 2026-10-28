@@ -1,0 +1,8 @@
+[Unit]
+Description=Lecturo Telegram alert about failed %i
+
+[Service]
+Type=oneshot
+User=deploy
+SupplementaryGroups=systemd-journal
+ExecStart=/opt/lecturo/infra/unit-failed.sh %i

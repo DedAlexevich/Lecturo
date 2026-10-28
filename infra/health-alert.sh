@@ -2,6 +2,7 @@
 set -euo pipefail
 
 failures_to_alert=3
+backup_max_age_hours=26
 
 cd "$(dirname "$0")/.."
 
@@ -10,16 +11,7 @@ env_value() {
 }
 
 notify() {
-  local token chat_id api_ip
-  token=$(env_value TELEGRAM_BOT_TOKEN)
-  chat_id=$(env_value ALERT_TELEGRAM_CHAT_ID)
-  api_ip=$(env_value TELEGRAM_API_IP)
-  if [ -z "$token" ] || [ -z "$chat_id" ]; then
-    echo "TELEGRAM_BOT_TOKEN or ALERT_TELEGRAM_CHAT_ID is not set, alert not sent: $1" >&2
-    return 1
-  fi
-  printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" |
-    curl -fsS -m 15 -o /dev/null -K - --resolve "api.telegram.org:443:${api_ip:-149.154.167.220}" --data-urlencode "chat_id=$chat_id" --data-urlencode "text=$1"
+  infra/notify.sh "$1"
 }
 
 service_problems() {
@@ -47,6 +39,20 @@ state_dir=${STATE_DIRECTORY:-${XDG_STATE_HOME:-$HOME/.local/state}/lecturo}
 mkdir -p "$state_dir"
 failures_file="$state_dir/health-failures"
 alerted_file="$state_dir/health-alerted"
+
+backup_dir=$(env_value BACKUP_DIR)
+backup_dir=${backup_dir:-./backups}
+backup_alerted_file="$state_dir/backup-alerted"
+fresh_backup=$(find "$backup_dir" -maxdepth 1 \( -name 'lecturo-*.dump' -o -name 'lecturo-*.tar.age' \) -mmin -$((backup_max_age_hours * 60)) -print -quit 2>/dev/null || true)
+if [ -n "$fresh_backup" ]; then
+  if [ -f "$backup_alerted_file" ] && notify "Бэкап Lecturo снова свежий: $fresh_backup"; then
+    rm -f "$backup_alerted_file"
+  fi
+elif [ ! -f "$backup_alerted_file" ]; then
+  if notify "Бэкап Lecturo устарел: в $backup_dir нет дампа моложе $backup_max_age_hours часов"; then
+    touch "$backup_alerted_file"
+  fi
+fi
 
 public_url=$(env_value PUBLIC_URL)
 url="${public_url:-http://localhost}/api/v1/health"

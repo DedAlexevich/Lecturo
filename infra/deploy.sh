@@ -79,7 +79,7 @@ main() {
       exit 1
     fi
     echo "$backup_log"
-    dump=$(sed -n 's/^saved \(.*\) (.*)$/\1/p' <<<"$backup_log")
+    dump=$(sed -n 's/^\(saved\|encrypted\) \(.*\) (.*)$/\2/p' <<<"$backup_log" | tail -n 1)
     if [ -z "$dump" ]; then
       echo "backup path not found in backup output, code returned to $previous" >&2
       restore_code "$previous"

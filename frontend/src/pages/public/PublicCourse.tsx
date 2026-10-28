@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import type { components } from "../../api/schema";
+import { formatDuration } from "../../lib/duration";
 import { lecturesCount } from "../home/format";
-import { formatDuration } from "../lecture/time";
 import { LocalBadge } from "./LocalBadge";
 import { SaveCopyButton } from "./SaveCopyButton";
 

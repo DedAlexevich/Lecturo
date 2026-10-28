@@ -23,7 +23,7 @@ repo_url=https://github.com/DedAlexevich/Lecturo.git
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
-apt-get install -y ca-certificates curl git ufw fail2ban unattended-upgrades
+apt-get install -y ca-certificates curl git ufw fail2ban unattended-upgrades age
 
 if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sh
@@ -73,7 +73,7 @@ if [ ! -f "$app_dir/.env" ]; then
   chmod 600 "$app_dir/.env"
 fi
 
-install -m 644 "$app_dir/infra/backup/lecturo-backup.service" "$app_dir/infra/backup/lecturo-backup.timer" /etc/systemd/system/
+install -m 644 "$app_dir/infra/backup/lecturo-backup.service" "$app_dir/infra/backup/lecturo-backup.timer" "$app_dir/infra/backup/lecturo-alert@.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now lecturo-backup.timer
 

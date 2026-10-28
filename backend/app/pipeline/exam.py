@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from arq import create_pool
-from arq.connections import RedisSettings
 from arq.jobs import Job, JobStatus
 from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
@@ -14,8 +13,11 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
-from app.pipeline.summarize import MAP_ATTEMPTS, load_prompt, parse_json
+from app.pipeline.jobs import queue_settings
+from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
+from app.pipeline.tasks import enqueue
 from app.providers import LLM, get_llm
+from app.services import maintenance
 from app.services.consents import ai_transfer_given
 
 
@@ -100,13 +102,7 @@ def outline(content_md: str) -> str:
 
 async def digest_lecture(llm: LLM, notes: LectureNotes) -> LectureDigest:
     request = f"# {notes.title}\n\n{notes.content_md}"
-    data: dict[str, Any] = {}
-    for _ in range(MAP_ATTEMPTS):
-        try:
-            data = parse_json(await llm.complete(load_prompt("exam_map"), request, json_mode=True))
-        except ValueError:
-            continue
-        break
+    data = await complete_json(llm, load_prompt("exam_map"), request, MAP_ATTEMPTS)
     return LectureDigest(
         title=notes.title,
         tickets=parse_tickets(data.get("tickets")),
@@ -146,15 +142,7 @@ async def compose_exam_sheet(
 ) -> ExamSheetDraft:
     digests = [await digest_lecture(llm, lecture) for lecture in notes]
     request = exam_reduce_request(course_title, digests)
-    data: dict[str, Any] = {}
-    for _ in range(MAP_ATTEMPTS):
-        try:
-            data = parse_json(
-                await llm.complete(load_prompt("exam_reduce"), request, json_mode=True)
-            )
-        except ValueError:
-            continue
-        break
+    data = await complete_json(llm, load_prompt("exam_reduce"), request, MAP_ATTEMPTS)
     return merge_digests(data, digests)
 
 
@@ -178,6 +166,7 @@ async def save_exam_sheet(
 
 
 async def build_exam_sheet(ctx: dict, course_id: str) -> str:
+    await maintenance.hold_job_while_active()
     course_uuid = uuid.UUID(course_id)
     async with SessionLocal() as session:
         row = (
@@ -195,6 +184,7 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         notes = await load_course_notes(session, course_uuid)
         if not notes:
             return "empty"
+        await session.commit()
         try:
             draft = await compose_exam_sheet(get_llm(), course_title, notes)
             await save_exam_sheet(
@@ -226,24 +216,12 @@ async def exam_sheet_failed(course_id: uuid.UUID) -> bool:
     return bool(await get_redis(get_settings().redis_url).exists(exam_sheet_failure_key(course_id)))
 
 
-def queue_settings() -> RedisSettings:
-    settings = RedisSettings.from_dsn(get_settings().redis_url)
-    settings.conn_retries = 0
-    return settings
-
-
 def exam_sheet_job_id(course_id: uuid.UUID) -> str:
     return f"exam-sheet:{course_id}"
 
 
 async def enqueue_exam_sheet(course_id: uuid.UUID) -> None:
-    redis = await create_pool(queue_settings())
-    try:
-        await redis.enqueue_job(
-            "build_exam_sheet", str(course_id), _job_id=exam_sheet_job_id(course_id)
-        )
-    finally:
-        await redis.aclose()
+    await enqueue("build_exam_sheet", exam_sheet_job_id(course_id), str(course_id))
 
 
 async def exam_sheet_in_progress(course_id: uuid.UUID) -> bool:

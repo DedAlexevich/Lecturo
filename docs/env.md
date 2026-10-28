@@ -33,6 +33,7 @@ cp .env.example .env
 | `PUBLIC_URL` | Публичный адрес сайта, например `https://lecturo.example`. Из него строятся ссылки в письмах, ссылки на шаринг и адрес возврата после оплаты. Бот показывает кнопку «Открыть Lecturo» только если адрес начинается с `https://` | на сервере | `http://localhost` | `backend/app/services/mail.py`, `api/billing.py`, `api/shares.py`, `bot/app/config.py` |
 | `SECRET_KEY` | Секрет для подписи токенов входа (JWT), ссылок на экспорт и видео. Длинная случайная строка, например из `openssl rand -hex 32`. Если `PUBLIC_URL` не указывает на localhost или начинается с `https://`, ключ должен быть не короче 32 символов и отличаться от значения по умолчанию и из `.env.example`, иначе `api` и `worker` не стартуют. После смены все пользователи будут разлогинены | на сервере | `dev-secret-change-me-before-production` | `backend/app/core/security.py` |
 | `POSTGRES_PASSWORD` | Пароль пользователя `lecturo` в Postgres. Из него же собираются `DATABASE_URL` для `api`, `worker` и `bot` | на сервере | `lecturo` | `docker-compose.yml` (db, api, worker, bot) |
+| `FORWARDED_ALLOW_IPS` | С каких адресов `api` принимает `X-Forwarded-For`. По умолчанию это частные диапазоны docker: порт `api` наружу не открыт, до него доходят только контейнеры проекта и сам сервер | нет | `172.16.0.0/12,192.168.0.0/16,10.0.0.0/8` | `docker-compose.yml` (api) |
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
 | `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
@@ -44,6 +45,13 @@ cp .env.example .env
 | `BACKUP_DB_SERVICE` | Сервис compose с Postgres, к которому подключаются скрипты бэкапа | нет | `db` | `infra/backup` |
 | `BACKUP_DB_CONTAINER` | Имя контейнера с Postgres. Если задано, скрипты бэкапа идут через `docker exec` в него, а не через compose | нет | пусто | `infra/backup` |
 | `BACKUP_CHECK_CONTAINER` | Имя временного контейнера Postgres, в котором `check.sh` проверяет восстановление бэкапа | нет | `lecturo-backup-check` | `infra/backup/check.sh` |
+| `BACKUP_AGE_RECIPIENT` | Публичный ключ age владельца (`age1...`). Если задан, бэкап на сервере вместе с ключом DKIM шифруется в `lecturo-<дата>-<время>.tar.age`, иначе остаётся незашифрованный `.dump`. См. [deploy.md](deploy.md#ключ-шифрования) | на сервере | пусто | `infra/backup` |
+| `BACKUP_AGE_IDENTITY` | Путь к приватному ключу age. Задаётся только на время запуска `restore.sh` для `.tar.age`, в `.env` не хранится | для восстановления | пусто | `infra/backup/restore.sh` |
+| `BACKUP_S3_BUCKET` | Бакет Yandex Object Storage для копии бэкапов вне сервера. Если не задан вместе с ключами, выгрузка пропускается. См. [deploy.md](deploy.md#копия-в-yandex-object-storage) | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_ACCESS_KEY_ID` | Идентификатор статического ключа сервисного аккаунта с ролью `storage.uploader` на этот бакет | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_SECRET_ACCESS_KEY` | Секрет этого ключа | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_ENDPOINT` | Адрес S3 API | нет | `https://storage.yandexcloud.net` | `infra/backup/common.sh` |
+| `BACKUP_S3_REGION` | Регион для подписи запросов | нет | `ru-central1` | `infra/backup/common.sh` |
 
 `DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
 
@@ -160,6 +168,7 @@ docker compose exec worker python -m app.pipeline.reindex
 | `SMTP_USER` | Логин. Если пуст, авторизация не выполняется | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_PASSWORD` | Пароль. Для Яндекса и Gmail нужен пароль приложения | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_FROM` | Адрес в поле «От». Локально при пустом значении берётся `SMTP_USER`, на сервере подставляется `noreply@<домен>`, поэтому для внешнего SMTP там его нужно заполнить | на сервере с внешним SMTP | пусто, на сервере `Lecturo <noreply@<домен>>` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
+| `COMPLAINTS_EMAIL` | Адрес, на который приходит письмо о каждой новой жалобе на публичную ссылку. Пусто: жалоба только сохраняется в базе и пишется в лог | нет | пусто | `backend/app/api/shares.py` |
 | `MAIL_DOMAIN` | Домен, от имени которого `mail` отправляет и подписывает письма. Только один домен без схемы и порта, например `lecturo.example`. Если в `SITE_ADDRESS` несколько адресов или схема, задайте `MAIL_DOMAIN` явно, иначе `mail` не запустится | нет | значение `SITE_ADDRESS` | `infra/compose.prod.yml`, `infra/mail` |
 
 Яндекс Почта:
@@ -183,9 +192,9 @@ Gmail:
 | `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
 | `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
 | `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
-| `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота и алертов. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml`, `infra/health-alert.sh` |
+| `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота и алертов. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml`, `infra/notify.sh` |
 | `YOUTUBE_PROXY` | Прокси для скачивания аудио с YouTube, например `socks5h://ytproxy:<пароль>@<ip>:1080`. С сервера в РФ YouTube недоступен, поэтому ссылки YouTube качаются через зарубежный сервер, остальные источники идут напрямую. Если пусто, YouTube качается напрямую. Как поднять прокси, описано в [deploy.md](deploy.md#прокси-для-youtube) | только на сервере | пусто | `backend/app/pipeline/download.py` |
-| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/health-alert.sh` |
+| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать, бэкап упал или устарел. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/notify.sh` |
 
 Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
@@ -261,7 +270,7 @@ Gmail:
 1. Зарегистрируйтесь в [личном кабинете ЮKassa](https://yookassa.ru) и создайте тестовый магазин.
 2. В настройках магазина найдите идентификатор магазина и впишите его в `YOOKASSA_SHOP_ID`.
 3. В разделе с ключами API выпустите секретный ключ и впишите его в `YOOKASSA_SECRET_KEY`. Ключ показывается один раз.
-4. В настройках HTTP-уведомлений укажите адрес `https://<домен>/api/v1/billing/webhook` и событие `payment.succeeded`. Адрес должен быть доступен из интернета, поэтому на локальной машине для проверки уведомлений нужен туннель.
+4. В настройках HTTP-уведомлений укажите адрес `https://<домен>/api/v1/billing/webhook` и события `payment.succeeded`, `payment.canceled` и `refund.succeeded`. По `refund.succeeded` при полном возврате отзывается подписка или пакет часов. Адрес должен быть доступен из интернета, поэтому на локальной машине для проверки уведомлений нужен туннель.
 5. Для оплаты в тестовом магазине используйте тестовые карты из документации ЮKassa: реальные деньги не списываются.
 6. Для боевого магазина пройдите подключение в ЮKassa и замените идентификатор и ключ на боевые. Если нужен чек, включите `YOOKASSA_RECEIPT=true`.
 
@@ -281,6 +290,22 @@ Gmail:
 | `FREE_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у бесплатных пользователей | `3` | `backend/app/services/quota.py`, `backend/app/pipeline/media.py` |
 | `SUBSCRIPTION_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у подписчиков | `30` | `backend/app/services/quota.py` |
 | `LOCAL_EMBEDDINGS_WEEKLY_SECONDS` | Недельный лимит секунд для результатов, посчитанных на устройстве пользователя (10 часов) | `36000` | `backend/app/api/local_results.py` |
+
+## Администраторы
+
+| Переменная | Описание | По умолчанию | Где используется |
+|---|---|---|---|
+| `INITIAL_ADMINS` | Почты или Telegram id через запятую. При старте api, если в базе ещё нет ни одного администратора, найденные пользователи получают права администратора. Если администратор уже есть, переменная ничего не меняет. Подробнее в [deploy.md](deploy.md#первый-администратор) | пусто | `backend/app/main.py`, `backend/app/services/admin.py` |
+
+## Админ-панель: логи и бэкапы
+
+| Переменная | Описание | По умолчанию | Где используется |
+|---|---|---|---|
+| `LOG_STREAM_LIMIT` | Сколько потоков логов в реальном времени можно держать открытыми одновременно | `3` | `backend/app/api/admin_logs.py` |
+| `BACKUP_MAX_UPLOAD_MB` | Максимальный размер дампа, который можно загрузить в панели, МБ. Caddy пропускает до 2 ГБ на `/api/v1/admin/backups/upload` | `2048` | `backend/app/services/admin_backups.py`, `infra/Caddyfile` |
+| `RESTORE_IDLE_WAIT_SECONDS` | Сколько секунд восстановление из панели ждёт, пока воркер закончит текущую обработку лекций | `300` | `backend/app/services/admin_backups.py` |
+
+Папка бэкапов внутри контейнера `api` всегда `/backups`: `docker-compose.yml` монтирует туда `BACKUP_DIR` с хоста, а значение переменной внутри контейнера переопределяет.
 
 ## Проверка
 

@@ -165,14 +165,12 @@ async def test_embed_saves_chunks_with_vectors(user, embeddings):
     assert chunks[0].text.startswith("слово 0 слово 1")
 
 
-async def test_embed_sends_texts_in_batches_and_reports_progress(user, embeddings, monkeypatch):
-    monkeypatch.setattr(embed, "BATCH_SIZE", 2)
+async def test_embed_sends_all_texts_to_provider_at_once(user, embeddings):
     lecture = await create_lecture(user, even_bounds(300, 10))
 
-    progress = await run_embed(lecture.id)
+    await run_embed(lecture.id)
 
-    assert [len(batch) for batch in embeddings.batches] == [2, 2, 1]
-    assert progress == [0.4, 0.8, 1.0]
+    assert [len(batch) for batch in embeddings.batches] == [5]
     assert len(await load_chunks(lecture.id)) == 5
 
 

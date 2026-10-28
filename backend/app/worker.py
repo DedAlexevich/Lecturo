@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 import httpx
-from arq import cron
+from arq import cron, func
 from arq.connections import RedisSettings
 
 from app.core.config import Settings, get_settings
@@ -12,9 +12,11 @@ from app.pipeline.exam import build_exam_sheet
 from app.pipeline.retention import delete_expired_videos, delete_stale_uploads
 from app.pipeline.tasks import (
     LECTURE_TIMEOUT_SEC,
+    VIDEO_TIMEOUT_SEC,
     process_lecture,
     process_quiz,
     process_regeneration,
+    process_video,
     resume_interrupted_lectures,
 )
 from app.providers import get_embeddings, get_llm
@@ -54,7 +56,13 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    functions = [process_lecture, process_quiz, process_regeneration, build_exam_sheet]
+    functions = [
+        process_lecture,
+        func(process_video, timeout=VIDEO_TIMEOUT_SEC + 600),
+        process_quiz,
+        process_regeneration,
+        build_exam_sheet,
+    ]
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = get_settings().worker_max_jobs

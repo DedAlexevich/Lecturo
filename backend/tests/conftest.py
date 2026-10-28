@@ -1,10 +1,12 @@
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -17,6 +19,7 @@ from app.models import (
     Payment,
     User,
 )
+from app.pipeline import tasks
 from app.services.legal import read_document
 
 
@@ -60,6 +63,27 @@ def auth_headers(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
+SessionAction = Callable[[AsyncSession], Awaitable]
+
+
+@pytest.fixture
+def race() -> Callable[..., Awaitable[list]]:
+    async def run(*actions: SessionAction) -> list:
+        start = asyncio.Barrier(len(actions))
+
+        async def in_own_session(action: SessionAction):
+            async with SessionLocal() as session:
+                await session.connection()
+                await start.wait()
+                return await action(session)
+
+        return await asyncio.gather(
+            *(in_own_session(action) for action in actions), return_exceptions=True
+        )
+
+    return run
+
+
 @pytest.fixture(autouse=True)
 def retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     pauses: list[float] = []
@@ -69,6 +93,14 @@ def retry_pauses(monkeypatch: pytest.MonkeyPatch) -> list[float]:
 
     monkeypatch.setattr("app.providers.retry.sleep", record)
     return pauses
+
+
+@pytest.fixture(autouse=True)
+def video_in_place(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def run_now(lecture_id) -> None:
+        await tasks.process_video({}, str(lecture_id))
+
+    monkeypatch.setattr(tasks, "enqueue_video", run_now)
 
 
 async def notifications(lecture_id) -> list[tuple[NotificationKind, NotificationOutcome]]:

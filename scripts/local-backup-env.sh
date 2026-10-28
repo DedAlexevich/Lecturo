@@ -1,4 +1,5 @@
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+#!/usr/bin/env bash
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 if [ -z "${BACKUP_DIR:-}" ] && ! grep -qs "^BACKUP_DIR=." .env; then
   data_dir="${DATA_DIR:-}"

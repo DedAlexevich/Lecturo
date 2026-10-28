@@ -5,13 +5,14 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings, get_settings
 from app.core.db import SessionLocal
 from app.main import app
 from app.models import (
+    BusinessEvent,
     HourPackage,
     Lecture,
     Payment,
@@ -19,9 +20,11 @@ from app.models import (
     PaymentStatus,
     SourceType,
     Subscription,
+    UsageEntry,
+    UsageSource,
     User,
 )
-from app.services import yookassa
+from app.services import quota, yookassa
 
 SETTINGS = Settings(
     yookassa_shop_id="shop",
@@ -126,7 +129,13 @@ async def subscriptions_of(user: User) -> list[Subscription]:
 
 async def test_succeeded_package_increases_quota(client, user, auth_headers, fake):
     payment = await make_payment(user, "hours_5")
-    fake.set_remote(payment, "succeeded", captured_at="2026-10-26T10:00:00.000Z")
+    fake.set_remote(
+        payment,
+        "succeeded",
+        captured_at="2026-10-26T10:00:00.000Z",
+        payment_method={"type": "bank_card", "card": {"first6": "555555", "last4": "4444"}},
+    )
+    fake.payments[payment.yookassa_id]["metadata"]["receipt_email"] = "buyer@example.org"
 
     response = await client.post(WEBHOOK, json=notification(payment))
 
@@ -138,7 +147,12 @@ async def test_succeeded_package_increases_quota(client, user, auth_headers, fak
     stored = await load_payment(payment)
     assert stored.status == PaymentStatus.succeeded
     assert stored.paid_at == datetime(2026, 10, 26, 10, tzinfo=UTC)
-    assert stored.raw["status"] == "succeeded"
+    assert stored.raw == {
+        "id": payment.yookassa_id,
+        "status": "succeeded",
+        "amount": {"value": "199.00", "currency": "RUB"},
+        "captured_at": "2026-10-26T10:00:00.000Z",
+    }
     [package] = await packages_of(user)
     assert package.payment_id == payment.id
     assert package.seconds_total == package.seconds_left == 5 * 3600
@@ -388,3 +402,165 @@ async def test_payment_of_deleted_account_is_settled_without_grant(client, user,
     async with SessionLocal() as session:
         await session.delete(stored)
         await session.commit()
+
+
+def refund_notification(payment: Payment) -> dict[str, Any]:
+    return {
+        "type": "notification",
+        "event": "refund.succeeded",
+        "object": {
+            "id": f"rf-{uuid.uuid4()}",
+            "payment_id": payment.yookassa_id,
+            "status": "succeeded",
+            "amount": yookassa.format_amount(payment.amount_kopecks),
+        },
+    }
+
+
+def refund_remote(fake: FakeYooKassa, payment: Payment, kopecks: int | None = None) -> None:
+    refunded = yookassa.format_amount(payment.amount_kopecks if kopecks is None else kopecks)
+    fake.payments[payment.yookassa_id]["refunded_amount"] = refunded
+
+
+async def test_refund_revokes_package(client, user, auth_headers, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded")
+    await client.post(WEBHOOK, json=notification(payment))
+    refund_remote(fake, payment)
+
+    requests_before = len(fake.requests)
+    first = await client.post(WEBHOOK, json=refund_notification(payment))
+    second = await client.post(WEBHOOK, json=refund_notification(payment))
+
+    assert first.status_code == second.status_code == 200
+    assert len(fake.requests) == requests_before + 1
+    assert str(fake.requests[-1].url) == f"https://yookassa.test/v3/payments/{payment.yookassa_id}"
+    [package] = await packages_of(user)
+    assert package.seconds_left == 0
+    quota = await client.get("/api/v1/billing/quota", headers=auth_headers)
+    assert quota.json()["package_left_sec"] == 0
+    stored = await load_payment(payment)
+    assert stored.raw["refunded_amount"] == {"value": "199.00", "currency": "RUB"}
+    assert stored.status == PaymentStatus.refunded
+    history = await client.get("/api/v1/billing/payments", headers=auth_headers)
+    assert [item["status"] for item in history.json()] == ["refunded"]
+
+
+async def test_refund_then_lecture_cancel_keeps_package_empty(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded")
+    await client.post(WEBHOOK, json=notification(payment))
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=user.id, title="Лекция", source_type=SourceType.upload)
+        session.add(lecture)
+        await session.flush()
+        db_user = await session.get(User, user.id)
+        db_user.quota_week_start = datetime.now(UTC)
+        session.add(
+            UsageEntry(
+                user_id=user.id,
+                lecture_id=lecture.id,
+                source=UsageSource.package,
+                package_id=(await packages_of(user))[0].id,
+                seconds=600,
+            )
+        )
+        await session.commit()
+        lecture_id = lecture.id
+    refund_remote(fake, payment)
+    await client.post(WEBHOOK, json=refund_notification(payment))
+
+    async with SessionLocal() as session:
+        await quota.refund_lecture(session, lecture_id)
+        await session.commit()
+
+    [package] = await packages_of(user)
+    assert package.seconds_left == 0
+
+
+async def test_refund_shortens_subscription_and_moves_next_one(client, user, auth_headers, fake):
+    first = await make_payment(user, "subscription")
+    second = await make_payment(user, "subscription")
+    fake.set_remote(first, "succeeded")
+    fake.set_remote(second, "succeeded")
+    await client.post(WEBHOOK, json=notification(first))
+    await client.post(WEBHOOK, json=notification(second))
+    refund_remote(fake, first)
+
+    before = datetime.now(UTC)
+    response = await client.post(WEBHOOK, json=refund_notification(first))
+    await client.post(WEBHOOK, json=refund_notification(first))
+
+    assert response.status_code == 200
+    refunded, next_one = await subscriptions_of(user)
+    assert refunded.payment_id == first.id
+    assert before <= refunded.ends_at <= datetime.now(UTC)
+    assert next_one.starts_at == refunded.ends_at
+    assert next_one.ends_at - next_one.starts_at == timedelta(days=30)
+    quota = (await client.get("/api/v1/billing/quota", headers=auth_headers)).json()
+    assert datetime.fromisoformat(quota["subscription_until"]) == next_one.ends_at
+
+
+async def test_partial_refund_keeps_package(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded")
+    await client.post(WEBHOOK, json=notification(payment))
+    refund_remote(fake, payment, 5000)
+
+    response = await client.post(WEBHOOK, json=refund_notification(payment))
+
+    assert response.status_code == 200
+    [package] = await packages_of(user)
+    assert package.seconds_left == 5 * 3600
+
+
+async def test_refund_of_unpaid_payment_skips_yookassa(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+
+    response = await client.post(WEBHOOK, json=refund_notification(payment))
+
+    assert response.status_code == 200
+    assert fake.requests == []
+
+
+async def event_kinds(yookassa_id: str) -> list[str]:
+    async with SessionLocal() as session:
+        rows = await session.scalars(
+            select(BusinessEvent.kind)
+            .where(BusinessEvent.details["yookassa_id"].astext == yookassa_id)
+            .order_by(BusinessEvent.created_at)
+        )
+        return list(rows)
+
+
+async def drop_events(yookassa_id: str) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            delete(BusinessEvent).where(BusinessEvent.details["yookassa_id"].astext == yookassa_id)
+        )
+        await session.commit()
+
+
+async def test_webhook_leaves_business_events(client, user, fake):
+    payment = await make_payment(user, "subscription")
+    fake.set_remote(payment, "succeeded")
+
+    await client.post(WEBHOOK, json=notification(payment))
+    await client.post(WEBHOOK, json=notification(payment))
+
+    kinds = await event_kinds(payment.yookassa_id)
+    await drop_events(payment.yookassa_id)
+    assert kinds.count("webhook_received") == 1
+    assert kinds.count("payment_succeeded") == 1
+    assert kinds.count("subscription_granted") == 1
+
+
+async def test_rejected_webhook_is_recorded(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+
+    response = await client.post(WEBHOOK, json=notification(payment))
+
+    kinds = await event_kinds(payment.yookassa_id)
+    await drop_events(payment.yookassa_id)
+    assert response.status_code == 400
+    assert "webhook_rejected" in kinds

@@ -17,13 +17,12 @@ from app.pipeline.exam import (
     is_outdated,
     load_course_notes,
 )
+from app.pipeline.tasks import QUEUE_UNAVAILABLE
 from app.schemas.lecture import ExamSheetOut
 from app.services.consents import require_ai_transfer_consent
 from app.services.rate_limit import is_rate_limited, reset_rate_limit
 
 router = APIRouter(prefix="/courses/{course_id}/exam-sheet", tags=["exam"])
-
-QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
 
 
 @router.post(

@@ -35,6 +35,11 @@ function resetSession() {
   notify();
 }
 
+export function expireSession(authorization: string | null | undefined) {
+  const token = tokenStorage.get();
+  if (token !== null && authorization === `Bearer ${token}`) resetSession();
+}
+
 export function signOut() {
   signedOutByUser = true;
   resetSession();
@@ -51,7 +56,7 @@ api.use({
     const token = tokenStorage.get();
     if (response.status !== 401 || token === null) return response;
     if (localAuthErrors.includes(new URL(request.url).pathname)) return response;
-    if (request.headers.get("Authorization") === `Bearer ${token}`) resetSession();
+    expireSession(request.headers.get("Authorization"));
     return response;
   },
 });

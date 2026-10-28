@@ -1,0 +1,341 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+  padding-bottom: var(--space-7);
+}
+
+.title {
+  font-size: var(--text-2xl);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-5);
+}
+
+.sections {
+  position: sticky;
+  top: var(--space-5);
+  display: grid;
+  gap: 2px;
+}
+
+.sectionLink {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--transition), color var(--transition);
+}
+
+.sectionLink:hover {
+  color: var(--color-text);
+}
+
+.sectionLinkActive,
+.sectionLinkActive:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.content {
+  min-width: 0;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.panelTitle {
+  font-size: var(--text-xl);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.alert {
+  margin-top: var(--space-3);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.state {
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: var(--space-3);
+  min-height: 6rem;
+}
+
+.empty {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.filter {
+  display: grid;
+  flex: 0 1 15rem;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.filterLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.select {
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.select:focus-visible {
+  outline: none;
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table th {
+  padding: 0 var(--space-3) var(--space-2) 0;
+  color: var(--color-text-muted);
+  font-weight: var(--weight-regular);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+
+.when {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.who {
+  max-width: 14rem;
+  overflow-wrap: anywhere;
+}
+
+.what {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.subline {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.how {
+  color: var(--color-text-muted);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.admins {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 3.25rem;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin:first-child {
+  border-top: 0;
+}
+
+.adminInfo {
+  display: grid;
+  min-width: 0;
+}
+
+.adminName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.selfMark {
+  flex: none;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-data-soft);
+  color: var(--color-data);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.grantForm {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) max-content;
+  justify-content: start;
+  align-items: start;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.grantForm > button {
+  margin-top: calc(var(--text-sm) * var(--leading-normal) + var(--space-2));
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .sections {
+    position: static;
+    display: flex;
+    gap: var(--space-1);
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .panel {
+    padding: var(--space-4);
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+  }
+
+  .table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px var(--space-3);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .table td {
+    padding: 0;
+    border-top: 0;
+  }
+
+  .table td:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .when {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: var(--text-xs);
+  }
+
+  .who {
+    grid-column: 1;
+    grid-row: 2;
+    max-width: none;
+    color: var(--color-text-muted);
+  }
+
+  .how {
+    grid-column: 1 / -1;
+    font-size: var(--text-xs);
+  }
+
+  .grantForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grantForm > button {
+    margin-top: 0;
+    justify-self: start;
+  }
+}

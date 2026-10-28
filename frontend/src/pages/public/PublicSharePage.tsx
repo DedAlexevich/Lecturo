@@ -22,6 +22,7 @@ function Unavailable() {
   return (
     <div className="public">
       <EmptyState
+        level={1}
         title="Ссылка больше не работает"
         description="Владелец отозвал её или удалил материал. Попросите у него новую ссылку."
         action={<Link to="/">Перейти в Lecturo</Link>}

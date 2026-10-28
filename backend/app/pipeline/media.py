@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import Lecture, User
-from app.pipeline.runner import Report
+from app.pipeline.runner import Report, UserFacingError
 from app.services import quota
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ LOCAL_PROTOCOLS = "file,pipe"
 PLAYER_PROFILES = {"Constrained Baseline", "Baseline", "Main", "High"}
 
 
-class MediaError(Exception):
+class MediaError(UserFacingError):
     pass
 
 
@@ -258,7 +258,7 @@ async def transcode_video(session: AsyncSession, lecture: Lecture, report: Repor
             now = datetime.now(UTC)
             days = await quota.video_retention_days(session, owner, now=now, settings=settings)
             lecture.video_expires_at = now + timedelta(days=days)
-    except Exception:
+    except MediaError:
         await asyncio.to_thread(original.unlink, missing_ok=True)
         raise
     await asyncio.to_thread(original.unlink, missing_ok=True)

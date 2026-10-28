@@ -68,7 +68,7 @@ export function ExamSheetPage() {
   const course = useCourse(id);
   const sheet = useExamSheet(id);
   const create = useCreateExamSheet(id);
-  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const { requireConsent, waiting: consentWaiting, dialog: consentDialog } = useAiTransferConsent();
 
   const code = errorCode(sheet.error);
   const knownState = code !== null && sheetStates.includes(code);
@@ -127,7 +127,7 @@ export function ExamSheetPage() {
           description="Соберём билеты, определения и шпаргалку из конспектов всех лекций курса. Потом её можно распечатать."
           action={
             <div className="exam-sheet__create">
-              <Button onClick={startCreate} loading={create.isPending}>
+              <Button onClick={startCreate} loading={create.isPending || consentWaiting}>
                 Собрать памятку
               </Button>
               {create.isError && (
@@ -176,7 +176,7 @@ export function ExamSheetPage() {
               </p>
             )}
           </div>
-          <Button variant="secondary" size="sm" onClick={startCreate} loading={create.isPending}>
+          <Button variant="secondary" size="sm" onClick={startCreate} loading={create.isPending || consentWaiting}>
             Обновить памятку
           </Button>
         </div>

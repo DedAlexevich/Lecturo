@@ -23,9 +23,8 @@
   transition: border-color var(--transition), background var(--transition);
 }
 
-.add-lecture__drop:hover,
-.add-lecture__drop--active {
-  border-color: var(--color-border-strong);
+.add-lecture__drop:hover {
+  border-color: var(--color-text-muted);
 }
 
 .add-lecture__drop--active {

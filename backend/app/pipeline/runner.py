@@ -33,6 +33,29 @@ class StepFailed(Exception):
     pass
 
 
+class UserFacingError(Exception):
+    pass
+
+
+PROCESSING_FAILED = "Не удалось обработать лекцию, попробуйте ещё раз"
+
+STEP_ERRORS = {
+    StepName.download: "Не удалось скачать запись по ссылке, попробуйте позже",
+    StepName.audio: "Не удалось извлечь звук из записи",
+    StepName.video: "Не удалось пережать видео",
+    StepName.transcribe: "Сервис распознавания недоступен, попробуйте позже",
+    StepName.summarize: "Сервис конспектов недоступен, попробуйте позже",
+    StepName.embed: "Не удалось подготовить поиск по лекции, попробуйте позже",
+    StepName.quiz: "Не удалось собрать квиз, попробуйте позже",
+}
+
+
+def step_error(name: StepName, error: Exception) -> str:
+    if isinstance(error, UserFacingError):
+        return str(error)
+    return STEP_ERRORS.get(name, PROCESSING_FAILED)
+
+
 async def get_step(session: AsyncSession, lecture_id: uuid.UUID, name: StepName) -> ProcessingStep:
     step = await session.scalar(
         select(ProcessingStep).where(
@@ -92,7 +115,7 @@ async def run_step(
             raise
         logger.error("Шаг %s лекции %s завершился ошибкой", name.value, lecture.id, exc_info=error)
         step.status = StepStatus.failed
-        step.error = str(error) or type(error).__name__
+        step.error = step_error(name, error)
         step.finished_at = datetime.now(UTC)
         if fails_lecture:
             lecture.status = LectureStatus.failed
