@@ -36,7 +36,8 @@ cp .env.example .env
 | `FORWARDED_ALLOW_IPS` | С каких адресов `api` принимает `X-Forwarded-For`. По умолчанию это частные диапазоны docker: порт `api` наружу не открыт, до него доходят только контейнеры проекта и сам сервер | нет | `172.16.0.0/12,192.168.0.0/16,10.0.0.0/8` | `docker-compose.yml` (api) |
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
-| `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
+| `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy) |
+| `COMPOSE_FILE` | Какие файлы compose подключать. Локально только `docker-compose.yml`, на сервере `infra/server-setup.sh` ставит `docker-compose.yml:infra/compose.prod.yml`. Пустое значение compose не принимает | на сервере | `docker-compose.yml` | docker compose |
 | `LOG_MAX_MB` | Размер лог-файла в `data/logs`, при котором он ротируется. См. [logs.md](logs.md) | нет | `10` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
 | `LOG_BACKUP_COUNT` | Сколько прежних копий лог-файла хранить | нет | `5` | `docker-compose.yml`, `backend/app/core/logging.py`, `bot/app/logs.py`, `infra/log-to-file.sh` |
 | `BACKUP_DIR` | Папка на хосте для бэкапов базы. Путь абсолютный или относительный к корню репозитория. Если не задана, `infra/backup` использует `./backups`, а контейнер `db-backup` и `scripts/backup-db.sh` с `scripts/restore-db.sh` берут `${DATA_DIR}/backups`. См. [backups.md](backups.md) и [deploy.md](deploy.md#бэкапы-базы) | нет | `./backups` на сервере, `./data/backups` локально | `docker-compose.yml` (db-backup), `infra/backup`, `scripts` |
@@ -53,7 +54,7 @@ cp .env.example .env
 | `BACKUP_S3_ENDPOINT` | Адрес S3 API | нет | `https://storage.yandexcloud.net` | `infra/backup/common.sh` |
 | `BACKUP_S3_REGION` | Регион для подписи запросов | нет | `ru-central1` | `infra/backup/common.sh` |
 
-`DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
+`DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
 
 ## Распознавание речи (STT)
 
@@ -170,6 +171,7 @@ docker compose exec worker python -m app.pipeline.reindex
 | `SMTP_FROM` | Адрес в поле «От». Локально при пустом значении берётся `SMTP_USER`, на сервере подставляется `noreply@<домен>`, поэтому для внешнего SMTP там его нужно заполнить | на сервере с внешним SMTP | пусто, на сервере `Lecturo <noreply@<домен>>` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
 | `COMPLAINTS_EMAIL` | Адрес, на который приходит письмо о каждой новой жалобе на публичную ссылку. Пусто: жалоба только сохраняется в базе и пишется в лог | нет | пусто | `backend/app/api/shares.py` |
 | `MAIL_DOMAIN` | Домен, от имени которого `mail` отправляет и подписывает письма. Только один домен без схемы и порта, например `lecturo.example`. Если в `SITE_ADDRESS` несколько адресов или схема, задайте `MAIL_DOMAIN` явно, иначе `mail` не запустится | нет | значение `SITE_ADDRESS` | `infra/compose.prod.yml`, `infra/mail` |
+| `DKIM_SELECTOR` | Селектор ключа DKIM, только на сервере. От него зависит имя TXT-записи `<селектор>._domainkey` | нет | `mail` | `infra/mail`, `infra/compose.prod.yml` |
 
 Яндекс Почта:
 
@@ -289,6 +291,7 @@ Gmail:
 | `HOUR_PACKAGES` | Пакеты часов в формате JSON: `{"часы": цена в рублях}` | `{"5": 199, "10": 349}` | `backend/app/services/quota.py` |
 | `FREE_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у бесплатных пользователей | `3` | `backend/app/services/quota.py`, `backend/app/pipeline/media.py` |
 | `SUBSCRIPTION_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у подписчиков | `30` | `backend/app/services/quota.py` |
+| `LOCAL_*` | Лимиты проверки результатов, посчитанных на устройстве пользователя: число лекций в неделю, символов в минуту, сегментов, глав, длина текста, допуск таймкодов и частота запросов. Значения по умолчанию в `.env.example` совпадают с `backend/app/core/config.py` | см. `.env.example` | `backend/app/services/local_validation.py`, `backend/app/api/local_results.py` |
 | `LOCAL_EMBEDDINGS_WEEKLY_SECONDS` | Недельный лимит секунд для результатов, посчитанных на устройстве пользователя (10 часов) | `36000` | `backend/app/api/local_results.py` |
 
 ## Администраторы

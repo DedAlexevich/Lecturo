@@ -67,8 +67,8 @@ if [ ! -f "$app_dir/.env" ]; then
     -e "s|^PUBLIC_URL=.*|PUBLIC_URL=https://$domain|" \
     -e "s|^SECRET_KEY=.*|SECRET_KEY=$(openssl rand -hex 32)|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" \
+    -e "s|^COMPOSE_FILE=.*|COMPOSE_FILE=docker-compose.yml:infra/compose.prod.yml|" \
     "$app_dir/.env.example" > "$app_dir/.env"
-  echo "COMPOSE_FILE=docker-compose.yml:infra/compose.prod.yml" >> "$app_dir/.env"
   chown deploy:deploy "$app_dir/.env"
   chmod 600 "$app_dir/.env"
 fi

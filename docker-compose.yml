@@ -153,13 +153,11 @@ services:
 
   caddy:
     image: caddy:2-alpine
-    entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/caddy.log", "caddy"]
-    command: ["run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
-      LOG_FILE_MODE: "640"
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -169,7 +167,6 @@ services:
       - ${DATA_DIR:-./data}/zoomer:/srv/zoomer:ro
       - ${DATA_DIR:-./data}/caddy:/data
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
-      - ./infra/log-to-file.sh:/log-to-file.sh:ro
     depends_on:
       api:
         condition: service_healthy

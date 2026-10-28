@@ -3,12 +3,11 @@ set -euo pipefail
 
 failures_to_alert=3
 backup_max_age_hours=26
+disk_max_percent=85
 
 cd "$(dirname "$0")/.."
 
-env_value() {
-  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true
-}
+source infra/env.sh
 
 notify() {
   infra/notify.sh "$1"
@@ -36,6 +35,19 @@ if [ -n "$fresh_backup" ]; then
 elif [ ! -f "$backup_alerted_file" ]; then
   if notify "Бэкап Lecturo устарел: в $backup_dir нет дампа моложе $backup_max_age_hours часов"; then
     touch "$backup_alerted_file"
+  fi
+fi
+
+data_dir=$(env_value DATA_DIR ./data)
+disk_alerted_file="$state_dir/disk-alerted"
+disk_usage=$(df -P / "$data_dir" "$backup_dir" 2>/dev/null | awk -v max="$disk_max_percent" 'NR > 1 && !seen[$1]++ { used = $5 + 0; if (used >= max) print $6 ": " $5 }' || true)
+if [ -z "$disk_usage" ]; then
+  if [ -f "$disk_alerted_file" ] && notify "Место на диске Lecturo снова есть: занято меньше $disk_max_percent%"; then
+    rm -f "$disk_alerted_file"
+  fi
+elif [ ! -f "$disk_alerted_file" ]; then
+  if notify "$(printf 'На сервере Lecturo кончается место, занято от %s%%:\n%s' "$disk_max_percent" "$disk_usage")"; then
+    touch "$disk_alerted_file"
   fi
 fi
 
