@@ -35,6 +35,8 @@ def hit(lecture_id, text="Предел равен двум", start=10, end=15, k
         end=end,
         section=None,
         text=text,
+        description=None,
+        chapter_title=None,
         score=0.5,
     )
 

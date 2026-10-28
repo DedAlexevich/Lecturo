@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 import pytest
 from sqlalchemy import select
 
@@ -13,7 +16,8 @@ from app.models import (
     TranscriptSegment,
 )
 from app.pipeline import embed
-from app.pipeline.embed import split_into_chunks
+from app.pipeline.embed import MAX_DESCRIPTION_CHARS, parse_descriptions, split_into_chunks
+from app.providers.openai_compat import OpenAICompatibleError
 from app.providers.stub import StubEmbeddings
 
 
@@ -79,6 +83,39 @@ class RecordingEmbeddings(StubEmbeddings):
 def embeddings(monkeypatch) -> RecordingEmbeddings:
     provider = RecordingEmbeddings()
     monkeypatch.setattr(embed, "get_embeddings", lambda: provider)
+    return provider
+
+
+class DescribingLLM:
+    def __init__(self) -> None:
+        self.requests: list[list[str]] = []
+        self.active = 0
+        self.peak = 0
+        self.fail = False
+
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        chunks = json.loads(user)["chunks"]
+        self.requests.append([chunk["text"] for chunk in chunks])
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        if self.fail:
+            raise OpenAICompatibleError("нет ответа")
+        return json.dumps(
+            {
+                "descriptions": [
+                    {"id": chunk["id"], "text": f"О чём {chunk['text'][:12]}"} for chunk in chunks
+                ]
+            },
+            ensure_ascii=False,
+        )
+
+
+@pytest.fixture(autouse=True)
+def llm(monkeypatch) -> DescribingLLM:
+    provider = DescribingLLM()
+    monkeypatch.setattr(embed, "get_llm", lambda: provider)
     return provider
 
 
@@ -227,3 +264,124 @@ async def test_embed_indexes_chapters_and_summary(user, embeddings):
         (1, "Ряды\nЕщё"),
     ]
     assert all(c.embedding is not None for c in chunks)
+
+
+async def test_embed_describes_transcript_chunks(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(120, 10))
+    async with SessionLocal() as session:
+        session.add(Chapter(lecture_id=lecture.id, idx=0, start=0, end=120, title=" Пределы "))
+        session.add(Summary(lecture_id=lecture.id, content_md="## Пределы\nТекст"))
+        await session.commit()
+
+    await run_embed(lecture.id)
+
+    chunks = await load_chunks(lecture.id)
+    described = {kind: [c.description for c in chunks if c.kind == kind] for kind in ChunkKind}
+    assert described[ChunkKind.transcript] == ["О чём слово 0 слов", "О чём слово 6 слов"]
+    assert described[ChunkKind.chapter] == ["Пределы"]
+    assert described[ChunkKind.summary] == [None]
+    assert len(llm.requests) == 1
+
+
+async def test_descriptions_go_in_limited_parallel_batches(user, embeddings, llm, monkeypatch):
+    monkeypatch.setattr(embed, "DESCRIBE_BATCH_SIZE", 2)
+    lecture = await create_lecture(user, even_bounds(600, 10))
+
+    await run_embed(lecture.id)
+
+    assert [len(batch) for batch in llm.requests] == [2, 2, 2, 2, 2]
+    assert llm.peak == embed.DESCRIBE_CONCURRENCY
+    assert all(c.description for c in await load_chunks(lecture.id))
+
+
+async def test_llm_error_leaves_descriptions_empty(user, embeddings, llm):
+    llm.fail = True
+    lecture = await create_lecture(user, even_bounds(120, 10))
+
+    await run_embed(lecture.id)
+
+    chunks = await load_chunks(lecture.id)
+    assert len(chunks) == 2
+    assert all(c.description is None and c.embedding is not None for c in chunks)
+
+
+async def test_repeated_embed_keeps_ready_descriptions(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(120, 10))
+    await run_embed(lecture.id)
+    async with SessionLocal() as session:
+        second = await session.scalar(
+            select(SearchChunk).where(SearchChunk.lecture_id == lecture.id, SearchChunk.start == 60)
+        )
+        second.description = None
+        await session.commit()
+    llm.requests.clear()
+
+    await run_embed(lecture.id)
+
+    assert llm.requests == [[" ".join(f"слово {i}" for i in range(6, 12))]]
+    assert [c.description for c in await load_chunks(lecture.id)] == [
+        "О чём слово 0 слов",
+        "О чём слово 6 слов",
+    ]
+
+
+def test_parse_descriptions_skips_bad_items_and_shortens():
+    content = json.dumps(
+        {
+            "descriptions": [
+                {"id": 2, "text": "  Ряд   Тейлора "},
+                {"id": 5, "text": "лишний"},
+                {"id": "1", "text": "не число"},
+                {"id": 3, "text": "а" * 200},
+                "мусор",
+            ]
+        }
+    )
+
+    descriptions = parse_descriptions(content, 3)
+
+    assert descriptions[:2] == [None, "Ряд Тейлора"]
+    assert len(descriptions[2]) == MAX_DESCRIPTION_CHARS
+    assert descriptions[2].endswith("…")
+
+
+def test_parse_descriptions_rejects_wrong_shape():
+    with pytest.raises(ValueError):
+        parse_descriptions('{"text": "что-то"}', 2)
+
+
+async def test_local_lecture_is_not_sent_to_llm(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(120, 10))
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.source_type = SourceType.local
+        stored.processed_locally = True
+        session.add(Chapter(lecture_id=lecture.id, idx=0, start=0, end=120, title="Пределы"))
+        await session.commit()
+
+    await run_embed(lecture.id)
+
+    chunks = await load_chunks(lecture.id)
+    assert llm.requests == []
+    assert {c.kind: c.description for c in chunks if c.kind == ChunkKind.chapter} == {
+        ChunkKind.chapter: "Пределы"
+    }
+    assert all(c.description is None for c in chunks if c.kind == ChunkKind.transcript)
+
+
+async def test_changed_text_gets_new_description(user, embeddings, llm):
+    lecture = await create_lecture(user, even_bounds(60, 10), text="старое")
+    await run_embed(lecture.id)
+    async with SessionLocal() as session:
+        for segment in await session.scalars(
+            select(TranscriptSegment).where(TranscriptSegment.lecture_id == lecture.id)
+        ):
+            segment.text = segment.text.replace("старое", "новое")
+        await session.commit()
+    llm.requests.clear()
+
+    await run_embed(lecture.id)
+
+    [chunk] = await load_chunks(lecture.id)
+    assert len(llm.requests) == 1
+    assert chunk.description == "О чём новое 0 ново"

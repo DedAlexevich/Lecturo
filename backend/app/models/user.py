@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +37,7 @@ class User(UUIDPk, CreatedAt, Base):
     email: Mapped[str | None] = mapped_column(String(320), unique=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_hash: Mapped[str | None] = mapped_column(String(255))
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     display_name: Mapped[str] = mapped_column(String(120), default="")
     telegram_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     ai_transfer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -64,5 +75,6 @@ class AuthToken(UUIDPk, CreatedAt, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     kind: Mapped[AuthTokenKind] = mapped_column(Enum(AuthTokenKind, name="auth_token_kind"))
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
+    email: Mapped[str | None] = mapped_column(String(320))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

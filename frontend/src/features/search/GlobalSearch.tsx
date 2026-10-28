@@ -4,9 +4,9 @@ import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { highlight } from "./highlight";
+import { HitSummary } from "./HitSummary";
 import { buildMatcher } from "./matcher";
-import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch, type SearchHit } from "./queries";
+import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch, type SearchHit } from "./queries";
 import { momentsCount } from "./SearchPanel";
 import "./search.css";
 
@@ -72,7 +72,7 @@ export function GlobalSearch({ children }: { children: ReactNode }) {
         {active && search.isPending && <p className="search__note">Ищем…</p>}
         {active && search.isError && !search.isFetching && (
           <div className="search__error" role="alert">
-            <p>Поиск не сработал. Проверьте соединение и попробуйте ещё раз.</p>
+            <p>{searchErrorText(search.error)}</p>
             <Button variant="secondary" size="sm" onClick={() => void search.refetch()}>
               Повторить
             </Button>
@@ -98,7 +98,7 @@ export function GlobalSearch({ children }: { children: ReactNode }) {
                       <li key={`${hit.kind}-${hit.start}-${hit.section}-${hit.text.slice(0, 24)}`}>
                         <Link className="search__hit search__hit--stacked" to={hitLink(hit)}>
                           <span className="search__place">{hitPlace(hit)}</span>
-                          <span className="search__text">{highlight(hit.text, matcher)}</span>
+                          <HitSummary hit={hit} matcher={matcher} />
                         </Link>
                       </li>
                     ))}

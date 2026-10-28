@@ -1,19 +1,23 @@
+import asyncio
 import re
+import time
 import uuid
 import zlib
 from datetime import UTC, datetime
 
+from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import Chapter, Lecture, SourceType, Summary, User
-from app.services.pdf import format_timecode, lecture_html, render_pdf
+from app.services import pdf
+from app.services.pdf import format_timecode, lecture_html, render_pdf, render_pdf_limited
 
 
 def pdf_objects(content: bytes) -> bytes:
-    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", content, re.S)
+    streams = re.findall(rb"stream\r?\n(.*?)\nendstream", content, re.S)
     inflated = []
     for stream in streams:
         try:
-            inflated.append(zlib.decompress(stream))
+            inflated.append(zlib.decompressobj().decompress(stream))
         except zlib.error:
             continue
     return content + b"".join(inflated)
@@ -158,3 +162,38 @@ def test_pdf_renders_formula_with_embedded_fonts():
     objects = pdf_objects(result)
     assert b"KaTeX" in objects
     assert b"DejaVu" in objects or b"Inter" in objects
+
+
+async def test_export_pdf_rate_limit(client, user, auth_headers, monkeypatch):
+    monkeypatch.setattr(get_settings(), "pdf_export_rate_limit", 1)
+    monkeypatch.setattr(pdf, "render_pdf", lambda html: b"%PDF-1.7")
+    lecture = await create_lecture(user)
+    url = f"/api/v1/lectures/{lecture.id}/export.pdf"
+
+    first = await client.get(url, headers=auth_headers)
+    second = await client.get(url, headers=auth_headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["detail"] == "Слишком много выгрузок PDF, попробуйте через минуту"
+
+
+async def test_pdf_renders_are_limited(monkeypatch):
+    running = 0
+    peak = 0
+
+    def slow_render(html: str) -> bytes:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        time.sleep(0.05)
+        running -= 1
+        return b"%PDF"
+
+    monkeypatch.setattr(pdf, "render_pdf", slow_render)
+    monkeypatch.setattr(pdf, "pdf_renders", asyncio.Semaphore(2))
+
+    results = await asyncio.gather(*(render_pdf_limited("<p></p>") for _ in range(6)))
+
+    assert results == [b"%PDF"] * 6
+    assert peak == 2

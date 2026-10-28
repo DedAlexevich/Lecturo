@@ -4,15 +4,22 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.api.courses import get_own_course
+from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
 from app.models import ChunkKind, Lecture, SearchChunk, course_lectures
 from app.schemas.search import SearchHit
+from app.services.rate_limit import enforce_rate_limit
 from app.services.search import embed_query, semantic_search
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-@router.get("")
+@router.get(
+    "",
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много поисковых запросов"}
+    },
+)
 async def search(
     user: CurrentUser,
     session: SessionDep,
@@ -25,6 +32,14 @@ async def search(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Запрос слишком короткий")
     if lecture_id is not None and course_id is not None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Укажите либо лекцию, либо курс")
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:search:{user.id}",
+        settings.search_rate_limit,
+        settings.search_rate_window_seconds,
+        "Слишком много поисковых запросов, попробуйте через минуту",
+    )
     vector = await embed_query(q)
     if lecture_id is None and course_id is None:
         scope = SearchChunk.lecture_id.in_(select(Lecture.id).where(Lecture.owner_id == user.id))

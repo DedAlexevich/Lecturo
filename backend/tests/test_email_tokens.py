@@ -175,6 +175,7 @@ async def test_verify_token_does_not_reset_password(client, email, mails):
 async def test_mail_without_smtp_hides_token_and_address_on_public_host(caplog, monkeypatch):
     monkeypatch.setenv("SMTP_HOST", "")
     monkeypatch.setenv("PUBLIC_URL", "https://lecturo.test/")
+    monkeypatch.setenv("SECRET_KEY", "x" * 64)
     get_settings.cache_clear()
     with caplog.at_level("INFO", logger="app.services.mail"):
         await send_verification_mail("alice@example.org", "secret-token")

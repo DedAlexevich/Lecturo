@@ -12,4 +12,6 @@ class SearchHit(Schema):
     end: float | None
     section: int | None
     text: str
+    description: str | None
+    chapter_title: str | None
     score: float

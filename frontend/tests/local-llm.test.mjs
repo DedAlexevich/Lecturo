@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { splitTranscript } from "../src/local/llm/chunks.ts";
+import { notesPrompts } from "../src/local/llm/prompt.ts";
 
 test("splits a ten-minute transcript without losing text or time boundaries", () => {
   const segments = Array.from({ length: 120 }, (_, index) => ({
@@ -23,4 +24,13 @@ test("handles empty text and oversized words", () => {
   assert.equal(chunks[0].start, 1);
   assert.equal(chunks.at(-1).end, 2);
   assert.ok(chunks.every((chunk, index) => index === 0 || chunks[index - 1].end <= chunk.start));
+});
+
+test("chooses a notes prompt that matches the lecture language", () => {
+  const russian = notesPrompts("ru");
+  const english = notesPrompts("en");
+  assert.match(russian.system, /только на русском/);
+  assert.match(russian.user, /Назови тему/);
+  assert.match(english.system, /only in English/);
+  assert.match(english.user, /Give this excerpt/);
 });

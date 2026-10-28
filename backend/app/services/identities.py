@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.schemas.user import EmailIdentityIn, IdentityOut, TelegramNotifications, UserOut
 from app.services.auth import hash_password, normalize_email
+from app.services.auth_tokens import bump_token_version, revoke_unused_tokens
 from app.services.consents import ai_transfer_given, current_ai_transfer_revision
 
 TELEGRAM_TAKEN = "Этот Telegram уже привязан к другому аккаунту"
@@ -216,6 +217,7 @@ async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -
     user.email_verified_at = None
     user.password_hash = hash_password(body.password)
     session.add(AuthIdentity(user_id=user.id, provider=AuthProvider.email, provider_user_id=email))
+    await revoke_unused_tokens(session, user.id)
     try:
         await session.commit()
     except IntegrityError:
@@ -223,7 +225,7 @@ async def link_email(session: AsyncSession, user: User, body: EmailIdentityIn) -
         raise HTTPException(status.HTTP_409_CONFLICT, taken) from None
 
 
-async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvider) -> None:
+async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvider) -> int:
     await session.refresh(user, ["identities"])
     identity = next((item for item in user.identities if item.provider == provider), None)
     if identity is None:
@@ -234,10 +236,13 @@ async def unlink_identity(session: AsyncSession, user: User, provider: AuthProvi
         user.email = None
         user.email_verified_at = None
         user.password_hash = None
+        await revoke_unused_tokens(session, user.id)
     elif provider == AuthProvider.telegram:
         user.telegram_chat_id = None
     await session.delete(identity)
+    version = await bump_token_version(session, user.id)
     await session.commit()
+    return version
 
 
 async def accept_ai_transfer(session: AsyncSession, user: User) -> None:

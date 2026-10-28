@@ -20,7 +20,7 @@ from yt_dlp.utils import YoutubeDLError
 from app.core.config import get_settings
 from app.models import Lecture
 from app.pipeline import media
-from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
+from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC, make_mono
 from app.pipeline.runner import Report
 
 logger = logging.getLogger(__name__)
@@ -321,9 +321,11 @@ async def probe_duration(url: str) -> float | None:
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), PROBE_TIMEOUT_SEC)
     except TimeoutError:
-        process.kill()
-        await process.wait()
         return None
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
     try:
         return float(stdout.decode().strip())
     except ValueError:
@@ -395,6 +397,10 @@ def remove_partial(target: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+async def keep_progress(progress: float) -> None:
+    pass
+
+
 async def download(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     url = lecture.source_url or ""
     if is_yandex_disk(url):
@@ -419,6 +425,7 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
         duration = await media.probe_duration(audio_path)
         if duration > MAX_DURATION_SEC:
             raise LinkError("Видео длиннее 4 часов")
+        await make_mono(audio_path, duration, keep_progress)
     except Exception:
         await asyncio.to_thread(audio_path.unlink, missing_ok=True)
         raise

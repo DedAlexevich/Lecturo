@@ -95,3 +95,19 @@ async def test_reindex_adds_chapters_and_summary_once(user):
     kinds = sorted(chunk.kind for chunk in chunks)
     assert kinds == [ChunkKind.chapter, ChunkKind.summary, ChunkKind.transcript]
     assert all(chunk.embedding is not None for chunk in chunks)
+
+
+async def test_reindex_keeps_descriptions_and_describes_new_chapters(user):
+    lecture_id = await add_lecture(user.id, "расшифровка")
+    async with SessionLocal() as session:
+        chunk = await session.scalar(
+            select(SearchChunk).where(SearchChunk.lecture_id == lecture_id)
+        )
+        chunk.description = "Вступление"
+        session.add(Chapter(lecture_id=lecture_id, idx=0, start=0, end=60, title="Пределы"))
+        await session.commit()
+
+    await reindex.reindex()
+
+    descriptions = {chunk.kind: chunk.description for chunk in await load_chunks(lecture_id)}
+    assert descriptions == {ChunkKind.transcript: "Вступление", ChunkKind.chapter: "Пределы"}

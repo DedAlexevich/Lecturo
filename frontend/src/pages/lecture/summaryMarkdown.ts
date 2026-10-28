@@ -22,6 +22,17 @@ for (const [kind, label] of Object.entries(labels)) {
   });
 }
 
+const externalLink = /^(?:https?:)?\/\//i;
+
+markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
+  const token = tokens[index];
+  if (externalLink.test(String(token.attrGet("href") ?? ""))) {
+    token.attrSet("target", "_blank");
+    token.attrSet("rel", "noopener noreferrer");
+  }
+  return self.renderToken(tokens, index, options);
+};
+
 export function renderSummary(source: string) {
   return markdown.render(source);
 }

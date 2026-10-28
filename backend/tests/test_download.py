@@ -400,7 +400,11 @@ def probed_duration(monkeypatch):
     async def probe(path):
         return durations[0]
 
+    async def mono(path, duration, report):
+        pass
+
     monkeypatch.setattr(media, "probe_duration", probe)
+    monkeypatch.setattr(download, "make_mono", mono)
     return durations
 
 
@@ -415,6 +419,12 @@ async def test_download_saves_audio_path(public_host, probed_duration, monkeypat
         return target.with_suffix(".opus")
 
     monkeypatch.setattr(download, "fetch_audio", fake_fetch)
+    mono = []
+
+    async def fake_make_mono(path, duration, report):
+        mono.append(path)
+
+    monkeypatch.setattr(download, "make_mono", fake_make_mono)
     reported = []
 
     async def report(progress):
@@ -435,6 +445,7 @@ async def test_download_saves_audio_path(public_host, probed_duration, monkeypat
     assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
     assert lecture.duration_sec == 1800.0
+    assert mono == [tmp_path / "audio" / f"{lecture.id}.opus"]
     assert reported[-1] == 1.0
 
 

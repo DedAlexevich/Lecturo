@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from typing import Annotated
 from urllib.parse import urlencode
@@ -19,7 +18,7 @@ from app.core.security import (
 )
 from app.models import Lecture, LectureStatus
 from app.schemas.lecture import ExportLinkOut
-from app.services.pdf import lecture_html, render_pdf
+from app.services.pdf import lecture_html, render_pdf_limited
 from app.services.rate_limit import enforce_rate_limit
 from app.services.subtitles import build_cues, content_disposition, to_srt, to_vtt
 
@@ -148,7 +147,7 @@ async def public_export_pdf(
     base_url = get_settings().public_url.rstrip("/")
     page_url = f"{base_url}/s/{token}" + ("" if share.lecture_id else f"/{lecture_id}")
     html = lecture_html(lecture, base_url, page_url)
-    content = await asyncio.to_thread(render_pdf, html)
+    content = await render_pdf_limited(html)
     return Response(
         content,
         media_type="application/pdf",
