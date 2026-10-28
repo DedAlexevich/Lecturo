@@ -32,6 +32,8 @@ DOWNLOAD_TIMEOUT_SEC = 3600.0
 MAX_REDIRECTS = 5
 PROBE_FORMATS = "mov,matroska,mp3,ogg,wav,flac,aac,avi,flv,mpegts,asf"
 INTERNAL_NETWORK = "Ссылка ведёт во внутреннюю сеть"
+YOUTUBE_UNAVAILABLE = "YouTube временно недоступен, загрузите файл"
+VIDEO_UNAVAILABLE_MARKERS = ("video unavailable", "private video", "this video has been removed")
 
 YANDEX_DISK_HOSTS = {
     "disk.yandex.ru",
@@ -170,6 +172,20 @@ def ydl_options(url: str) -> dict[str, Any]:
     return BASE_OPTIONS
 
 
+def ydl_url(url: str) -> str:
+    if video_id := youtube_id(urlparse(url)):
+        return f"https://www.youtube.com/watch?v={video_id}"
+    return url
+
+
+def link_error(url: str, error: YoutubeDLError) -> LinkError:
+    if is_youtube(url) and not any(
+        marker in str(error).lower() for marker in VIDEO_UNAVAILABLE_MARKERS
+    ):
+        return LinkError(YOUTUBE_UNAVAILABLE)
+    return LinkError("Не удалось получить видео по ссылке")
+
+
 def with_scheme(url: str) -> str:
     url = url.strip()
     if url and not SCHEME.match(url):
@@ -301,7 +317,7 @@ async def resolve_yandex_disk(
 
 def extract_info(url: str) -> dict[str, Any]:
     with PublicYoutubeDL(ydl_options(url)) as ydl:
-        return ydl.extract_info(url, download=False)
+        return ydl.extract_info(ydl_url(url), download=False)
 
 
 async def probe_remote_duration(url: str) -> float | None:
@@ -349,7 +365,7 @@ async def inspect_link(url: str) -> LinkInfo:
             raise LinkError(INTERNAL_NETWORK) from error
         except YoutubeDLError as error:
             logger.warning("yt-dlp не смог получить видео (%s): %s", urlparse(url).hostname, error)
-            raise LinkError("Не удалось получить видео по ссылке") from error
+            raise link_error(url, error) from error
         if info.get("_type") == "playlist":
             raise LinkError("Нужна ссылка на одно видео, а не на плейлист")
         if info.get("is_live"):
@@ -396,7 +412,7 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float], stop: thread
         "postprocessor_args": {"extractaudio": ["-ac", "1"]},
     }
     with PublicYoutubeDL(options) as ydl:
-        ydl.download([url])
+        ydl.download([ydl_url(url)])
     audio_path = target.with_suffix(".opus")
     if not audio_path.is_file():
         raise RuntimeError("Аудио не скачалось")
@@ -438,6 +454,9 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
         await asyncio.to_thread(remove_partial, target)
         if isinstance(error, BlockedAddress):
             raise LinkError(INTERNAL_NETWORK) from error
+        if isinstance(error, YoutubeDLError):
+            logger.warning("yt-dlp не смог скачать видео (%s): %s", urlparse(url).hostname, error)
+            raise link_error(url, error) from error
         raise
     try:
         duration = await media.probe_duration(audio_path)

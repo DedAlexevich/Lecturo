@@ -896,3 +896,45 @@ async def test_follow_redirects_limits_chain():
 
     with pytest.raises(LinkError, match="перенаправлений"):
         await download.follow_redirects("http://93.184.216.34/a", transport)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://youtu.be/dQw4w9WgXcQ?si=AbCdEfGh",
+        "https://m.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1&t=42",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+    ],
+)
+def test_youtube_link_is_normalized_for_yt_dlp(url):
+    assert download.ydl_url(url) == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+
+def test_other_links_pass_to_yt_dlp_as_is():
+    url = "https://vkvideo.ru/video-1_2?list=abc"
+    assert download.ydl_url(url) == url
+
+
+@pytest.mark.parametrize(
+    ("url", "message", "expected"),
+    [
+        (
+            "https://youtu.be/dQw4w9WgXcQ",
+            "Sign in to confirm you're not a bot",
+            download.YOUTUBE_UNAVAILABLE,
+        ),
+        ("https://youtu.be/dQw4w9WgXcQ", "Video unavailable", "Не удалось получить видео"),
+        ("https://vkvideo.ru/video-1_2", "Unable to download", "Не удалось получить видео"),
+    ],
+)
+async def test_inspect_link_explains_yt_dlp_failure(monkeypatch, url, message, expected):
+    def failing(link):
+        raise download.YoutubeDLError(message)
+
+    async def public(link):
+        pass
+
+    monkeypatch.setattr(download, "extract_info", failing)
+    monkeypatch.setattr(download, "ensure_public_host", public)
+    with pytest.raises(LinkError, match=expected):
+        await inspect_link(url)
