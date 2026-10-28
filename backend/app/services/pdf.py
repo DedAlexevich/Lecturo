@@ -7,6 +7,7 @@ from weasyprint.text.fonts import FontConfiguration
 
 from app.core.config import get_settings
 from app.models import Course, Lecture
+from app.services.durations import format_duration
 from app.services.summary_markdown import katex_css, render_summary
 
 MOSCOW = ZoneInfo("Europe/Moscow")
@@ -160,19 +161,11 @@ def format_timecode(total_seconds: float) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
-def format_duration(total_seconds: float) -> str:
-    minutes = max(1, round(total_seconds / 60))
-    hours, rest = divmod(minutes, 60)
-    if hours == 0:
-        return f"{minutes} мин"
-    return f"{hours} ч" if rest == 0 else f"{hours} ч {rest} мин"
-
-
 def lecture_html(lecture: Lecture, base_url: str, lecture_url: str | None = None) -> str:
     lecture_url = lecture_url or f"{base_url}/lectures/{lecture.id}"
     meta = [lecture.created_at.astimezone(MOSCOW).strftime("%d.%m.%Y")]
     if lecture.duration_sec:
-        meta.append(format_duration(lecture.duration_sec))
+        meta.append(format_duration(max(lecture.duration_sec, 60), round_up=False))
     meta.append(f'<a href="{escape(lecture_url)}">Открыть в Lecturo</a>')
 
     parts = [

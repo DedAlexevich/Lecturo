@@ -21,6 +21,7 @@ from app.models import (
     User,
 )
 from app.schemas.billing import ProductOut
+from app.services.durations import format_duration
 
 WEEK = timedelta(days=7)
 CHARGED_SOURCES = (UsageSource.weekly, UsageSource.package)
@@ -290,9 +291,11 @@ async def plan_queue(
     )
     if not await can_process(session, user, needed, now, settings):
         quota = await get_quota(session, user, now, settings)
+        needed_text = format_duration(needed, round_up=True)
+        left_text = format_duration(quota.available_sec, round_up=True)
         raise PlanExceedsQuota(
-            f"Выбранные лекции длятся {format_duration(needed)}, "
-            f"а осталось {format_duration(quota.available_sec)}. Уберите часть лекций из плана"
+            f"Выбранные лекции длятся {needed_text}, "
+            f"а осталось {left_text}. Уберите часть лекций из плана"
         )
     for lecture in planned:
         if lecture.duration_sec is not None:
@@ -307,18 +310,6 @@ async def return_to_waiting(session: AsyncSession, lectures: list[Lecture]) -> N
         await refund_lecture(session, lecture.id)
         lecture.status = LectureStatus.waiting_quota
     await session.flush()
-
-
-def format_duration(seconds: int) -> str:
-    hours, rest = divmod(seconds, 3600)
-    minutes = math.ceil(rest / 60)
-    if minutes == 60:
-        hours, minutes = hours + 1, 0
-    if hours and minutes:
-        return f"{hours} ч {minutes} мин"
-    if hours:
-        return f"{hours} ч"
-    return f"{minutes} мин"
 
 
 def list_products(settings: Settings | None = None) -> list[ProductOut]:
