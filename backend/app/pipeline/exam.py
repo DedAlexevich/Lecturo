@@ -17,6 +17,7 @@ from app.pipeline.jobs import queue_settings
 from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
 from app.pipeline.tasks import enqueue
 from app.providers import LLM, get_llm
+from app.services import maintenance
 from app.services.consents import ai_transfer_given
 
 
@@ -165,6 +166,7 @@ async def save_exam_sheet(
 
 
 async def build_exam_sheet(ctx: dict, course_id: str) -> str:
+    await maintenance.hold_job_while_active()
     course_uuid = uuid.UUID(course_id)
     async with SessionLocal() as session:
         row = (
