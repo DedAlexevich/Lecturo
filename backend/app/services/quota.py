@@ -94,13 +94,13 @@ async def get_quota(
 ) -> Quota:
     settings = settings or get_settings()
     now = now or datetime.now(UTC)
-    user.quota_week_start = current_week_start(user.quota_week_start, now)
+    week_start = current_week_start(user.quota_week_start, now)
     until = await subscription_until(session, user.id, now)
     weekly_used = await session.scalar(
         select(func.coalesce(func.sum(UsageEntry.seconds), 0)).where(
             UsageEntry.user_id == user.id,
             UsageEntry.source == UsageSource.weekly,
-            UsageEntry.created_at >= user.quota_week_start,
+            UsageEntry.created_at >= week_start,
         )
     )
     package_left = await session.scalar(
@@ -114,7 +114,7 @@ async def get_quota(
         ),
         weekly_used_sec=weekly_used,
         package_left_sec=package_left,
-        resets_at=user.quota_week_start + WEEK,
+        resets_at=week_start + WEEK,
         subscription_until=until,
     )
 
@@ -144,6 +144,7 @@ async def charge_lecture(
     if await is_charged(session, lecture_id):
         return True
     seconds = math.ceil(duration_sec)
+    user.quota_week_start = current_week_start(user.quota_week_start, now)
     quota = await get_quota(session, user, now, settings)
     if seconds > quota.available_sec:
         return False

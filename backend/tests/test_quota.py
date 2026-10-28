@@ -188,6 +188,10 @@ async def test_new_week_resets_usage_and_keeps_packages(user):
     assert result.resets_at == WEEK_START + timedelta(days=21)
     assert await packages_left(package_ids) == [1400]
     async with SessionLocal() as session:
+        assert (await session.get(User, user.id)).quota_week_start == WEEK_START
+
+    await charge(user, await new_lecture(user), 60, now=later)
+    async with SessionLocal() as session:
         stored = await session.get(User, user.id)
         assert stored.quota_week_start == WEEK_START + timedelta(days=14)
 
@@ -307,6 +311,17 @@ async def test_quota_endpoint(client, user, auth_headers):
     assert body["package_left_sec"] == 0
     assert body["subscription_until"] is None
     assert "resets_at" in body
+
+
+@pytest.mark.parametrize("path", ["/api/v1/billing/quota", "/api/v1/billing/waiting"])
+async def test_quota_reads_do_not_write(client, user, auth_headers, path):
+    await prepare(user)
+
+    response = await client.get(path, headers=auth_headers)
+
+    assert response.status_code == 200
+    async with SessionLocal() as session:
+        assert (await session.get(User, user.id)).quota_week_start == WEEK_START
 
 
 async def test_quota_endpoint_requires_auth(client):

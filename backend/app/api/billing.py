@@ -44,7 +44,6 @@ def resolve_return_url(return_url: str | None) -> str:
 @router.get("/quota")
 async def get_quota(user: CurrentUser, session: SessionDep) -> QuotaOut:
     result = await quota.get_quota(session, user)
-    await session.commit()
     return QuotaOut.model_validate(result)
 
 
@@ -147,9 +146,7 @@ async def waiting_out(user: CurrentUser, session: SessionDep) -> WaitingOut:
 
 @router.get("/waiting")
 async def get_waiting(user: CurrentUser, session: SessionDep) -> WaitingOut:
-    result = await waiting_out(user, session)
-    await session.commit()
-    return result
+    return await waiting_out(user, session)
 
 
 @router.post("/queue-plan")
