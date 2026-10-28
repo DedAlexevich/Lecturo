@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep, bearer, user_by_token
 from app.models import Complaint, Course, Lecture, LectureStatus, ShareLink, User, course_lectures
-from app.pipeline.video_access import signed_video_url
+from app.pipeline.video_access import playable_video_url
 from app.schemas.share import (
     ComplaintIn,
     PublicCourseOut,
@@ -88,7 +88,7 @@ async def public_lecture(
         id=lecture.id,
         title=lecture.title,
         embed_url=lecture.embed_url,
-        video_url=signed_video_url(lecture.id, token) if lecture.video_path else None,
+        video_url=playable_video_url(lecture, token),
         duration_sec=lecture.duration_sec,
         processed_locally=lecture.processed_locally,
         segments=lecture.segments,
