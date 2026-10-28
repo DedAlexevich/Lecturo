@@ -6,6 +6,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
 import { ApiError } from "./queryClient";
 import styles from "./Layout.module.css";
+import { MaintenanceNotice } from "./MaintenanceNotice";
 import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
 import { CookieNotice } from "../features/consent/CookieNotice";
@@ -114,6 +115,7 @@ export function Layout() {
         </header>
         <main className={styles.main}>
           <TelegramBridge />
+          <MaintenanceNotice />
           <LegalUpdateNotice />
           {signedIn && <WaitingNotice />}
           <Suspense fallback={<Spinner label="Загрузка" />}>

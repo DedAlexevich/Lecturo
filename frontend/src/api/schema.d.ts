@@ -1207,6 +1207,228 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/logs/{service}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Log */
+        get: operations["get_log_api_v1_admin_logs__service__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/logs/{service}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Log */
+        get: operations["stream_log_api_v1_admin_logs__service__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/processing-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Processing Errors */
+        get: operations["get_processing_errors_api_v1_admin_processing_errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/processing-errors/{lecture_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Processing */
+        post: operations["retry_processing_api_v1_admin_processing_errors__lecture_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Events */
+        get: operations["get_events_api_v1_admin_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Backups */
+        get: operations["get_backups_api_v1_admin_backups_get"];
+        put?: never;
+        /** Create Backup */
+        post: operations["create_backup_api_v1_admin_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/job": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Backup Job */
+        get: operations["get_backup_job_api_v1_admin_backups_job_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Backup */
+        post: operations["upload_backup_api_v1_admin_backups_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/{name}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Backup */
+        get: operations["download_backup_api_v1_admin_backups__name__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Backup */
+        delete: operations["delete_backup_api_v1_admin_backups__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/backups/{name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Backup */
+        post: operations["restore_backup_api_v1_admin_backups__name__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/maintenance/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable Maintenance */
+        post: operations["disable_maintenance_api_v1_admin_maintenance_disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Maintenance */
+        get: operations["get_maintenance_api_v1_maintenance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1223,7 +1445,7 @@ export interface components {
          * AdminAction
          * @enum {string}
          */
-        AdminAction: "admin_granted" | "admin_revoked";
+        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled";
         /** AdminGrantIn */
         AdminGrantIn: {
             /** Identifier */
@@ -1286,6 +1508,94 @@ export interface components {
          * @enum {string}
          */
         AuthProvider: "email" | "telegram" | "vk" | "yandex";
+        /**
+         * BackupIntegrity
+         * @enum {string}
+         */
+        BackupIntegrity: "ok" | "broken" | "encrypted";
+        /** BackupJobOut */
+        BackupJobOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** State */
+            state: string;
+            /** Step */
+            step: string;
+            /** Message */
+            message: string;
+            /** Backup */
+            backup: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+        };
+        /** BackupOut */
+        BackupOut: {
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /**
+             * Modified At
+             * Format: date-time
+             */
+            modified_at: string;
+            /** Source */
+            source: string;
+            integrity: components["schemas"]["BackupIntegrity"];
+            /** Dump Major */
+            dump_major: number | null;
+            /** Restorable */
+            restorable: boolean;
+        };
+        /** BackupsOut */
+        BackupsOut: {
+            /** Items */
+            items: components["schemas"]["BackupOut"][];
+            job: components["schemas"]["BackupJobOut"] | null;
+            /** Maintenance */
+            maintenance: boolean;
+        };
+        /**
+         * BusinessEventKind
+         * @enum {string}
+         */
+        BusinessEventKind: "payment_created" | "payment_succeeded" | "payment_canceled" | "payment_refunded" | "subscription_granted" | "webhook_received" | "webhook_rejected" | "register" | "login" | "login_failed" | "account_deleted";
+        /** BusinessEventOut */
+        BusinessEventOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            kind: components["schemas"]["BusinessEventKind"];
+            /** User Id */
+            user_id: string | null;
+            /** User Label */
+            user_label: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        /** BusinessEventsPage */
+        BusinessEventsPage: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["BusinessEventOut"][];
+        };
         /** ChapterOut */
         ChapterOut: {
             /** Start */
@@ -1712,6 +2022,37 @@ export interface components {
             /** Summary Md */
             summary_md?: string | null;
         };
+        /**
+         * LogLevel
+         * @enum {string}
+         */
+        LogLevel: "debug" | "info" | "warning" | "error" | "critical";
+        /** LogLineOut */
+        LogLineOut: {
+            level: components["schemas"]["LogLevel"] | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * LogService
+         * @enum {string}
+         */
+        LogService: "api" | "worker" | "bot" | "caddy" | "tusd";
+        /** LogTailOut */
+        LogTailOut: {
+            service: components["schemas"]["LogService"];
+            /** Lines */
+            lines: components["schemas"]["LogLineOut"][];
+            /** Offset */
+            offset: number;
+            /** Size */
+            size: number;
+            /**
+             * Modified At
+             * Format: date-time
+             */
+            modified_at: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -1721,6 +2062,13 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** MaintenanceOut */
+        MaintenanceOut: {
+            /** Active */
+            active: boolean;
+            /** Message */
+            message: string;
         };
         /** PasswordChangeIn */
         PasswordChangeIn: {
@@ -1780,6 +2128,40 @@ export interface components {
          * @enum {string}
          */
         PaymentStatus: "pending" | "succeeded" | "canceled" | "refunded";
+        /** ProcessingErrorOut */
+        ProcessingErrorOut: {
+            /**
+             * Lecture Id
+             * Format: uuid
+             */
+            lecture_id: string;
+            /** Lecture Title */
+            lecture_title: string;
+            lecture_status: components["schemas"]["LectureStatus"];
+            step: components["schemas"]["StepName"];
+            /** Error */
+            error: string;
+            /** Attempts */
+            attempts: number;
+            /**
+             * Failed At
+             * Format: date-time
+             */
+            failed_at: string;
+            /** User Id */
+            user_id: string | null;
+            /** User Label */
+            user_label: string;
+            /** Can Retry */
+            can_retry: boolean;
+        };
+        /** ProcessingErrorsPage */
+        ProcessingErrorsPage: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["ProcessingErrorOut"][];
+        };
         /** ProductOut */
         ProductOut: {
             /** Code */
@@ -1922,6 +2304,13 @@ export interface components {
             accept_terms: boolean;
             /** Accept Personal Data */
             accept_personal_data: boolean;
+        };
+        /** RestoreIn */
+        RestoreIn: {
+            /** Password */
+            password: string;
+            /** Confirmation */
+            confirmation: string;
         };
         /** SearchHit */
         SearchHit: {
@@ -5032,6 +5421,471 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_log_api_v1_admin_logs__service__get: {
+        parameters: {
+            query?: {
+                level?: components["schemas"]["LogLevel"] | null;
+                q?: string;
+                lines?: number;
+            };
+            header?: never;
+            path: {
+                service: components["schemas"]["LogService"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogTailOut"];
+                };
+            };
+            /** @description Лог не найден или недоступен */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_log_api_v1_admin_logs__service__stream_get: {
+        parameters: {
+            query?: {
+                level?: components["schemas"]["LogLevel"] | null;
+                q?: string;
+                offset?: number | null;
+            };
+            header?: never;
+            path: {
+                service: components["schemas"]["LogService"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Лог не найден или недоступен */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_processing_errors_api_v1_admin_processing_errors_get: {
+        parameters: {
+            query?: {
+                only_failed?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingErrorsPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_processing_api_v1_admin_processing_errors__lecture_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lecture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Лекция не найдена */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Перезапустить можно только упавшую обработку */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_events_api_v1_admin_events_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["BusinessEventKind"] | null;
+                user_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessEventsPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_backups_api_v1_admin_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupsOut"];
+                };
+            };
+        };
+    };
+    create_backup_api_v1_admin_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupJobOut"];
+                };
+            };
+            /** @description Уже выполняется другая операция с бэкапами */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_backup_job_api_v1_admin_backups_job_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupJobOut"] | null;
+                };
+            };
+        };
+    };
+    upload_backup_api_v1_admin_backups_upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupOut"];
+                };
+            };
+            /** @description Файл больше допустимого размера */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Файл не похож на дамп PostgreSQL (формат custom) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    download_backup_api_v1_admin_backups__name__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Бэкап не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_backup_api_v1_admin_backups__name__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Бэкап не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_backup_api_v1_admin_backups__name__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupJobOut"];
+                };
+            };
+            /** @description Неверный пароль */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Бэкап не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Уже выполняется другая операция с бэкапами */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_maintenance_api_v1_admin_maintenance_disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_maintenance_api_v1_maintenance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceOut"];
                 };
             };
         };
