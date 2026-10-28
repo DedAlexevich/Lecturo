@@ -5,11 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import create_access_token
 from app.models import AuthIdentity, AuthProvider, User
+from app.schemas.user import TokenOut
 from app.services.consents import record_signup_consents
 
 hasher = PasswordHasher()
 missing_user_hash = hasher.hash("missing-user")
+ACCOUNT_BLOCKED = "Аккаунт заблокирован. Если это ошибка, напишите в поддержку"
 
 
 def hash_password(password: str) -> str:
@@ -52,3 +55,9 @@ async def authenticate(session: AsyncSession, email: str, password: str) -> User
     if not verify_password(password_hash, password) or not has_password:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     return user
+
+
+def login_token(user: User) -> TokenOut:
+    if user.blocked_at is not None:
+        raise HTTPException(status.HTTP_423_LOCKED, ACCOUNT_BLOCKED)
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))

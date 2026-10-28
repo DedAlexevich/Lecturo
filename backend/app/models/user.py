@@ -51,6 +51,8 @@ class User(UUIDPk, CreatedAt, Base):
         DateTime(timezone=True), server_default=func.now()
     )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    blocked_reason: Mapped[str | None] = mapped_column(String(500))
 
     identities: Mapped[list["AuthIdentity"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
