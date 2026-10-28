@@ -57,7 +57,10 @@ class User(UUIDPk, CreatedAt, Base):
 
 class AuthIdentity(UUIDPk, CreatedAt, Base):
     __tablename__ = "auth_identities"
-    __table_args__ = (UniqueConstraint("provider", "provider_user_id"),)
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_user_id"),
+        UniqueConstraint("user_id", "provider"),
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     provider: Mapped[AuthProvider] = mapped_column(Enum(AuthProvider, name="auth_provider"))
@@ -72,7 +75,9 @@ class AuthIdentity(UUIDPk, CreatedAt, Base):
 class AuthToken(UUIDPk, CreatedAt, Base):
     __tablename__ = "auth_tokens"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     kind: Mapped[AuthTokenKind] = mapped_column(Enum(AuthTokenKind, name="auth_token_kind"))
     token_hash: Mapped[str] = mapped_column(String(128), unique=True)
     email: Mapped[str | None] = mapped_column(String(320))

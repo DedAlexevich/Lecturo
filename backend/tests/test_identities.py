@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -9,7 +10,9 @@ from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urlencode
 
 import pytest
-from sqlalchemy import delete, select, update
+from fastapi import HTTPException
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
@@ -24,6 +27,7 @@ from app.models import (
     User,
 )
 from app.services.auth import hash_password
+from app.services.identities import link_vk, link_yandex
 
 BOT_TOKEN = "123456:test-bot-token"
 PASSWORD = "correct-horse"
@@ -420,3 +424,42 @@ async def test_link_telegram_with_second_telegram_keeps_empty_account(client, cl
     )
     assert response.status_code == 409
     assert await identity_owner(telegram_id + 1) == other.id
+
+
+@pytest.mark.parametrize(
+    ("link", "provider", "message"),
+    [
+        (link_vk, AuthProvider.vk, "К аккаунту уже привязан другой VK"),
+        (link_yandex, AuthProvider.yandex, "К аккаунту уже привязан другой Яндекс"),
+    ],
+)
+async def test_parallel_links_create_one_identity(user, link, provider, message):
+    async def attach(external_id: str) -> None:
+        async with SessionLocal() as session:
+            account = await session.get(User, user.id)
+            await link(session, account, external_id, {})
+
+    results = await asyncio.gather(
+        attach(f"first-{uuid.uuid4()}"), attach(f"second-{uuid.uuid4()}"), return_exceptions=True
+    )
+
+    errors = [result for result in results if isinstance(result, HTTPException)]
+    assert results.count(None) == 1
+    assert [(error.status_code, error.detail) for error in errors] == [(409, message)]
+    async with SessionLocal() as session:
+        count = await session.scalar(
+            select(func.count())
+            .select_from(AuthIdentity)
+            .where(AuthIdentity.user_id == user.id, AuthIdentity.provider == provider)
+        )
+    assert count == 1
+
+
+async def test_identity_is_unique_per_user_and_provider(user):
+    async with SessionLocal() as session:
+        session.add_all(
+            AuthIdentity(user_id=user.id, provider=AuthProvider.vk, provider_user_id=external_id)
+            for external_id in (f"first-{uuid.uuid4()}", f"second-{uuid.uuid4()}")
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
