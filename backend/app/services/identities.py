@@ -49,6 +49,7 @@ async def user_out(session: AsyncSession, user: User) -> UserOut:
         else None,
         identities=[IdentityOut.model_validate(identity) for identity in user.identities],
         telegram_notifications=telegram_notifications(user.identities),
+        is_admin=user.is_admin,
     )
 
 
