@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import EmailStr
+from pydantic import EmailStr, Field
 
 from app.models import PaymentKind, PaymentStatus
 from app.schemas.common import Schema
@@ -28,6 +28,7 @@ class PaymentIn(Schema):
     accept_offer: bool
     return_url: str | None = None
     receipt_email: EmailStr | None = None
+    promo_code: str | None = Field(default=None, max_length=64)
 
 
 class PaymentOut(Schema):
@@ -35,6 +36,7 @@ class PaymentOut(Schema):
     kind: PaymentKind
     product_code: str
     amount_kopecks: int
+    discount_kopecks: int = 0
     status: PaymentStatus
     confirmation_url: str | None = None
     created_at: datetime
