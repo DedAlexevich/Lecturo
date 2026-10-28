@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
-from app.pipeline.summarize import MAP_ATTEMPTS, load_prompt, parse_json
+from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
 from app.pipeline.tasks import enqueue, queue_settings
 from app.providers import LLM, get_llm
 from app.services.consents import ai_transfer_given
@@ -100,13 +100,7 @@ def outline(content_md: str) -> str:
 
 async def digest_lecture(llm: LLM, notes: LectureNotes) -> LectureDigest:
     request = f"# {notes.title}\n\n{notes.content_md}"
-    data: dict[str, Any] = {}
-    for _ in range(MAP_ATTEMPTS):
-        try:
-            data = parse_json(await llm.complete(load_prompt("exam_map"), request, json_mode=True))
-        except ValueError:
-            continue
-        break
+    data = await complete_json(llm, load_prompt("exam_map"), request, MAP_ATTEMPTS)
     return LectureDigest(
         title=notes.title,
         tickets=parse_tickets(data.get("tickets")),
@@ -146,15 +140,7 @@ async def compose_exam_sheet(
 ) -> ExamSheetDraft:
     digests = [await digest_lecture(llm, lecture) for lecture in notes]
     request = exam_reduce_request(course_title, digests)
-    data: dict[str, Any] = {}
-    for _ in range(MAP_ATTEMPTS):
-        try:
-            data = parse_json(
-                await llm.complete(load_prompt("exam_reduce"), request, json_mode=True)
-            )
-        except ValueError:
-            continue
-        break
+    data = await complete_json(llm, load_prompt("exam_reduce"), request, MAP_ATTEMPTS)
     return merge_digests(data, digests)
 
 
