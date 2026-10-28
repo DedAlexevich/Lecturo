@@ -25,6 +25,7 @@ MAX_QUESTIONS = 12
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
 QUIZ_ATTEMPTS = 3
+QUIZ_MAX_TOKENS = 4096
 TRANSCRIPT_CHAR_LIMIT = 60_000
 
 logger = logging.getLogger(__name__)
@@ -151,7 +152,9 @@ async def generate_questions(
 ) -> list[dict[str, Any]]:
     reason = ""
     for attempt in range(1, QUIZ_ATTEMPTS + 1):
-        content = await llm.complete(load_prompt("quiz"), request, json_mode=True)
+        content = await llm.complete(
+            load_prompt("quiz"), request, json_mode=True, max_tokens=QUIZ_MAX_TOKENS
+        )
         try:
             return parse_questions(content, segments, lecture_end)
         except ValueError as error:

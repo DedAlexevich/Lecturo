@@ -99,6 +99,45 @@ async def test_truncated_answer_gives_clear_error():
         await llm.complete("система", "текст", json_mode=True)
 
 
+def length_response(content: str) -> httpx.Response:
+    return httpx.Response(
+        200, json={"choices": [{"message": {"content": content}, "finish_reason": "length"}]}
+    )
+
+
+async def test_truncated_answer_with_complete_json_is_accepted():
+    payload = '{"questions": []}' + " \n" * 500
+    llm = OpenAICompatibleLLM(
+        SETTINGS, transport=httpx.MockTransport(lambda request: length_response(payload))
+    )
+
+    assert await llm.complete("система", "текст", json_mode=True) == '{"questions": []}'
+
+
+async def test_truncated_answer_without_json_mode_is_error():
+    llm = OpenAICompatibleLLM(
+        SETTINGS, transport=httpx.MockTransport(lambda request: length_response("{}"))
+    )
+
+    with pytest.raises(OpenAICompatibleError, match="ответ обрезан"):
+        await llm.complete("система", "текст")
+
+
+async def test_max_tokens_is_limited_by_settings():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return chat_response("ответ")
+
+    settings = SETTINGS.model_copy(update={"llm_max_tokens": 3000})
+    llm = OpenAICompatibleLLM(settings, transport=httpx.MockTransport(handler))
+    await llm.complete("система", "текст", max_tokens=1000)
+    await llm.complete("система", "текст", max_tokens=9000)
+
+    assert [body["max_tokens"] for body in requests] == [1000, 3000]
+
+
 async def test_llm_retries_on_rate_limit_and_server_error():
     statuses = iter([429, 503])
 

@@ -39,7 +39,9 @@ class SpeechToText(Protocol):
 
 
 class LLM(Protocol):
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str: ...
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str: ...
 
 
 class Embeddings(Protocol):

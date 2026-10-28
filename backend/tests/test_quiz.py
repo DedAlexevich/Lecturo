@@ -283,7 +283,9 @@ class ScriptedLLM:
         self.answers = list(answers)
         self.requests: list[str] = []
 
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
         assert json_mode
         assert system == quiz.load_prompt("quiz")
         self.requests.append(user)

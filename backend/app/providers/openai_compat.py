@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 from typing import Any
 
 import httpx
@@ -8,8 +10,14 @@ from app.models import EMBEDDING_DIM
 
 MAX_RETRY_DELAY_SECONDS = 60.0
 
+logger = logging.getLogger(__name__)
+
 
 class OpenAICompatibleError(RuntimeError):
+    pass
+
+
+class OpenAICompatibleTruncated(OpenAICompatibleError):
     pass
 
 
@@ -81,6 +89,16 @@ class OpenAICompatibleClient:
         return min(delay, MAX_RETRY_DELAY_SECONDS)
 
 
+def is_complete_json(content: Any) -> bool:
+    if not isinstance(content, str):
+        return False
+    try:
+        json.loads(content.strip())
+    except ValueError:
+        return False
+    return True
+
+
 def require_settings(settings: dict[str, str], provider: str) -> None:
     missing = [name for name, value in settings.items() if not value]
     if missing:
@@ -110,14 +128,22 @@ class OpenAICompatibleLLM:
             settings.llm_base_url, settings.llm_api_key, transport=transport, **options
         )
 
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(
+        self,
+        system: str,
+        user: str,
+        *,
+        json_mode: bool = False,
+        max_tokens: int | None = None,
+    ) -> str:
+        limit = min(max_tokens, self.max_tokens) if max_tokens else self.max_tokens
         body: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "max_tokens": self.max_tokens,
+            "max_tokens": limit,
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
@@ -128,9 +154,11 @@ class OpenAICompatibleLLM:
         except (KeyError, IndexError, TypeError) as error:
             raise OpenAICompatibleError("/chat/completions: в ответе нет текста") from error
         if choice.get("finish_reason") == "length":
-            raise OpenAICompatibleError(
-                f"/chat/completions: ответ обрезан на лимите {self.max_tokens} токенов, "
-                "увеличьте LLM_MAX_TOKENS или сократите запрос"
+            if json_mode and is_complete_json(content):
+                logger.warning("Ответ дошёл до лимита %s токенов, но JSON полный", limit)
+                return content.strip()
+            raise OpenAICompatibleTruncated(
+                f"/chat/completions: ответ обрезан на лимите {limit} токенов"
             )
         if not content:
             raise OpenAICompatibleError("/chat/completions: модель вернула пустой ответ")

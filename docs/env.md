@@ -107,6 +107,7 @@ cp .env.example .env
 | `LLM_BASE_URL` | Базовый адрес API | при `openai` | `https://api.deepseek.com` | `backend/app/providers/openai_compat.py` |
 | `LLM_API_KEY` | Ключ API | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
 | `LLM_MODEL` | Название модели | при `openai` | `deepseek-chat` | `backend/app/providers/openai_compat.py` |
+| `LLM_MAX_TOKENS` | Потолок длины ответа модели в токенах. Отдельные вызовы (например, квиз) просят меньше, но не больше этого значения. Не ставьте выше предела вывода модели: у `deepseek-chat` он 8192, при большем значении API вернёт ошибку. Менять стоит только для модели с большим пределом | нет | `8192` | `backend/app/providers/openai_compat.py` |
 | `EMBEDDINGS_PROVIDER` | `stub`, `openai` или `yandex` | нет | `stub` | `backend/app/providers/__init__.py` |
 | `EMBEDDINGS_BASE_URL` | Базовый адрес API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
 | `EMBEDDINGS_API_KEY` | Ключ API эмбеддингов | при `openai` | пусто | `backend/app/providers/openai_compat.py` |
