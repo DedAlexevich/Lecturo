@@ -22,10 +22,16 @@ services:
   bot-redis:
     restart: always
 
+  data-owner:
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+
   api:
     environment:
       <<: *smtp
       DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}@db:5432/lecturo
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
     networks:
       - default
       - mail
