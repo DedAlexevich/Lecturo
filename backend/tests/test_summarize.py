@@ -11,9 +11,11 @@ from app.pipeline.summarize import (
     PartDigest,
     Topic,
     build_chapters,
+    group_chapters,
     plan_chapters,
     split_into_parts,
     split_oversized,
+    strip_code_fence,
 )
 from app.providers.openai_compat import OpenAICompatibleTruncated
 
@@ -88,8 +90,12 @@ class ScriptedLLM:
         self.requests: list[str] = []
 
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
-        assert json_mode
         self.requests.append(user)
+        if "часть конспекта" in system:
+            assert not json_mode
+            chapters = json.loads(user)["chapters"]
+            return "\n\n".join(f"## {chapter['title']}\n\nРазбор" for chapter in chapters)
+        assert json_mode
         if "фрагмент расшифровки" in system:
             start = int(user.split("]", 1)[0].lstrip("["))
             return json.dumps(
@@ -147,10 +153,10 @@ async def test_summarize_maps_parts_and_saves_chapters(user, monkeypatch):
 
     reported = await run_summarize(lecture.id)
 
-    assert len(llm.requests) == 5
+    assert len(llm.requests) == 9
     assert reported == pytest.approx([0.2, 0.4, 0.6, 0.8])
     chapters, summary = await saved(lecture.id)
-    assert summary.content_md == "## Итог"
+    assert summary.content_md == "\n\n".join(f"## Глава {i}\n\nРазбор" for i in range(1, 5))
     assert [c.title for c in chapters] == ["Глава 1", "Глава 2", "Глава 3", "Глава 4"]
     assert [(c.start, c.end) for c in chapters] == [
         (0, 900),
@@ -200,7 +206,7 @@ async def test_failed_reduce_keeps_previous_chapters(user, monkeypatch):
 
     chapters, summary = await saved(lecture.id)
     assert [(c.title, c.start, c.end) for c in chapters] == before
-    assert summary.content_md == "## Итог"
+    assert summary.content_md.startswith("## Глава 1")
 
 
 class BrokenMapLLM(ScriptedLLM):
@@ -286,7 +292,7 @@ class FlakyReduceLLM(ScriptedLLM):
             self.reduce_calls += 1
             if self.reduce_calls <= self.broken_reduces:
                 return "не JSON"
-        else:
+        elif "фрагмент расшифровки" in system:
             self.map_calls += 1
         return await super().complete(system, user, json_mode=json_mode)
 
@@ -301,7 +307,7 @@ async def test_broken_first_reduce_answer_is_retried(user, monkeypatch):
     chapters, summary = await saved(lecture.id)
     assert llm.reduce_calls == 2
     assert llm.map_calls == 4
-    assert summary.content_md == "## Итог"
+    assert summary.content_md.startswith("## Глава 1")
     assert [c.title for c in chapters] == ["Глава 1", "Глава 2", "Глава 3", "Глава 4"]
 
 
@@ -492,3 +498,136 @@ def test_repeated_split_keeps_titles_unique_and_fills_summary():
     assert len(result) >= 3
     assert len({c.title for c in result}) == len(result)
     assert all(c.summary for c in result)
+
+
+class TruncatingLLM(ScriptedLLM):
+    def __init__(self, truncate_full_reduce: bool = False, truncate_chapters: bool = False) -> None:
+        super().__init__()
+        self.systems: list[str] = []
+        self.truncate_full_reduce = truncate_full_reduce
+        self.truncate_chapters = truncate_chapters
+        self.truncated_section_start: int | None = None
+
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        self.systems.append(system)
+        if self.truncate_full_reduce and '"summary_md"' in system:
+            raise OpenAICompatibleTruncated("ответ обрезан")
+        if self.truncate_chapters and "Главы" in system:
+            raise OpenAICompatibleTruncated("ответ обрезан")
+        if "часть конспекта" in system:
+            chapters = json.loads(user)["chapters"]
+            if chapters[0]["start"] == self.truncated_section_start:
+                raise OpenAICompatibleTruncated("ответ обрезан")
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+def count(systems: list[str], marker: str) -> int:
+    return len([system for system in systems if marker in system])
+
+
+async def test_short_lecture_writes_summary_in_one_reduce(user, monkeypatch):
+    llm = TruncatingLLM()
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 15)
+
+    await run_summarize(lecture.id)
+
+    _, summary = await saved(lecture.id)
+    assert summary.content_md == "## Итог"
+    assert count(llm.systems, '"summary_md"') == 1
+    assert count(llm.systems, "часть конспекта") == 0
+
+
+async def test_truncated_short_reduce_builds_summary_by_chapters(user, monkeypatch):
+    llm = TruncatingLLM(truncate_full_reduce=True)
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 15)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert len(chapters) == 5
+    assert count(llm.systems, '"summary_md"') == 1
+    assert count(llm.systems, "Конспект писать не нужно") == 1
+    assert count(llm.systems, "часть конспекта") == 1
+    assert summary.content_md.startswith(f"## {chapters[0].title}\n\nРазбор")
+
+
+async def test_long_lecture_skips_full_reduce_and_bounds_requests(user, monkeypatch):
+    llm = TruncatingLLM()
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 120)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert len(chapters) == 8
+    assert count(llm.systems, '"summary_md"') == 0
+    assert count(llm.systems, "Конспект писать не нужно") == 1
+    assert count(llm.systems, "часть конспекта") == 8
+    assert all(f"## {chapter.title}" in summary.content_md for chapter in chapters)
+    assert "{{" not in next(s for s in llm.systems if "часть конспекта" in s)
+
+
+async def test_truncated_section_falls_back_to_chapter_summaries(user, monkeypatch):
+    llm = TruncatingLLM()
+    llm.truncated_section_start = 900
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    await run_summarize(lecture.id)
+
+    _, summary = await saved(lecture.id)
+    assert summary.content_md == "\n\n".join(
+        [
+            "## Глава 1\n\nРазбор",
+            "## Глава 2\n\nЧасть с 900",
+            "## Глава 3\n\nРазбор",
+            "## Глава 4\n\nРазбор",
+        ]
+    )
+
+
+async def test_truncated_chapters_reduce_takes_chapters_from_parts(user, monkeypatch):
+    llm = TruncatingLLM(truncate_chapters=True)
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert [c.title for c in chapters] == ["Тема 0", "Тема 900", "Тема 1800", "Тема 2700"]
+    assert summary.content_md.startswith("## Тема 0\n\nРазбор")
+
+
+def test_group_chapters_limits_section_length():
+    chapters = [
+        ChapterDraft(f"Глава {i}", start, end, "")
+        for i, (start, end) in enumerate([(0, 300), (300, 700), (700, 1000), (1000, 2500)])
+    ]
+
+    groups = group_chapters(chapters)
+
+    assert [[c.title for c in group] for group in groups] == [
+        ["Глава 0", "Глава 1"],
+        ["Глава 2"],
+        ["Глава 3"],
+    ]
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["## Глава\n\nТекст", "```markdown\n## Глава\n\nТекст\n```", "\n```\n## Глава\n\nТекст\n```\n"],
+)
+def test_strip_code_fence(content):
+    assert strip_code_fence(content) == "## Глава\n\nТекст"
+
+
+async def test_long_lecture_on_stub_llm_gets_markdown_by_chapters(user):
+    lecture = await create_transcribed_lecture(user, 40)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert summary.content_md.startswith(f"## {chapters[0].title}\n\n")
+    assert '"chapters"' not in summary.content_md

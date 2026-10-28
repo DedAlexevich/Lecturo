@@ -56,6 +56,11 @@ def stub_quiz(user: str) -> str:
     return json.dumps({"questions": questions}, ensure_ascii=False)
 
 
+def stub_section(user: str) -> str:
+    chapters = json.loads(user).get("chapters", [])
+    return "\n\n".join(f"## {chapter['title']}\n\n{chapter['summary']}" for chapter in chapters)
+
+
 class StubLLM:
     async def complete(
         self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
@@ -80,6 +85,8 @@ class StubLLM:
                         ensure_ascii=False,
                     )
             return json.dumps({"text": user[:200]}, ensure_ascii=False)
+        if "часть конспекта" in system:
+            return stub_section(user)
         return f"Кратко: {user[:200]}"
 
 
