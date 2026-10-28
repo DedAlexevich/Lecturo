@@ -1,0 +1,36 @@
+.provider-button {
+  gap: var(--space-3);
+}
+
+.button.provider-button--full {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem;
+}
+
+.provider-button--full::before {
+  content: "";
+}
+
+.provider-button__label {
+  text-align: center;
+}
+
+.provider-button__mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.button--sm.provider-button .provider-button__mark {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.provider-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
