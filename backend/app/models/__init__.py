@@ -1,4 +1,4 @@
-from app.models.admin import AdminAction, AdminAuditEntry
+from app.models.admin import AdminAction, AdminAuditEntry, BusinessEvent, BusinessEventKind
 from app.models.base import EMBEDDING_DIM, Base
 from app.models.billing import (
     HourPackage,
@@ -38,6 +38,8 @@ __all__ = [
     "AuthToken",
     "AuthTokenKind",
     "Base",
+    "BusinessEvent",
+    "BusinessEventKind",
     "Chapter",
     "ChunkKind",
     "Complaint",
