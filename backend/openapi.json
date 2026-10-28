@@ -3658,6 +3658,227 @@
           }
         ]
       }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Audit",
+        "operationId": "get_audit_api_v1_admin_audit_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AdminAction"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/admins": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Admins",
+        "operationId": "get_admins_api_v1_admin_admins_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminOut"
+                  },
+                  "type": "array",
+                  "title": "Response Get Admins Api V1 Admin Admins Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add Admin",
+        "operationId": "add_admin_api_v1_admin_admins_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGrantIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "409": {
+            "description": "Пользователь уже администратор"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/admins/{user_id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Remove Admin",
+        "operationId": "remove_admin_api_v1_admin_admins__user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Этот пользователь не администратор"
+          },
+          "409": {
+            "description": "Нельзя снять последнего администратора"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3700,6 +3921,157 @@
         },
         "type": "object",
         "title": "AccountDeleteIn"
+      },
+      "AdminAction": {
+        "type": "string",
+        "enum": [
+          "admin_granted",
+          "admin_revoked"
+        ],
+        "title": "AdminAction"
+      },
+      "AdminGrantIn": {
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Identifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifier"
+        ],
+        "title": "AdminGrantIn"
+      },
+      "AdminOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "created_at"
+        ],
+        "title": "AdminOut"
+      },
+      "AuditEntryOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_label": {
+            "type": "string",
+            "title": "Actor Label"
+          },
+          "action": {
+            "$ref": "#/components/schemas/AdminAction"
+          },
+          "target_type": {
+            "type": "string",
+            "title": "Target Type"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_label": {
+            "type": "string",
+            "title": "Target Label"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "actor_id",
+          "actor_label",
+          "action",
+          "target_type",
+          "target_id",
+          "target_label",
+          "details"
+        ],
+        "title": "AuditEntryOut"
+      },
+      "AuditPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "AuditPage"
       },
       "AuthProvider": {
         "type": "string",
@@ -6133,6 +6505,10 @@
           },
           "telegram_notifications": {
             "$ref": "#/components/schemas/TelegramNotifications"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin"
           }
         },
         "type": "object",
@@ -6143,7 +6519,8 @@
           "display_name",
           "ai_transfer_accepted_at",
           "identities",
-          "telegram_notifications"
+          "telegram_notifications",
+          "is_admin"
         ],
         "title": "UserOut"
       },
