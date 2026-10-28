@@ -1,4 +1,5 @@
 import logging
+import re
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -8,6 +9,20 @@ from app.core.config import Settings, get_settings
 APP_LOGGER_NAME = "app"
 OWN_OUTPUT_LOGGERS = ("app", "arq", "uvicorn")
 SERVER_LOGGERS = ("uvicorn", "uvicorn.access")
+SECRET_QUERY_PARAMS = re.compile(r"(?<=[?&])(signature|share|token|code)=[^&#]*")
+
+
+def mask_query(path: str) -> str:
+    return SECRET_QUERY_PARAMS.sub(r"\1=***", path)
+
+
+class MaskedAccessQuery(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client_addr, method, path, http_version, status_code = record.args
+            if isinstance(path, str):
+                record.args = (client_addr, method, mask_query(path), http_version, status_code)
+        return True
 
 
 class WithoutOwnOutput(logging.Filter):
@@ -46,6 +61,9 @@ def configure_logging() -> None:
     formatter = build_formatter(settings.log_service)
     logger = logging.getLogger(APP_LOGGER_NAME)
     logger.setLevel(logging.INFO)
+    access_logger = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, MaskedAccessQuery) for f in access_logger.filters):
+        access_logger.addFilter(MaskedAccessQuery())
     if logger.handlers:
         return
     handler = logging.StreamHandler(sys.stdout)

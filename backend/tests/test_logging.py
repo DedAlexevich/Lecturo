@@ -12,12 +12,17 @@ from app.core.logging import configure_logging
 def isolated_loggers():
     names = ["", "app", "uvicorn", "uvicorn.access"]
     loggers = [logging.getLogger(name) for name in names]
-    saved = [(logger.handlers[:], logger.level, logger.propagate) for logger in loggers]
+    saved = [
+        (logger.handlers[:], logger.filters[:], logger.level, logger.propagate)
+        for logger in loggers
+    ]
     for logger in loggers:
         logger.handlers.clear()
+        logger.filters.clear()
     yield
-    for logger, (handlers, level, propagate) in zip(loggers, saved, strict=True):
+    for logger, (handlers, filters, level, propagate) in zip(loggers, saved, strict=True):
         logger.handlers[:] = handlers
+        logger.filters[:] = filters
         logger.setLevel(level)
         logger.propagate = propagate
     get_settings.cache_clear()
@@ -55,3 +60,29 @@ def test_no_file_without_log_dir(monkeypatch, isolated_loggers):
     get_settings.cache_clear()
     configure_logging()
     assert not [h for h in logging.getLogger().handlers if isinstance(h, RotatingFileHandler)]
+
+
+def test_access_log_masks_secrets_in_query(caplog, monkeypatch, isolated_loggers):
+    monkeypatch.delenv("LOG_DIR", raising=False)
+    get_settings.cache_clear()
+    configure_logging()
+    configure_logging()
+    path = "/api/v1/lectures/1/video-access?signature=abc&share=tok&expires=99"
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        logging.getLogger("uvicorn.access").info(
+            '%s - "%s %s HTTP/%s" %d', "10.0.0.1:5000", "GET", path, "1.1", 200
+        )
+        logging.getLogger("uvicorn.access").info(
+            '%s - "%s %s HTTP/%s" %d',
+            "10.0.0.1:5000",
+            "GET",
+            "/api/v1/auth/verify?token=t",
+            "1.1",
+            204,
+        )
+    assert len(logging.getLogger("uvicorn.access").filters) == 1
+    assert "abc" not in caplog.text
+    assert "share=tok" not in caplog.text
+    assert "token=t " not in caplog.text
+    assert "video-access?signature=***&share=***&expires=99" in caplog.text
+    assert "verify?token=*** HTTP/1.1" in caplog.text
