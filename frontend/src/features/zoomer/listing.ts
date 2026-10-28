@@ -1,17 +1,11 @@
-const clipName = /\.(mp4|webm)$/i;
+const clipUrl = /^\/zoomer\/[0-9a-f-]{36}\.mp4$/;
 
-export function parseClipListing(body: unknown): string[] {
+export function parseClipList(body: unknown): string[] {
   if (!Array.isArray(body)) return [];
   return body
     .filter(
-      (entry): entry is { name: string } =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof entry.name === "string" &&
-        entry.is_dir !== true &&
-        clipName.test(entry.name),
+      (entry): entry is { url: string } =>
+        typeof entry === "object" && entry !== null && typeof entry.url === "string" && clipUrl.test(entry.url),
     )
-    .map((entry) => entry.name)
-    .sort()
-    .map((name) => `/zoomer/${encodeURIComponent(name)}`);
+    .map((entry) => entry.url);
 }

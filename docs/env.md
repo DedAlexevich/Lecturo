@@ -307,6 +307,8 @@ Gmail:
 |---|---|---|---|
 | `LOG_STREAM_LIMIT` | Сколько потоков логов в реальном времени можно держать открытыми одновременно | `3` | `backend/app/api/admin_logs.py` |
 | `BACKUP_MAX_UPLOAD_MB` | Максимальный размер дампа, который можно загрузить в панели, МБ. Caddy пропускает до 2 ГБ на `/api/v1/admin/backups/upload` | `2048` | `backend/app/services/admin_backups.py`, `infra/Caddyfile` |
+| `ZOOMER_MAX_UPLOAD_MB` | Максимальный размер ролика для режима зумера, который можно загрузить в панели, МБ. Caddy пропускает до 64 МБ на `/api/v1/admin/zoomer/videos` | `30` | `backend/app/services/zoomer.py`, `infra/Caddyfile` |
+| `ZOOMER_MAX_DURATION_SEC` | Максимальная длительность ролика для режима зумера, секунды | `180` | `backend/app/services/zoomer.py` |
 | `RESTORE_IDLE_WAIT_SECONDS` | Сколько секунд восстановление из панели ждёт, пока воркер закончит текущую обработку лекций | `300` | `backend/app/services/admin_backups.py` |
 
 Папка бэкапов внутри контейнера `api` всегда `/backups`: `docker-compose.yml` монтирует туда `BACKUP_DIR` с хоста, а значение переменной внутри контейнера переопределяет.

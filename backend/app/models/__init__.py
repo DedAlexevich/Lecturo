@@ -30,6 +30,7 @@ from app.models.promo import PromoCode, PromoKind, PromoRedemption
 from app.models.search import ChunkKind, SearchChunk
 from app.models.share import Complaint, ShareLink
 from app.models.user import AuthIdentity, AuthProvider, AuthToken, AuthTokenKind, User
+from app.models.zoomer import ZoomerVideo, ZoomerVideoStatus
 
 __all__ = [
     "EMBEDDING_DIM",
@@ -80,5 +81,7 @@ __all__ = [
     "UsageEntry",
     "UsageSource",
     "User",
+    "ZoomerVideo",
+    "ZoomerVideoStatus",
     "course_lectures",
 ]

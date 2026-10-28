@@ -1,11 +1,11 @@
-import { parseClipListing } from "./listing";
+import { parseClipList } from "./listing";
 
 let request: Promise<string[]> | null = null;
 
 export function loadZoomerClips(): Promise<string[]> {
-  request ??= fetch("/zoomer/", { headers: { Accept: "application/json" } })
+  request ??= fetch("/api/v1/zoomer/videos", { headers: { Accept: "application/json" } })
     .then((response) => (response.ok ? response.json() : []))
-    .then(parseClipListing)
+    .then(parseClipList)
     .catch(() => []);
   return request;
 }

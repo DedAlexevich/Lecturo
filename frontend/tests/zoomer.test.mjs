@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseClipListing } from "../src/features/zoomer/listing.ts";
+import { parseClipList } from "../src/features/zoomer/listing.ts";
 import { nextClipIndex, parseStoredIndex, parseStoredMode } from "../src/features/zoomer/rotation.ts";
 
 test("no clip is picked when the folder is empty", () => {
@@ -38,23 +38,20 @@ test("mode is off unless explicitly stored as on", () => {
   assert.equal(parseStoredMode("on"), true);
 });
 
-test("listing keeps only mp4 and webm files in name order", () => {
+test("clip list keeps the server order and only clip urls", () => {
+  const first = "/zoomer/0b6f2c1e-6a3d-4f8e-9c1a-2d4e5f607182.mp4";
+  const second = "/zoomer/9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d.mp4";
   const body = [
-    { name: "rugs.webm", is_dir: false },
-    { name: "notes.txt", is_dir: false },
-    { name: "Run.MP4", is_dir: false },
-    { name: "old.mp4", is_dir: true },
-    { name: "carpet wash.mp4", is_dir: false },
+    { id: "b", url: second, title: "Второй" },
+    { id: "x", url: "https://example.org/clip.mp4" },
+    { id: "y", url: "/zoomer/../secret.mp4" },
+    { id: "a", url: first, title: "Первый" },
   ];
-  assert.deepEqual(parseClipListing(body), [
-    "/zoomer/Run.MP4",
-    "/zoomer/carpet%20wash.mp4",
-    "/zoomer/rugs.webm",
-  ]);
+  assert.deepEqual(parseClipList(body), [second, first]);
 });
 
-test("listing that is not a file list gives no clips", () => {
-  assert.deepEqual(parseClipListing(null), []);
-  assert.deepEqual(parseClipListing({ name: "a.mp4" }), []);
-  assert.deepEqual(parseClipListing([null, 3, { name: 5 }]), []);
+test("response that is not a clip list gives no clips", () => {
+  assert.deepEqual(parseClipList(null), []);
+  assert.deepEqual(parseClipList({ url: "/zoomer/a.mp4" }), []);
+  assert.deepEqual(parseClipList([null, 3, { url: 5 }]), []);
 });

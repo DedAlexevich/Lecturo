@@ -271,7 +271,6 @@ services:
     volumes:
       - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - ${DATA_DIR:-./data}/storage:/srv/storage:ro
-      - ${DATA_DIR:-./data}/zoomer:/srv/zoomer:ro
       - ${DATA_DIR:-./data}/caddy:/data
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
     depends_on:

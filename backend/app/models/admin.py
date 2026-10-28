@@ -33,6 +33,11 @@ class AdminAction(enum.StrEnum):
     alert_settings_changed = "alert_settings_changed"
     promo_created = "promo_created"
     promo_disabled = "promo_disabled"
+    zoomer_video_uploaded = "zoomer_video_uploaded"
+    zoomer_video_rejected = "zoomer_video_rejected"
+    zoomer_video_updated = "zoomer_video_updated"
+    zoomer_video_deleted = "zoomer_video_deleted"
+    zoomer_videos_reordered = "zoomer_videos_reordered"
 
 
 class AdminAuditEntry(UUIDPk, CreatedAt, Base):
