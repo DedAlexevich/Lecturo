@@ -88,12 +88,15 @@ async def notices(users: dict[str, User]) -> list[LegalNotice]:
 def test_ai_transfer_revision_has_effective_date_and_changes():
     assert AI_TRANSFER.effective_date >= AI_TRANSFER.revision_date + timedelta(days=7)
     assert AI_TRANSFER.changes
-    privacy = read_document("privacy")
-    assert privacy.effective_date >= privacy.revision_date + timedelta(days=7)
-    assert privacy.changes
     terms = read_document("terms")
     assert terms.effective_date == terms.revision_date
     assert terms.changes is None
+
+
+def test_privacy_revision_has_effective_date_and_changes():
+    privacy = read_document("privacy")
+    assert privacy.effective_date >= privacy.revision_date + timedelta(days=7)
+    assert privacy.changes
 
 
 async def apply_after_announcement(day):
