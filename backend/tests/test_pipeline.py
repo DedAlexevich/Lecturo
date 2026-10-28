@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from arq import create_pool
+from arq import Retry, create_pool
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import (
     abort_jobs_ss,
@@ -51,6 +51,8 @@ from app.providers.stub import STUB_PHRASES
 from app.providers.yandex import YandexSpeechKitError
 from app.services.quota import QuotaExceeded
 from tests.conftest import notifications
+
+ENQUEUE_VIDEO = tasks.enqueue_video
 
 
 def generate_media(path: Path, *inputs: str) -> Path:
@@ -1252,3 +1254,59 @@ async def test_ready_lecture_with_pending_video_is_resumed(user, sample_video, a
 
     assert await tasks.resume_interrupted_lectures(arq_redis) == 1
     assert await Job(jobs.lecture_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+
+
+async def test_video_is_compressed_by_separate_job(user, sample_video, arq_redis, monkeypatch):
+    monkeypatch.setattr(tasks, "enqueue_video", ENQUEUE_VIDEO)
+    lecture = await create_lecture(user, sample_video)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    assert steps_by_name(await load(lecture.id))[StepName.video].status == StepStatus.pending
+    assert await Job(jobs.video_job_id(lecture.id), arq_redis).status() == JobStatus.queued
+
+    assert await tasks.process_video({}, str(lecture.id)) == StepStatus.done
+    compressed = await load(lecture.id)
+    assert steps_by_name(compressed)[StepName.video].status == StepStatus.done
+    assert compressed.video_path is not None
+
+
+async def test_video_has_own_timeout(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+
+    async def endless(session, lecture, report):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(tasks, "VIDEO_TIMEOUT_SEC", 0.5)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.video, endless)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    lecture = await load(lecture.id)
+    step = steps_by_name(lecture)[StepName.video]
+    assert lecture.status == LectureStatus.ready
+    assert (step.status, step.error) == (StepStatus.failed, tasks.VIDEO_TIMED_OUT)
+    assert not media.original_path(lecture.id).exists()
+
+
+async def test_temporary_video_error_keeps_original(user, sample_video, monkeypatch):
+    lecture = await create_lecture(user, sample_video)
+
+    async def later(lecture_id):
+        pass
+
+    async def disk_error(args, target, duration, report, error):
+        raise OSError("нет места на диске")
+
+    monkeypatch.setattr(tasks, "enqueue_video", later)
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+    monkeypatch.setattr(media, "encode", disk_error)
+
+    with pytest.raises(Retry):
+        await tasks.process_video({"job_try": 1}, str(lecture.id))
+    assert media.original_path(lecture.id).exists()
+
+    final = {"job_try": tasks.VIDEO_ATTEMPTS}
+    assert await tasks.process_video(final, str(lecture.id)) == StepStatus.failed
+    assert not media.original_path(lecture.id).exists()
+    assert (await load(lecture.id)).status == LectureStatus.ready
