@@ -19,7 +19,10 @@ from app.models import (
     Payment,
     PaymentKind,
     PaymentStatus,
+    ProcessingStep,
     SourceType,
+    StepName,
+    StepStatus,
     Subscription,
     UsageEntry,
     UsageSource,
@@ -406,12 +409,30 @@ async def stats_data() -> AsyncIterator[tuple[date, date]]:
             source_type=SourceType.upload,
             status=LectureStatus.failed,
             created_at=at(first, 12),
-            updated_at=at(second, 2),
+            updated_at=at(second + timedelta(days=5), 2),
         )
         session.add_all([ready, broken])
         await session.flush()
         session.add_all(
             [
+                ProcessingStep(
+                    lecture_id=broken.id,
+                    step=StepName.transcribe,
+                    status=StepStatus.failed,
+                    finished_at=at(second, 2),
+                ),
+                ProcessingStep(
+                    lecture_id=broken.id,
+                    step=StepName.summarize,
+                    status=StepStatus.failed,
+                    finished_at=at(second, 3),
+                ),
+                ProcessingStep(
+                    lecture_id=ready.id,
+                    step=StepName.transcribe,
+                    status=StepStatus.done,
+                    finished_at=at(first, 11),
+                ),
                 UsageEntry(
                     user_id=early.id,
                     lecture_id=ready.id,

@@ -15,9 +15,10 @@ from app.models import (
     AuthProvider,
     HourPackage,
     Lecture,
-    LectureStatus,
     Payment,
     PaymentStatus,
+    ProcessingStep,
+    StepStatus,
     Subscription,
     UsageEntry,
     User,
@@ -323,12 +324,15 @@ async def collect_stats(session: AsyncSession, date_from: date, date_to: date) -
         UsageEntry.source.in_(CHARGED_SOURCES),
         *within(UsageEntry.created_at),
     )
+    failed_at = func.coalesce(
+        ProcessingStep.finished_at, ProcessingStep.started_at, ProcessingStep.created_at
+    )
     failed = await per_day(
         session,
-        Lecture.updated_at,
-        func.count(),
-        Lecture.status == LectureStatus.failed,
-        *within(Lecture.updated_at),
+        failed_at,
+        func.count(ProcessingStep.lecture_id.distinct()),
+        ProcessingStep.status == StepStatus.failed,
+        *within(failed_at),
     )
     paid = Payment.status == PaymentStatus.succeeded, *within(Payment.paid_at)
     payments = await per_day(session, Payment.paid_at, func.count(), *paid)
