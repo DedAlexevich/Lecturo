@@ -1,13 +1,19 @@
+import hashlib
+import hmac
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.db import SessionLocal
 from app.models import (
+    AuthIdentity,
+    AuthProvider,
     HourPackage,
     Lecture,
     LectureStatus,
@@ -15,6 +21,7 @@ from app.models import (
     PaymentKind,
     PaymentStatus,
     ProcessingStep,
+    QuotaCarryover,
     StepName,
     StepStatus,
     Subscription,
@@ -24,9 +31,11 @@ from app.models import (
 )
 from app.schemas.billing import ProductOut
 from app.services.durations import format_duration
+from app.services.legal import today
 
 WEEK = timedelta(days=7)
 CHARGED_SOURCES = (UsageSource.weekly, UsageSource.package)
+CARRYOVER_FROM = date(2026, 11, 6)
 
 
 class QuotaExceeded(Exception):
@@ -342,3 +351,73 @@ def list_products(settings: Settings | None = None) -> list[ProductOut]:
         for hours, price in sorted(settings.hour_packages.items())
     ]
     return [subscription, *packages]
+
+
+def identity_hash(provider: AuthProvider, provider_user_id: str) -> str:
+    key = get_settings().secret_key.encode()
+    message = f"quota-carryover:{provider}:{provider_user_id}"
+    return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
+
+
+async def keep_weekly_usage(session: AsyncSession, user: User, now: datetime | None = None) -> None:
+    if today() < CARRYOVER_FROM:
+        return
+    quota = await get_quota(session, user, now)
+    if not quota.weekly_used_sec:
+        return
+    identities = await session.execute(
+        select(AuthIdentity.provider, AuthIdentity.provider_user_id).where(
+            AuthIdentity.user_id == user.id
+        )
+    )
+    for provider, provider_user_id in identities:
+        statement = insert(QuotaCarryover).values(
+            identity_hash=identity_hash(provider, provider_user_id),
+            used_sec=quota.weekly_used_sec,
+            week_ends_at=quota.resets_at,
+        )
+        await session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[QuotaCarryover.identity_hash],
+                set_={
+                    "used_sec": statement.excluded.used_sec,
+                    "week_ends_at": statement.excluded.week_ends_at,
+                },
+            )
+        )
+
+
+async def carry_weekly_usage(
+    session: AsyncSession,
+    user: User,
+    provider: AuthProvider,
+    provider_user_id: str,
+    now: datetime | None = None,
+) -> None:
+    now = now or datetime.now(UTC)
+    carried = (
+        await session.execute(
+            delete(QuotaCarryover)
+            .where(
+                QuotaCarryover.identity_hash == identity_hash(provider, provider_user_id),
+                QuotaCarryover.week_ends_at > now,
+            )
+            .returning(QuotaCarryover.used_sec, QuotaCarryover.week_ends_at)
+        )
+    ).first()
+    if carried is None:
+        return
+    used_sec, week_ends_at = carried
+    user.quota_week_start = week_ends_at - WEEK
+    session.add(
+        UsageEntry(user_id=user.id, source=UsageSource.weekly, seconds=used_sec, created_at=now)
+    )
+
+
+async def delete_expired_carryovers(ctx: dict) -> int:
+    async with SessionLocal() as session:
+        result = await session.execute(
+            delete(QuotaCarryover).where(QuotaCarryover.week_ends_at <= datetime.now(UTC))
+        )
+        await session.commit()
+    return result.rowcount

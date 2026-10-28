@@ -17,6 +17,7 @@ from app.services.admin import user_label
 from app.services.admin_logs import mask_text
 from app.services.auth import hash_password, verify_password
 from app.services.auth_tokens import bump_token_version, revoke_unused_tokens
+from app.services.quota import keep_weekly_usage
 from app.services.telegram_auth import verify_login_widget, verify_webapp_init_data
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ async def delete_account(session: AsyncSession, user: User) -> None:
     stt_objects = await lock_operation_objects(session, lecture_ids)
     user_id = user.id
     label = mask_text(user_label(user))
+    await keep_weekly_usage(session, user)
     await session.execute(update(Payment).where(Payment.user_id == user_id).values(raw={}))
     await session.execute(delete(User).where(User.id == user_id))
     await session.commit()
