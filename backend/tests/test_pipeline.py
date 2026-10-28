@@ -1131,9 +1131,9 @@ async def test_cancelled_job_is_not_started():
         poll_delay=0.1,
     )
     try:
-        assert not await jobs.abort_job(job_id)
         await tasks.enqueue_lecture(lecture_id)
-        assert await jobs.abort_job(job_id)
+        await jobs.cancel_lecture_jobs([lecture_id])
+        assert await redis.zscore(abort_jobs_ss, job_id) is not None
         await worker.main()
     finally:
         await redis.delete(job_key_prefix + job_id)
@@ -1141,7 +1141,6 @@ async def test_cancelled_job_is_not_started():
         await redis.zrem(abort_jobs_ss, job_id)
         await worker.close()
     assert calls == []
-    assert not await jobs.abort_job(job_id)
 
 
 async def interrupted_lecture(user, source: Path, step: StepName) -> Lecture:

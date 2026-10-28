@@ -54,14 +54,6 @@ async def abort_on(redis: ArqRedis, job_id: str) -> bool:
     return True
 
 
-async def abort_job(job_id: str) -> bool:
-    redis = await create_pool(queue_settings())
-    try:
-        return await abort_on(redis, job_id)
-    finally:
-        await redis.aclose()
-
-
 async def cancel_lecture_jobs(lecture_ids: list[uuid.UUID]) -> None:
     if not lecture_ids:
         return
