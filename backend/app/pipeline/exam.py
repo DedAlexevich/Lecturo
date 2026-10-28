@@ -7,6 +7,7 @@ from typing import Any
 
 from arq import Retry, create_pool
 from arq.jobs import Job, JobStatus
+from redis.exceptions import RedisError
 from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,12 +152,18 @@ def digest_cache_key(course_id: uuid.UUID) -> str:
 async def cached_digest(llm: LLM, notes: LectureNotes, cache_key: str) -> LectureDigest:
     redis = get_redis(get_settings().redis_url)
     field = hashlib.sha256(f"{notes.title}\n{notes.content_md}".encode()).hexdigest()
-    raw = await redis.hget(cache_key, field)
-    if raw is not None:
-        return LectureDigest(**json.loads(raw))
+    try:
+        raw = await redis.hget(cache_key, field)
+        if raw is not None:
+            return LectureDigest(**json.loads(raw))
+    except (OSError, RedisError, ValueError, TypeError):
+        logger.warning("Не удалось прочитать разбор лекции из кеша", exc_info=True)
     digest = await digest_lecture(llm, notes)
-    await redis.hset(cache_key, field, json.dumps(asdict(digest), ensure_ascii=False))
-    await redis.expire(cache_key, DIGEST_CACHE_TTL_SECONDS)
+    try:
+        await redis.hset(cache_key, field, json.dumps(asdict(digest), ensure_ascii=False))
+        await redis.expire(cache_key, DIGEST_CACHE_TTL_SECONDS)
+    except (OSError, RedisError):
+        logger.warning("Не удалось сохранить разбор лекции в кеш", exc_info=True)
     return digest
 
 
@@ -237,7 +244,10 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
 
 
 async def clear_digest_cache(course_id: uuid.UUID) -> None:
-    await get_redis(get_settings().redis_url).delete(digest_cache_key(course_id))
+    try:
+        await get_redis(get_settings().redis_url).delete(digest_cache_key(course_id))
+    except (OSError, RedisError):
+        logger.warning("Не удалось очистить кеш разборов лекций", exc_info=True)
 
 
 def exam_sheet_failure_key(course_id: uuid.UUID) -> str:
