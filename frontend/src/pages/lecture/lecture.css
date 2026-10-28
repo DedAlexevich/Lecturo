@@ -234,6 +234,7 @@
 
 .summary {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--space-3);
   padding: var(--space-4);
@@ -285,6 +286,28 @@
   background: var(--color-surface-sunken);
   font-family: var(--font-mono);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.summary pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.summary pre code {
+  padding: 0;
+  background: none;
+  overflow-wrap: normal;
+}
+
+.summary table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
 }
 
 .chapters {

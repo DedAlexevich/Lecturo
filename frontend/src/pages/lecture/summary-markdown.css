@@ -4,8 +4,10 @@
 
 .summary__content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .summary-callout {
