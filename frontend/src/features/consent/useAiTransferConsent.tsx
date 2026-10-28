@@ -54,10 +54,10 @@ export function useAiTransferConsent() {
     (action: () => void) => {
       pending.current = action;
       if (me) proceed(me);
-      else if (meFailed) setOpen(true);
+      else if (meFailed && !meFetching) setOpen(true);
       else setWaiting(true);
     },
-    [me, meFailed, proceed],
+    [me, meFailed, meFetching, proceed],
   );
 
   useEffect(() => {
@@ -65,11 +65,19 @@ export function useAiTransferConsent() {
     if (me) {
       setWaiting(false);
       proceed(me);
-    } else if (meFailed) {
+    } else if (meFailed && !meFetching) {
       setWaiting(false);
       setOpen(true);
     }
-  }, [waiting, me, meFailed, proceed]);
+  }, [waiting, me, meFailed, meFetching, proceed]);
+
+  useEffect(
+    () => () => {
+      pending.current = null;
+      setWaiting(false);
+    },
+    [],
+  );
 
   const retryMe = async () => {
     const result = await refetchMe();
