@@ -48,7 +48,7 @@ Server-side recognition uses Yandex SpeechKit, notes and quizzes are written by 
 ## Screenshots
 
 <div align="center">
-<a href="https://lecturo.ru"><img src="docs/assets/readme/demo.png" alt="Lecturo demo" width="800"></a>
+<a href="https://lecturo.ru"><img src="docs/assets/readme/demo.gif" alt="Lecturo demo" width="800"></a>
 </div>
 
 <table>
@@ -57,12 +57,12 @@ Server-side recognition uses Yandex SpeechKit, notes and quizzes are written by 
 <td width="50%"><img src="docs/assets/readme/summary.png" alt="Notes with formulas"><p align="center">Notes with formulas</p></td>
 </tr>
 <tr>
-<td><img src="docs/assets/readme/quiz.png" alt="Quiz"><p align="center">Quiz</p></td>
-<td><img src="docs/assets/readme/search.png" alt="Course search"><p align="center">Course search</p></td>
+<td width="50%"><img src="docs/assets/readme/quiz-question.png" alt="Quiz"><p align="center">Quiz</p></td>
+<td width="50%"><img src="docs/assets/readme/quiz.png" alt="Answer explanation with a link to the lecture moment"><p align="center">Answer explanation with a link to the lecture moment</p></td>
 </tr>
 <tr>
-<td><img src="docs/assets/readme/mini-app.png" alt="Telegram Mini App"><p align="center">Telegram Mini App</p></td>
-<td><img src="docs/assets/readme/local.png" alt="Local mode"><p align="center">Local mode</p></td>
+<td width="50%"><img src="docs/assets/readme/chapters.png" alt="Chapters with timecodes"><p align="center">Chapters with timecodes</p></td>
+<td width="50%"><img src="docs/assets/readme/local.png" alt="Local mode"><p align="center">Local mode</p></td>
 </tr>
 </table>
 
@@ -128,10 +128,6 @@ The same `docker compose` setup runs on a server. Put your domain into `SITE_ADD
 ## Documentation
 
 The index is [docs/README.md](docs/README.md). The documents are in Russian.
-
-## Contributing
-
-Tasks and bugs live in [issues](https://github.com/DedAlexevich/Lecturo/issues), code is discussed in pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first PR.
 
 ## Team
 
