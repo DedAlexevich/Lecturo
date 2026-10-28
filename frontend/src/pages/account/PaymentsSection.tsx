@@ -53,7 +53,12 @@ export function PaymentsSection() {
               <tr key={payment.id}>
                 <td className={styles.date}>{formatShortDate(payment.paid_at ?? payment.created_at)}</td>
                 <td>{titles.get(payment.product_code) ?? payment.product_code}</td>
-                <td className={styles.numeric}>{formatRubles(payment.amount_kopecks / 100)}</td>
+                <td className={styles.numeric}>
+                  {formatRubles(payment.amount_kopecks / 100)}
+                  {payment.discount_kopecks > 0 && (
+                    <span className={styles.paymentDiscount}>скидка {formatRubles(payment.discount_kopecks / 100)}</span>
+                  )}
+                </td>
                 <td>
                   <span className={styles.status}>
                     <span className={statusClasses[payment.status]}>{statusLabels[payment.status]}</span>

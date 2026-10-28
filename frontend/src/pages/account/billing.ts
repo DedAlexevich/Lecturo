@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
@@ -6,6 +6,7 @@ import { ApiError } from "../../app/queryClient";
 export type Quota = components["schemas"]["QuotaOut"];
 export type Product = components["schemas"]["ProductOut"];
 export type Payment = components["schemas"]["PaymentOut"];
+export type Promo = components["schemas"]["PromoOut"];
 
 export const subscriptionDays = 30;
 
@@ -60,6 +61,7 @@ type CreatePayment = {
   productCode: string;
   idempotenceKey: string;
   receiptEmail?: string;
+  promoCode?: string;
 };
 
 export const paymentReturnParam = "payment";
@@ -84,7 +86,7 @@ export function rememberedPayment(returnKey: string) {
 
 export function useCreatePayment() {
   return useMutation({
-    mutationFn: async ({ productCode, idempotenceKey, receiptEmail }: CreatePayment) => {
+    mutationFn: async ({ productCode, idempotenceKey, receiptEmail, promoCode }: CreatePayment) => {
       const returnUrl = new URL("/account", window.location.origin);
       returnUrl.searchParams.set(paymentReturnParam, idempotenceKey);
       const { data, error, response } = await api.POST("/api/v1/billing/payments", {
@@ -94,11 +96,26 @@ export function useCreatePayment() {
           accept_offer: true,
           return_url: returnUrl.toString(),
           receipt_email: receiptEmail,
+          promo_code: promoCode,
         },
       });
       if (data === undefined) throw new ApiError(response.status, error);
       rememberPayment(idempotenceKey, data.id);
       return data;
+    },
+  });
+}
+
+export function useApplyPromo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { data, error, response } = await api.POST("/api/v1/billing/promo", { body: { code } });
+      if (data === undefined) throw new ApiError(response.status, error);
+      return data;
+    },
+    onSuccess: (promo) => {
+      if (promo.applied) return queryClient.invalidateQueries({ queryKey: quotaQueryKey });
     },
   });
 }

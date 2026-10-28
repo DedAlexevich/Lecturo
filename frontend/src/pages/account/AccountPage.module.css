@@ -179,6 +179,55 @@
   white-space: nowrap;
 }
 
+.oldPrice {
+  margin-right: var(--space-2);
+  color: var(--color-text-muted);
+  font-weight: var(--weight-regular);
+  text-decoration: line-through;
+}
+
+.promo {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 26rem;
+}
+
+.promoLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.promoRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.promoSuccess {
+  color: var(--color-success);
+  font-size: var(--text-sm);
+}
+
+.promoApplied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  max-width: 26rem;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  background: var(--color-data-soft);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.paymentDiscount {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
 .consent {
   display: grid;
   gap: var(--space-1);

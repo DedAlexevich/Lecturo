@@ -19,10 +19,13 @@ import {
   useProducts,
   useQuota,
   type Product,
+  type Promo,
 } from "./billing";
 import { formatDate, formatRubles } from "./format";
 import { SectionError, SectionLoading } from "./SectionState";
 import { SubscriptionBenefits } from "./SubscriptionBenefits";
+import { PromoField } from "./PromoField";
+import { discountKopecks } from "./promo";
 import { pollInterval, pollLimit } from "./usePaymentReturn";
 
 export function PurchaseSection() {
@@ -88,6 +91,7 @@ function PurchaseForm({
   const [showConsentError, setShowConsentError] = useState(false);
   const [receiptEmail, setReceiptEmail] = useState("");
   const [receiptEmailError, setReceiptEmailError] = useState<string>();
+  const [discount, setDiscount] = useState<Promo | null>(null);
   const idempotenceKey = useRef(createId());
   const consentErrorId = useId();
   const createPayment = useCreatePayment();
@@ -96,6 +100,8 @@ function PurchaseForm({
   const createdId = createPayment.data?.id;
   const { data: payments } = usePayments(returnedAt && createdId ? pollInterval : false);
   const selected = products.find((product) => product.code === code) ?? products[0];
+  const discountFor = (product: Product) => (discount ? discountKopecks(product.price_rub, discount) : 0);
+  const payKopecks = selected.price_rub * 100 - discountFor(selected);
   const { reset } = createPayment;
   const isRenewal = (product: Product) => product.kind === "subscription" && subscriptionUntil !== null;
   const settled = payments?.some((payment) => payment.id === createdId && payment.status !== "pending") ?? false;
@@ -141,6 +147,12 @@ function PurchaseForm({
     createPayment.reset();
   };
 
+  const changeDiscount = (promo: Promo | null) => {
+    setDiscount(promo);
+    idempotenceKey.current = createId();
+    createPayment.reset();
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (getWebApp() && createPayment.data?.confirmation_url) {
@@ -156,6 +168,7 @@ function PurchaseForm({
         productCode: selected.code,
         idempotenceKey: idempotenceKey.current,
         receiptEmail: needsReceiptEmail ? receiptEmail.trim() : undefined,
+        promoCode: discount?.code,
       },
       {
         onSuccess: (payment) => {
@@ -196,11 +209,20 @@ function PurchaseForm({
                   : productNote(product)}
               </span>
             </span>
-            <span className={styles.optionPrice}>{formatRubles(product.price_rub)}</span>
+            <span className={styles.optionPrice}>
+              {discountFor(product) > 0 && (
+                <span className={styles.oldPrice}>
+                  <span className={styles.visuallyHidden}>Без скидки </span>
+                  {formatRubles(product.price_rub)}
+                </span>
+              )}
+              {formatRubles((product.price_rub * 100 - discountFor(product)) / 100)}
+            </span>
           </label>
         ))}
       </fieldset>
       <SubscriptionBenefits products={products} onChoose={choose} />
+      <PromoField discount={discount} onDiscount={changeDiscount} />
       {needsReceiptEmail && (
         <div className={styles.receiptEmail}>
           <ReceiptEmailField
@@ -258,7 +280,7 @@ function PurchaseForm({
           </Button>
         ) : (
           <Button type="submit" loading={createPayment.isPending || redirecting}>
-            {isRenewal(selected) ? "Продлить за" : "Оплатить"} {formatRubles(selected.price_rub)}
+            {isRenewal(selected) ? "Продлить за" : "Оплатить"} {formatRubles(payKopecks / 100)}
           </Button>
         )}
       </div>
