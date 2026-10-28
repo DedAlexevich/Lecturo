@@ -18,7 +18,13 @@ queue_signal() {
     -v kind="$kind" -v key="$key" -v state="$state" -v text="$text" <<'SQL'
 INSERT INTO admin_alert_signals (kind, key, state, text)
 VALUES (:'kind', left(:'key', 128), :'state', :'text');
-SELECT count(*) FROM users WHERE is_admin AND telegram_chat_id IS NOT NULL;
+SELECT count(*) FROM users u
+JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'telegram'
+LEFT JOIN admin_alert_settings s ON s.user_id = u.id
+WHERE u.is_admin AND u.telegram_chat_id IS NOT NULL AND coalesce(s.enabled, true)
+  AND NOT (:'kind' = ANY (coalesce(s.muted_kinds, '{}')))
+  AND i.bot_started_at IS NOT NULL
+  AND (i.bot_blocked_at IS NULL OR i.bot_blocked_at <= i.bot_started_at);
 SQL
 }
 
