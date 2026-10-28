@@ -5,7 +5,8 @@ import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { ProviderButton } from "../auth/ProviderButton";
-import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
+import { useTelegramEnabled } from "../../telegram/bot";
+import { TelegramButton } from "../auth/TelegramButton";
 import { VkButton } from "../auth/VkButton";
 import { YandexButton } from "../auth/YandexButton";
 import { messageOf } from "../auth/errors";
@@ -151,6 +152,7 @@ function VerifyEmail({ email }: { email: string }) {
 export function LinkTelegram() {
   const link = useLinkTelegram();
   const toast = useToast();
+  const telegramEnabled = useTelegramEnabled();
   const [error, setError] = useState<unknown>();
   const { mutate } = link;
 

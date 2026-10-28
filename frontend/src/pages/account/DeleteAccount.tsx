@@ -5,12 +5,14 @@ import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
-import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
+import { useTelegramEnabled } from "../../telegram/bot";
+import { TelegramButton } from "../auth/TelegramButton";
 import styles from "./SettingsSection.module.css";
 import { getMiniAppInitData } from "./miniApp";
 import { settingsError, useDeleteAccount, type TelegramUser } from "./settings";
 
 export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
+  const telegramEnabled = useTelegramEnabled();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [missing, setMissing] = useState(false);

@@ -6,7 +6,8 @@ import { Dialog } from "../../ui/Dialog";
 import { useToast } from "../../ui/Toast";
 import { getWebApp } from "../../telegram/sdk";
 import { ConsentFields } from "./ConsentFields";
-import { TelegramButton, telegramEnabled } from "./TelegramButton";
+import { useTelegramEnabled } from "../../telegram/bot";
+import { TelegramButton } from "./TelegramButton";
 import { VkButton } from "./VkButton";
 import { YandexButton } from "./YandexButton";
 import { messageOf } from "./errors";
@@ -26,6 +27,7 @@ export function SocialLogin() {
   const [terms, setTerms] = useState(false);
   const [personalData, setPersonalData] = useState(false);
   const inMiniApp = getWebApp() !== undefined;
+  const telegramEnabled = useTelegramEnabled();
   const showTelegram = telegramEnabled && !inMiniApp;
   const vkEnabled = useVkEnabled();
   const yandexEnabled = useYandexEnabled();
