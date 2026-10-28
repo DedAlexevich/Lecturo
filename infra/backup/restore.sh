@@ -15,7 +15,7 @@ dump=$file
 if [[ "$file" == *.tar.age ]]; then
   identity=$(env_value BACKUP_AGE_IDENTITY "")
   [ -n "$identity" ] || fail "set BACKUP_AGE_IDENTITY to the private key file to restore $file"
-  umask 077
+  umask 007
   mkdir -p "$backup_dir"
   work=$(mktemp -d "$backup_dir/.restore-XXXXXX")
   trap 'rm -rf "$work"' EXIT

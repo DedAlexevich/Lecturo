@@ -60,6 +60,8 @@ chmod 600 /home/admin/.ssh/authorized_keys
 
 id deploy >/dev/null 2>&1 || useradd -m -s /bin/bash deploy
 usermod -aG docker deploy
+getent group lecturo-backups >/dev/null || groupadd -g 1500 lecturo-backups
+usermod -aG lecturo-backups deploy
 install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 actions_key=$(mktemp -d)/actions
 ssh-keygen -q -t ed25519 -N "" -C github-actions-deploy -f "$actions_key"
@@ -73,7 +75,8 @@ if [ ! -d "$app_dir/.git" ]; then
   git clone "$repo_url" "$app_dir"
 fi
 chown -R deploy:deploy "$app_dir"
-sh "$app_dir/infra/data-owner.sh" "$app_dir/data/storage" "$app_dir/data/logs"
+install -d -m 700 -o deploy "$app_dir/backups"
+sh "$app_dir/infra/data-owner.sh" "$app_dir/backups" "$app_dir/data/storage" "$app_dir/data/logs"
 
 if [ ! -f "$app_dir/.env" ]; then
   sed \
