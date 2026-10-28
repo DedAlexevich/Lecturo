@@ -23,6 +23,10 @@ const AdminBackupsPage = lazy(() =>
   import("./backups/AdminBackupsPage").then((module) => ({ default: module.AdminBackupsPage })),
 );
 
+const AdminAlertsPage = lazy(() =>
+  import("./alerts/AdminAlertsPage").then((module) => ({ default: module.AdminAlertsPage })),
+);
+
 const sections = [
   { to: "/admin/users", label: "Пользователи" },
   { to: "/admin/stats", label: "Статистика" },
@@ -30,6 +34,7 @@ const sections = [
   { to: "/admin/admins", label: "Администраторы" },
   { to: "/admin/logs", label: "Логи и ошибки" },
   { to: "/admin/backups", label: "Бэкапы" },
+  { to: "/admin/alerts", label: "Алерты" },
 ];
 
 export function AdminPage() {
@@ -63,6 +68,7 @@ export function AdminPage() {
             <Route path="admins" element={<AdminsSection meId={me.id} />} />
             <Route path="logs" element={<AdminLogsPage />} />
             <Route path="backups" element={<AdminBackupsPage />} />
+            <Route path="alerts" element={<AdminAlertsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </div>
