@@ -32,6 +32,7 @@ export function TelegramBridge() {
   const [personalData, setPersonalData] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
     if (!app) return;
@@ -86,6 +87,7 @@ export function TelegramBridge() {
       automaticLoginDone = true;
       signIn(tokens.access_token);
       setConsent(false);
+      setDeclined(false);
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 403) setConsent(true);
       else setError(messageOf(failure));
@@ -94,9 +96,15 @@ export function TelegramBridge() {
     }
   };
 
+  const decline = () => {
+    if (busy) return;
+    setConsent(false);
+    setDeclined(true);
+  };
+
   return (
     <>
-      {!consent && (error || (token === null && wasSignedOutByUser())) && (
+      {!consent && (error || (token === null && (declined || wasSignedOutByUser()))) && (
         <div className="telegram-login">
           {error && <p role="alert" className="telegram-login__error">Вход через Telegram: {error}</p>}
           <Button fullWidth loading={busy} onClick={submit}>
@@ -107,11 +115,11 @@ export function TelegramBridge() {
       )}
       <Dialog
         open={consent}
-        onClose={() => { if (!busy) setConsent(false); }}
+        onClose={decline}
         title="Создание аккаунта"
         actions={
           <>
-            <Button variant="ghost" disabled={busy} onClick={() => setConsent(false)}>Отмена</Button>
+            <Button variant="ghost" disabled={busy} onClick={decline}>Отмена</Button>
             <Button disabled={!terms || !personalData} loading={busy} onClick={submit}>Продолжить</Button>
           </>
         }
