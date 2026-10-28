@@ -76,7 +76,11 @@ jobs:
           --health-interval 5s
           --health-retries 10
     env:
-      BOT_SCHEMA_DATABASE_URL: postgresql://lecturo:lecturo@localhost:5432/lecturo
+      BOT_SCHEMA_CHECK: "1"
+      PGHOST: localhost
+      PGUSER: lecturo
+      PGPASSWORD: lecturo
+      PGDATABASE: lecturo
     defaults:
       run:
         working-directory: bot
@@ -91,9 +95,8 @@ jobs:
             backend/pyproject.toml
       - name: Apply backend migrations
         working-directory: backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://lecturo:lecturo@localhost:5432/lecturo
         run: |
+          export DATABASE_URL="postgresql+asyncpg://$PGUSER:$PGPASSWORD@$PGHOST:5432/$PGDATABASE"
           python -m venv "$RUNNER_TEMP/backend"
           "$RUNNER_TEMP/backend/bin/pip" install -e .
           "$RUNNER_TEMP/backend/bin/alembic" upgrade head
