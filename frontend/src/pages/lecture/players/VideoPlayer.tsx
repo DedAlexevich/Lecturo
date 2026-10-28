@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react";
 import { Spinner } from "../../../ui/Spinner";
 import { formatTimecode } from "../../../lib/timecode";
-import type { PlayerProps } from "./player";
+import { isSourceStream, useNoReferrer, type PlayerProps } from "./player";
 import "./VideoPlayer.css";
 
 const RATES = [1, 1.25, 1.5, 1.75, 2];
@@ -49,6 +49,7 @@ export function VideoPlayer({ src, title, refreshSrc, audio = false, onReady, on
   const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  useNoReferrer(isSourceStream(activeSrc));
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === rootRef.current);

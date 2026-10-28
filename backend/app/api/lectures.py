@@ -1,9 +1,10 @@
 import asyncio
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Response, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from redis.exceptions import RedisError
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.api.courses import get_own_course
 from app.api.shares import shared_with
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, RequireSubscription, SessionDep
+from app.core.redis import get_redis
 from app.models import (
     Lecture,
     LectureStatus,
@@ -25,7 +27,13 @@ from app.models import (
     User,
     course_lectures,
 )
-from app.pipeline.download import LinkError, inspect_link, link_key
+from app.pipeline.download import (
+    LinkError,
+    inspect_link,
+    is_yandex_disk,
+    link_key,
+    resolve_yandex_disk,
+)
 from app.pipeline.estimate import expected_seconds, remaining_seconds
 from app.pipeline.events import publish_status
 from app.pipeline.jobs import cancel_lecture_jobs
@@ -40,7 +48,7 @@ from app.pipeline.tasks import (
     enqueue_regeneration,
     quiz_job_active,
 )
-from app.pipeline.video_access import is_valid_signature, signed_audio_url, signed_video_url
+from app.pipeline.video_access import is_valid_signature, playable_video_url, signed_audio_url
 from app.schemas.lecture import (
     LectureDetail,
     LectureOut,
@@ -59,6 +67,7 @@ from app.services.rate_limit import enforce_rate_limit, is_rate_limited, reset_r
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 VIDEO_FORBIDDEN = "Нет доступа к видео"
+STREAM_CACHE_SECONDS = 15 * 60
 AUDIO_FORBIDDEN = "Нет доступа к аудио"
 LECTURE_NOT_FOUND = "Лекция не найдена"
 
@@ -115,7 +124,7 @@ async def get_lecture(
         selectinload(Lecture.chapters),
         selectinload(Lecture.summary),
     )
-    video_url = signed_video_url(lecture.id) if lecture.video_path else None
+    video_url = playable_video_url(lecture)
     audio_only = is_audio_only(lecture)
     audio_url = signed_audio_url(lecture.id) if audio_only and lecture.audio_path else None
     steps, eta_sec = progress_of(lecture)
@@ -211,6 +220,51 @@ async def audio_file(
     if audio_path is None or not await asyncio.to_thread(Path(audio_path).is_file):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Аудио не найдено")
     return FileResponse(audio_path, media_type="audio/ogg")
+
+
+async def disk_media_url(lecture_id: uuid.UUID, source_url: str) -> str:
+    redis = get_redis(get_settings().redis_url)
+    key = f"stream:{lecture_id}"
+    if (cached := await redis.get(key)) is not None:
+        return cached.decode()
+    _, media_url = await resolve_yandex_disk(source_url)
+    host = urlparse(media_url).hostname or ""
+    if not host.endswith((".yandex.ru", ".yandex.net")):
+        raise LinkError("Яндекс Диск вернул неожиданную ссылку")
+    await redis.set(key, media_url, ex=STREAM_CACHE_SECONDS)
+    return media_url
+
+
+@router.get(
+    "/{lecture_id}/stream",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    responses={403: {}, 404: {}, 502: {}},
+)
+async def stream_source(
+    lecture_id: uuid.UUID,
+    session: SessionDep,
+    expires: str = "",
+    signature: str = "",
+    share: str | None = None,
+) -> RedirectResponse:
+    if not expires.isdecimal() or not is_valid_signature(
+        lecture_id, int(expires), signature, share, "stream"
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    query = select(Lecture.source_url).where(Lecture.id == lecture_id)
+    if share is not None:
+        query = query.where(shared_with(share))
+    source_url = await session.scalar(query)
+    if source_url is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, VIDEO_FORBIDDEN)
+    if not is_yandex_disk(source_url):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Видео не найдено")
+    try:
+        media_url = await disk_media_url(lecture_id, source_url)
+    except LinkError as error:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
+    return RedirectResponse(media_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/{lecture_id}/video-access")
