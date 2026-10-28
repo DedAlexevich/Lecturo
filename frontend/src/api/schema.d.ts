@@ -1429,6 +1429,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Users */
+        get: operations["search_users_api_v1_admin_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Card */
+        get: operations["get_user_card_api_v1_admin_users__user_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/hours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Grant Hours */
+        post: operations["grant_hours_api_v1_admin_users__user_id__hours_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extend Subscription */
+        post: operations["extend_subscription_api_v1_admin_users__user_id__subscription_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Block User */
+        post: operations["block_user_api_v1_admin_users__user_id__block_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unblock User */
+        post: operations["unblock_user_api_v1_admin_users__user_id__unblock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Stats */
+        get: operations["get_stats_api_v1_admin_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1445,7 +1564,7 @@ export interface components {
          * AdminAction
          * @enum {string}
          */
-        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled";
+        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked";
         /** AdminGrantIn */
         AdminGrantIn: {
             /** Identifier */
@@ -1467,6 +1586,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** AdminReasonIn */
+        AdminReasonIn: {
+            /** Reason */
+            reason: string;
         };
         /** AuditEntryOut */
         AuditEntryOut: {
@@ -1752,6 +1876,20 @@ export interface components {
              * Format: date-time
              */
             expires_at: string;
+        };
+        /** ExtendSubscriptionIn */
+        ExtendSubscriptionIn: {
+            /** Reason */
+            reason: string;
+            /** Days */
+            days: number;
+        };
+        /** GrantHoursIn */
+        GrantHoursIn: {
+            /** Reason */
+            reason: string;
+            /** Hours */
+            hours: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2376,6 +2514,66 @@ export interface components {
          * @enum {string}
          */
         SourceType: "upload" | "link" | "local";
+        /** StatsDayOut */
+        StatsDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** New Users */
+            new_users: number;
+            /** Lectures */
+            lectures: number;
+            /** Processed Seconds */
+            processed_seconds: number;
+            /** Failed Lectures */
+            failed_lectures: number;
+            /** Payments */
+            payments: number;
+            /** Revenue Kopecks */
+            revenue_kopecks: number;
+        };
+        /** StatsOut */
+        StatsOut: {
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            totals: components["schemas"]["StatsTotalsOut"];
+            /** Days */
+            days: components["schemas"]["StatsDayOut"][];
+        };
+        /** StatsTotalsOut */
+        StatsTotalsOut: {
+            /** New Users */
+            new_users: number;
+            /** Lectures */
+            lectures: number;
+            /** Processed Seconds */
+            processed_seconds: number;
+            /** Failed Lectures */
+            failed_lectures: number;
+            /** Payments */
+            payments: number;
+            /** Revenue Kopecks */
+            revenue_kopecks: number;
+            /** Refunds */
+            refunds: number;
+            /** Refunded Kopecks */
+            refunded_kopecks: number;
+        };
         /**
          * StepName
          * @enum {string}
@@ -2502,6 +2700,111 @@ export interface components {
              */
             token_type: string;
         };
+        /** UserBriefOut */
+        UserBriefOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Is Admin */
+            is_admin: boolean;
+            /** Blocked */
+            blocked: boolean;
+        };
+        /** UserCardOut */
+        UserCardOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string | null;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Is Admin */
+            is_admin: boolean;
+            /** Blocked At */
+            blocked_at: string | null;
+            /** Blocked Reason */
+            blocked_reason: string | null;
+            /** Identities */
+            identities: components["schemas"]["UserIdentityOut"][];
+            consents: components["schemas"]["UserConsentsOut"];
+            quota: components["schemas"]["QuotaOut"];
+            /** Payments */
+            payments: components["schemas"]["UserPaymentOut"][];
+            lectures: components["schemas"]["UserLecturesOut"];
+        };
+        /** UserConsentsOut */
+        UserConsentsOut: {
+            /** Terms Accepted At */
+            terms_accepted_at: string | null;
+            /** Terms Revision */
+            terms_revision: string | null;
+            /** Personal Data Accepted At */
+            personal_data_accepted_at: string | null;
+            /** Personal Data Revision */
+            personal_data_revision: string | null;
+            /** Ai Transfer Accepted At */
+            ai_transfer_accepted_at: string | null;
+            /** Ai Transfer Revision */
+            ai_transfer_revision: string | null;
+        };
+        /** UserIdentityOut */
+        UserIdentityOut: {
+            provider: components["schemas"]["AuthProvider"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** UserLectureOut */
+        UserLectureOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            status: components["schemas"]["LectureStatus"];
+            source_type: components["schemas"]["SourceType"];
+            /** Duration Sec */
+            duration_sec: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** UserLecturesOut */
+        UserLecturesOut: {
+            /** Total */
+            total: number;
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** Recent */
+            recent: components["schemas"]["UserLectureOut"][];
+        };
         /** UserOut */
         UserOut: {
             /**
@@ -2522,6 +2825,27 @@ export interface components {
             telegram_notifications: components["schemas"]["TelegramNotifications"];
             /** Is Admin */
             is_admin: boolean;
+        };
+        /** UserPaymentOut */
+        UserPaymentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["PaymentKind"];
+            /** Product Code */
+            product_code: string;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            status: components["schemas"]["PaymentStatus"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Paid At */
+            paid_at: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2722,6 +3046,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Аккаунт заблокирован */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Слишком много попыток входа */
             429: {
                 headers: {
@@ -2768,6 +3099,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Аккаунт заблокирован */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2890,6 +3228,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Аккаунт заблокирован */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description VK недоступен */
             502: {
                 headers: {
@@ -3004,6 +3349,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Аккаунт заблокирован */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Яндекс недоступен */
             502: {
@@ -3657,6 +4009,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Аккаунт заблокирован */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5886,6 +6245,296 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceOut"];
+                };
+            };
+        };
+    };
+    search_users_api_v1_admin_users_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserBriefOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_card_api_v1_admin_users__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCardOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_hours_api_v1_admin_users__user_id__hours_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantHoursIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCardOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extend_subscription_api_v1_admin_users__user_id__subscription_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtendSubscriptionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCardOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    block_user_api_v1_admin_users__user_id__block_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReasonIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCardOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Действие сейчас недоступно */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unblock_user_api_v1_admin_users__user_id__unblock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReasonIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCardOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Действие сейчас недоступно */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_api_v1_admin_stats_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsOut"];
+                };
+            };
+            /** @description Неверный период */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
