@@ -6,7 +6,7 @@ compose_up() {
 }
 
 alembic_revision() {
-  docker compose run --rm --no-deps -T migrate alembic "$1" | awk '$1 ~ /^[0-9A-Za-z_]+$/ {print $1; exit}'
+  docker compose run --rm --no-deps -T migrate alembic "$1" | awk '$1 ~ /^[0-9A-Za-z_]+$/ {print $1}'
 }
 
 restore_code() {
@@ -58,13 +58,18 @@ main() {
   fi
 
   previous_revision=""
+  if [ -n "$(docker compose ps -aq db)" ] && ! docker compose up -d --wait db; then
+    echo "database did not start, code returned to $previous" >&2
+    restore_code "$previous"
+    exit 1
+  fi
   if [ -n "$(docker compose ps -q --status running db)" ] && ! previous_revision=$(alembic_revision current); then
     echo "cannot read current alembic revision, code returned to $previous" >&2
     restore_code "$previous"
     exit 1
   fi
-  if ! new_head=$(alembic_revision heads) || [ -z "$new_head" ]; then
-    echo "cannot read alembic heads, code returned to $previous" >&2
+  if ! new_head=$(alembic_revision heads) || [ -z "$new_head" ] || [ "$(wc -l <<<"$new_head")" -ne 1 ]; then
+    echo "cannot read a single alembic head, code returned to $previous" >&2
     restore_code "$previous"
     exit 1
   fi
