@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { ApiError } from "../../app/queryClient";
+import { lectureStatusQueryKey } from "../../pages/lecture/useLecture";
 
 export function useRenameLecture(lectureId: string) {
   const client = useQueryClient();
@@ -112,7 +113,7 @@ export function useRegenerateSummary(lectureId: string) {
       return data;
     },
     onSuccess: async (status) => {
-      client.setQueryData(["lecture-status", lectureId], status);
+      client.setQueryData(lectureStatusQueryKey(lectureId), status);
       await client.invalidateQueries({ queryKey: ["lectures", lectureId], exact: true });
     },
   });

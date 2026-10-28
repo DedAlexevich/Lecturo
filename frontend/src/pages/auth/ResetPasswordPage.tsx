@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
 import { AuthLayout } from "./AuthLayout";
+import { useUrlToken } from "./useUrlToken";
 import { fieldErrorsOf, messageOf, type FieldErrors } from "./errors";
 import { useConfirmPasswordReset, useRequestPasswordReset } from "./useAuthRequests";
 import { validateEmail, validateNewPassword, validatePasswordConfirm } from "./validation";
@@ -151,7 +152,6 @@ function ConfirmReset({ token }: { token: string }) {
 }
 
 export function ResetPasswordPage() {
-  const [params] = useSearchParams();
-  const token = params.get("token");
+  const token = useUrlToken();
   return token ? <ConfirmReset token={token} /> : <RequestReset />;
 }
