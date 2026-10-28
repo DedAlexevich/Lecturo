@@ -36,7 +36,6 @@ if [ -n "$age_recipient" ]; then
   safety="${safety%.dump}.tar.age"
   seal_backup "$stage" "$safety"
 fi
-rotate_backups "$backup_dir" 3 pre-restore
 
 docker compose stop api worker bot
 if ! restore_database "$dump"; then
@@ -44,4 +43,5 @@ if ! restore_database "$dump"; then
 fi
 
 docker compose up -d --wait --wait-timeout 300 api worker bot
+rotate_backups "$backup_dir" 3 pre-restore
 echo "restored $file, previous database is saved in $safety"
