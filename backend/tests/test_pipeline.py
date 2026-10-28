@@ -1305,6 +1305,8 @@ async def test_temporary_video_error_keeps_original(user, sample_video, monkeypa
     with pytest.raises(Retry):
         await tasks.process_video({"job_try": 1}, str(lecture.id))
     assert media.original_path(lecture.id).exists()
+    step = steps_by_name(await load(lecture.id))[StepName.video]
+    assert (step.status, step.error) == (StepStatus.pending, None)
 
     final = {"job_try": tasks.VIDEO_ATTEMPTS}
     assert await tasks.process_video(final, str(lecture.id)) == StepStatus.failed

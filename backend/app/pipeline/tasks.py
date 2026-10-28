@@ -97,6 +97,7 @@ async def process_video(ctx: dict, lecture_id: str) -> str:
             return await run_after_ready(lecture_uuid)
     except StepFailed as failure:
         if isinstance(failure.__cause__, OSError) and ctx.get("job_try", 1) < VIDEO_ATTEMPTS:
+            await return_after_ready_to_queue(lecture_uuid)
             raise Retry(defer=VIDEO_RETRY_DELAY_SEC) from failure
         await asyncio.to_thread(media.original_path(lecture_uuid).unlink, missing_ok=True)
         return StepStatus.failed
@@ -119,6 +120,20 @@ async def run_after_ready(lecture_id: uuid.UUID) -> str:
         for name in AFTER_READY.get(lecture.source_type, []):
             await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
         return StepStatus.done
+
+
+async def return_after_ready_to_queue(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(AFTER_READY_STEPS),
+                ProcessingStep.status == StepStatus.failed,
+            )
+            .values(status=StepStatus.pending, progress=0.0, stage=None, error=None)
+        )
+        await session.commit()
 
 
 async def fail_after_ready(lecture_id: uuid.UUID, error: str) -> None:
