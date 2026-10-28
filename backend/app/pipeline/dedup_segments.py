@@ -2,11 +2,20 @@ import asyncio
 import uuid
 from dataclasses import dataclass
 
+from redis.exceptions import RedisError
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import SessionLocal
-from app.models import Lecture, LectureStatus, SourceType, StepStatus, TranscriptSegment, User
+from app.models import (
+    Lecture,
+    LectureStatus,
+    ProcessingStep,
+    SourceType,
+    StepStatus,
+    TranscriptSegment,
+    User,
+)
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
 from app.pipeline.tasks import REGENERATION_STEPS, enqueue_regeneration
@@ -18,6 +27,7 @@ class DedupResult:
     lectures: int
     segments: int
     regenerated: list[uuid.UUID]
+    not_queued: list[uuid.UUID]
 
 
 async def delete_duplicates(session: AsyncSession) -> list[uuid.UUID]:
@@ -96,22 +106,49 @@ async def mark_for_regeneration(
     return lectures
 
 
+async def restore_ready(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+            )
+            .values(status=StepStatus.done, progress=1.0)
+        )
+        await session.execute(
+            update(Lecture)
+            .where(Lecture.id == lecture_id, Lecture.status == LectureStatus.processing)
+            .values(status=LectureStatus.ready)
+        )
+        await session.commit()
+
+
 async def dedup_segments() -> DedupResult:
     async with SessionLocal() as session:
         deleted = await delete_duplicates(session)
         lecture_ids = sorted(set(deleted))
         if not lecture_ids:
-            return DedupResult(lectures=0, segments=0, regenerated=[])
+            return DedupResult(lectures=0, segments=0, regenerated=[], not_queued=[])
         await renumber(session, lecture_ids)
         lectures = await mark_for_regeneration(session, lecture_ids)
         await session.commit()
+    regenerated = []
+    not_queued = []
     for lecture in lectures:
+        try:
+            await enqueue_regeneration(lecture.id)
+        except (OSError, RedisError):
+            await restore_ready(lecture.id)
+            not_queued.append(lecture.id)
+            continue
         await publish_status(lecture.id, lecture.owner_id, LectureStatus.processing)
-        await enqueue_regeneration(lecture.id)
+        regenerated.append(lecture.id)
     return DedupResult(
         lectures=len(lecture_ids),
         segments=len(deleted),
-        regenerated=[lecture.id for lecture in lectures],
+        regenerated=regenerated,
+        not_queued=not_queued,
     )
 
 
@@ -120,3 +157,7 @@ if __name__ == "__main__":
     print(f"Лекций с дублями: {result.lectures}")
     print(f"Удалено сегментов: {result.segments}")
     print(f"Поставлено на пересоздание глав, конспекта и поиска: {len(result.regenerated)}")
+    if result.not_queued:
+        print("Не удалось поставить в очередь, пересоздайте вручную:")
+        for lecture_id in result.not_queued:
+            print(lecture_id)

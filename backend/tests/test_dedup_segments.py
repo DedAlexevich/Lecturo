@@ -1,4 +1,5 @@
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
@@ -119,6 +120,7 @@ async def test_second_run_changes_nothing(user, enqueued):
     result = await dedup_segments.dedup_segments()
 
     assert (result.lectures, result.segments, result.regenerated) == (0, 0, [])
+    assert result.not_queued == []
     assert enqueued == [lecture.id]
 
 
@@ -151,3 +153,27 @@ async def test_only_server_ready_lectures_are_regenerated(user, enqueued, fields
     status, steps = await state_of(lecture.id)
     assert status == fields["status"]
     assert steps[StepName.summarize] == StepStatus.done
+
+
+async def test_queue_error_restores_lecture_and_continues(user, enqueued, monkeypatch):
+    first = await create_lecture(user, doubled(PHRASES))
+    second = await create_lecture(user, doubled(PHRASES))
+    failing, queued = sorted([first.id, second.id])
+
+    async def flaky_enqueue(lecture_id):
+        if lecture_id == failing:
+            raise RedisConnectionError("нет связи")
+        enqueued.append(lecture_id)
+
+    monkeypatch.setattr(dedup_segments, "enqueue_regeneration", flaky_enqueue)
+
+    result = await dedup_segments.dedup_segments()
+
+    assert result.not_queued == [failing]
+    assert result.regenerated == [queued]
+    assert enqueued == [queued]
+    status, steps = await state_of(failing)
+    assert status == LectureStatus.ready
+    assert steps[StepName.summarize] == steps[StepName.embed] == StepStatus.done
+    assert (await state_of(queued))[0] == LectureStatus.processing
+    assert len(await segments_of(failing)) == 3
