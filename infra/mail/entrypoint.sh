@@ -12,7 +12,7 @@ if ! echo "$domain" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; 
 fi
 
 postconf -X mynetworks
-postconf -e "compatibility_level = 3.6" "mynetworks_style = subnet"
+postconf -e "compatibility_level = 3.6" "inet_protocols = ipv4" "mynetworks_style = subnet"
 networks=$(postconf -h mynetworks)
 
 mkdir -p "$keys" "$tls"
