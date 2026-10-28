@@ -84,7 +84,10 @@ seal_backup() {
 save_dkim() {
   local target=$1
   local services
-  services=$(docker compose config --services)
+  if ! services=$(docker compose config --services); then
+    warn "could not list compose services, DKIM keys skipped"
+    return 1
+  fi
   if ! grep -qx mail <<< "$services"; then
     echo "no mail service, DKIM keys skipped"
     return 0
