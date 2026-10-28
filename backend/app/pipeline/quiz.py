@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any
 
 from sqlalchemy import func, select
@@ -19,16 +20,29 @@ from app.pipeline.timecodes import locate_timestamp
 from app.providers import LLM, get_llm
 from app.schemas.lecture import QuizQuestion
 
-MIN_QUESTIONS = 8
+MIN_QUESTIONS = 6
 MAX_QUESTIONS = 12
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
 QUIZ_ATTEMPTS = 3
 TRANSCRIPT_CHAR_LIMIT = 60_000
 
+logger = logging.getLogger(__name__)
+
 
 class InvalidQuiz(ValueError):
     pass
+
+
+def spread_lines(lines: list[str], budget: int) -> list[str]:
+    last = len(lines) - 1
+    count = len(lines)
+    while count > 1:
+        picked = [lines[round(index * last / (count - 1))] for index in range(count)]
+        if sum(len(line) + 1 for line in picked) <= budget:
+            return picked
+        count -= 1
+    return lines[:1]
 
 
 def transcript_excerpt(
@@ -39,18 +53,10 @@ def transcript_excerpt(
         return full
     parts = split_into_parts(segments)
     budget = limit // len(parts)
-    excerpts = []
-    for part in parts:
-        lines: list[str] = []
-        used = 0
-        for segment in part:
-            line = format_part([segment])
-            if lines and used + len(line) > budget:
-                break
-            lines.append(line)
-            used += len(line) + 1
-        excerpts.append("\n".join(lines))
-    return "\n…\n".join(excerpts)
+    return "\n…\n".join(
+        "\n".join(spread_lines([format_part([segment]) for segment in part], budget))
+        for part in parts
+    )
 
 
 def quiz_request(
@@ -117,9 +123,23 @@ def parse_questions(
     content: str, segments: list[TranscriptSegment], lecture_end: float
 ) -> list[dict[str, Any]]:
     items = parse_json(content).get("questions")
-    if not isinstance(items, list) or not MIN_QUESTIONS <= len(items) <= MAX_QUESTIONS:
-        raise InvalidQuiz(f"в квизе должно быть от {MIN_QUESTIONS} до {MAX_QUESTIONS} вопросов")
-    return [parse_question(item, segments, lecture_end) for item in items]
+    if not isinstance(items, list):
+        raise InvalidQuiz("в ответе нет списка вопросов")
+    questions = []
+    reasons = []
+    for item in items:
+        try:
+            questions.append(parse_question(item, segments, lecture_end))
+        except InvalidQuiz as error:
+            reasons.append(str(error))
+    if reasons:
+        logger.warning("Отброшено вопросов квиза: %s (%s)", len(reasons), "; ".join(reasons))
+    if len(questions) < MIN_QUESTIONS:
+        details = f": {reasons[0]}" if reasons else ""
+        raise InvalidQuiz(
+            f"в квизе {len(questions)} корректных вопросов, нужно хотя бы {MIN_QUESTIONS}" + details
+        )
+    return questions[:MAX_QUESTIONS]
 
 
 async def generate_questions(

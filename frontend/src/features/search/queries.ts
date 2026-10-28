@@ -9,6 +9,13 @@ export type SearchHit = components["schemas"]["SearchHit"];
 
 export const MIN_QUERY_LENGTH = 2;
 
+export function searchErrorText(error: Error | null) {
+  if (error instanceof ApiError && error.status === 429) {
+    return "Слишком много поисковых запросов. Подождите минуту и попробуйте ещё раз.";
+  }
+  return "Поиск не сработал. Проверьте соединение и попробуйте ещё раз.";
+}
+
 export function useDebouncedValue<T>(value: T, delay: number) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {

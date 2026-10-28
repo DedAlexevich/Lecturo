@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { components } from "../../api/schema";
 import { api } from "../../api/client";
 import { ApiError } from "../../app/queryClient";
 import { Button } from "../../ui/Button";
 import { formatTimecode } from "../../lib/timecode";
+import { answerScrollTop, hasContentBelow, keyboardOverlap, scrollIntent } from "./chatScroll";
 import "./chat.css";
 
 type ChatResponse = components["schemas"]["LectureChatOut"];
@@ -81,11 +82,20 @@ function errorMessage(error: Error) {
   return "Не удалось получить ответ. Попробуйте ещё раз.";
 }
 
+function reducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export function ChatPanel({ lectureId, onSelectTime }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>(() => restoreMessages(lectureId));
   const [question, setQuestion] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [contentBelow, setContentBelow] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const shownCount = useRef<number | null>(null);
   const chat = useMutation({
     mutationFn: async ({ question, history }: { question: string; history: ChatHistory }) => {
       const { data, error, response } = await api.POST("/api/v1/lectures/{lecture_id}/chat", {
@@ -110,8 +120,73 @@ export function ChatPanel({ lectureId, onSelectTime }: ChatPanelProps) {
     } catch {
       setError("Не удалось сохранить историю чата в этой вкладке.");
     }
-    endRef.current?.scrollIntoView({ block: "end" });
   }, [lectureId, messages]);
+
+  const updateContentBelow = useCallback(() => {
+    const list = listRef.current;
+    if (list) setContentBelow(hasContentBelow(list));
+  }, []);
+
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = "auto") => {
+      const list = listRef.current;
+      if (!list) return;
+      list.scrollTo({ top: list.scrollHeight, behavior });
+      updateContentBelow();
+    },
+    [updateContentBelow],
+  );
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const intent = scrollIntent(shownCount.current, messages.map((message) => message.role));
+    shownCount.current = messages.length;
+    if (!list) return;
+    if (intent === "bottom") {
+      scrollToBottom();
+    } else if (intent === "answer" && lastMessageRef.current) {
+      list.scrollTop = answerScrollTop({
+        scrollTop: list.scrollTop,
+        containerTop: list.getBoundingClientRect().top,
+        messageTop: lastMessageRef.current.getBoundingClientRect().top,
+        inset: parseFloat(getComputedStyle(list).paddingTop) || 0,
+      });
+    }
+    updateContentBelow();
+  }, [messages, scrollToBottom, updateContentBelow]);
+
+  useLayoutEffect(() => {
+    if (chat.isPending || error) scrollToBottom();
+  }, [chat.isPending, error, scrollToBottom]);
+
+  useLayoutEffect(() => {
+    const field = fieldRef.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+  }, [question]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const keepFormVisible = () => {
+      const form = formRef.current;
+      if (!form || !form.contains(document.activeElement)) return;
+      const overlap = keyboardOverlap({
+        elementBottom: form.getBoundingClientRect().bottom,
+        viewportTop: viewport.offsetTop,
+        viewportHeight: viewport.height,
+      });
+      if (overlap > 0) window.scrollBy({ top: overlap });
+    };
+    viewport.addEventListener("resize", keepFormVisible);
+    return () => viewport.removeEventListener("resize", keepFormVisible);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateContentBelow);
+    return () => window.removeEventListener("resize", updateContentBelow);
+  }, [updateContentBelow]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -127,60 +202,85 @@ export function ChatPanel({ lectureId, onSelectTime }: ChatPanelProps) {
     chat.mutate({ question: trimmed, history });
   };
 
+  const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (!window.matchMedia("(pointer: fine)").matches) return;
+    event.preventDefault();
+    formRef.current?.requestSubmit();
+  };
+
   return (
     <div className="lecture-chat">
-      <div className="lecture-chat__messages" aria-live="polite" aria-label="История чата">
-        {messages.length === 0 && (
-          <p className="lecture-chat__empty">Задайте вопрос по лекции. Ответ будет опираться на расшифровку и главы.</p>
+      <div className="lecture-chat__viewport">
+        <div
+          ref={listRef}
+          className="lecture-chat__messages"
+          aria-live="polite"
+          aria-label="История чата"
+          onScroll={updateContentBelow}
+        >
+          {messages.length === 0 && (
+            <p className="lecture-chat__empty">Задайте вопрос по лекции. Ответ будет опираться на расшифровку и главы.</p>
+          )}
+          {messages.map((message, index) => (
+            <article
+              key={`${message.role}-${index}`}
+              ref={index === messages.length - 1 ? lastMessageRef : undefined}
+              className={`lecture-chat__message lecture-chat__message--${message.role}`}
+            >
+              <p className="lecture-chat__speaker">{message.role === "user" ? "Вы" : "Ответ по лекции"}</p>
+              {message.role === "user" ? (
+                <p className="lecture-chat__text">{message.content}</p>
+              ) : (
+                <>
+                  {message.response.status === "off_topic" ? (
+                    <p className="lecture-chat__text">{message.response.answer}</p>
+                  ) : message.response.status === "not_found" ? (
+                    <p className="lecture-chat__text">{message.response.answer}</p>
+                  ) : (
+                    <p className="lecture-chat__text">{message.response.answer}</p>
+                  )}
+                  {message.response.extra && <p className="lecture-chat__extra">Дополнительно: {message.response.extra}</p>}
+                  {message.response.sources.length > 0 && (
+                    <ul className="lecture-chat__sources" aria-label="Источники в лекции">
+                      {message.response.sources.map((source, sourceIndex) => (
+                        <li key={`${source.kind}-${source.start}-${sourceIndex}`}>
+                          {onSelectTime ? (
+                            <button type="button" onClick={() => onSelectTime(source.start)}>
+                              {formatTimecode(source.start)}
+                            </button>
+                          ) : (
+                            <span>{formatTimecode(source.start)}</span>
+                          )}
+                          <span>{source.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </article>
+          ))}
+          {chat.isPending && <p className="lecture-chat__pending" role="status">Ищем ответ в материалах лекции…</p>}
+          {error && <p className="lecture-chat__error" role="alert">{error}</p>}
+        </div>
+        {contentBelow && (
+          <button type="button" className="lecture-chat__to-bottom" onClick={() => scrollToBottom(reducedMotion() ? "auto" : "smooth")}>
+            Прокрутить вниз
+          </button>
         )}
-        {messages.map((message, index) => (
-          <article key={`${message.role}-${index}`} className={`lecture-chat__message lecture-chat__message--${message.role}`}>
-            <p className="lecture-chat__speaker">{message.role === "user" ? "Вы" : "Ответ по лекции"}</p>
-            {message.role === "user" ? (
-              <p className="lecture-chat__text">{message.content}</p>
-            ) : (
-              <>
-                {message.response.status === "off_topic" ? (
-                  <p className="lecture-chat__text">{message.response.answer}</p>
-                ) : message.response.status === "not_found" ? (
-                  <p className="lecture-chat__text">{message.response.answer}</p>
-                ) : (
-                  <p className="lecture-chat__text">{message.response.answer}</p>
-                )}
-                {message.response.extra && <p className="lecture-chat__extra">Дополнительно: {message.response.extra}</p>}
-                {message.response.sources.length > 0 && (
-                  <ul className="lecture-chat__sources" aria-label="Источники в лекции">
-                    {message.response.sources.map((source, sourceIndex) => (
-                      <li key={`${source.kind}-${source.start}-${sourceIndex}`}>
-                        {onSelectTime ? (
-                          <button type="button" onClick={() => onSelectTime(source.start)}>
-                            {formatTimecode(source.start)}
-                          </button>
-                        ) : (
-                          <span>{formatTimecode(source.start)}</span>
-                        )}
-                        <span>{source.text}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-          </article>
-        ))}
-        {chat.isPending && <p className="lecture-chat__pending" role="status">Ищем ответ в материалах лекции…</p>}
-        {error && <p className="lecture-chat__error" role="alert">{error}</p>}
-        <div ref={endRef} />
       </div>
-      <form className="lecture-chat__form" onSubmit={submit}>
+      <form ref={formRef} className="lecture-chat__form" onSubmit={submit}>
         <label className="lecture-chat__label" htmlFor={`lecture-chat-question-${lectureId}`}>Ваш вопрос</label>
         <textarea
+          ref={fieldRef}
           id={`lecture-chat-question-${lectureId}`}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={submitOnEnter}
           maxLength={1000}
-          rows={3}
-          placeholder="Например: как лектор определяет предел?"
+          rows={1}
+          placeholder="Вопрос по лекции"
           disabled={chat.isPending}
           required
         />

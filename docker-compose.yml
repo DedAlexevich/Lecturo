@@ -202,6 +202,7 @@ services:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      LOG_FILE_MODE: "640"
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"

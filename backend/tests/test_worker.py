@@ -1,9 +1,10 @@
 import json
+import logging
 
 import httpx
 import pytest
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.models import EMBEDDING_DIM
 from app.providers.openai_compat import OpenAICompatibleError
 from app.worker import WorkerSettings, check_providers, startup
@@ -53,28 +54,33 @@ async def test_embeddings_dimension_mismatch_fails():
         await check_providers(OPENAI_EMBEDDINGS, embeddings_transport(768))
 
 
-async def test_unavailable_embeddings_api_fails_without_retries():
+async def test_unavailable_embeddings_api_logs_error_and_starts(caplog):
     requests = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         return httpx.Response(503)
 
-    with pytest.raises(OpenAICompatibleError, match="503"):
+    with caplog.at_level(logging.ERROR, logger="app.worker"):
         await check_providers(OPENAI_EMBEDDINGS, httpx.MockTransport(handler))
+
     assert len(requests) == 1
+    assert "503" in caplog.text
 
 
-async def test_startup_survives_unavailable_provider(monkeypatch):
-    resumed = []
+async def test_unreachable_embeddings_api_does_not_stop_worker():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
 
-    async def fail(settings):
-        raise OpenAICompatibleError("503")
+    await check_providers(OPENAI_EMBEDDINGS, httpx.MockTransport(handler))
 
-    async def resume(redis):
-        resumed.append(redis)
 
-    monkeypatch.setattr("app.worker.check_providers", fail)
-    monkeypatch.setattr("app.worker.resume_interrupted_lectures", resume)
-    await startup({"redis": "redis"})
-    assert resumed == ["redis"]
+async def test_rejected_embeddings_key_fails():
+    transport = httpx.MockTransport(lambda request: httpx.Response(401, text="bad key"))
+
+    with pytest.raises(OpenAICompatibleError, match="401"):
+        await check_providers(OPENAI_EMBEDDINGS, transport)
+
+
+def test_max_jobs_comes_from_settings():
+    assert WorkerSettings.max_jobs == get_settings().worker_max_jobs

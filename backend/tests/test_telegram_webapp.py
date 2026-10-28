@@ -171,6 +171,12 @@ async def test_expired_auth_date_rejected(client, bot_token, telegram_id):
     assert response.status_code == 401
 
 
+async def test_init_data_older_than_hour_rejected(client, bot_token, telegram_id):
+    fields = webapp_fields(telegram_id, auth_date=str(int(time.time()) - 2 * 3600))
+    response = await client.post(URL, json={"init_data": init_data(bot_token, **fields)})
+    assert response.status_code == 401
+
+
 async def test_future_auth_date_rejected(client, bot_token, telegram_id):
     fields = webapp_fields(telegram_id, auth_date=str(int(time.time()) + 3600))
     response = await client.post(URL, json={"init_data": init_data(bot_token, **fields)})

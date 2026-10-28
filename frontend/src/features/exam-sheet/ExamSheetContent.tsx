@@ -1,4 +1,4 @@
-import { Markdown } from "../../pages/legal/markdown";
+import { SummaryMarkdown } from "../../pages/lecture/SummaryMarkdown";
 import type { Definition } from "./queries";
 
 export function TicketList({ tickets }: { tickets: string[] }) {
@@ -30,7 +30,7 @@ export function Cheatsheet({ source }: { source: string }) {
   if (!source.trim()) return <p className="exam-sheet__none">Шпаргалки в памятке нет.</p>;
   return (
     <div className="exam-cheatsheet">
-      <Markdown source={source} />
+      <SummaryMarkdown source={source} />
     </div>
   );
 }

@@ -14,12 +14,21 @@ bearer = HTTPBearer(auto_error=False)
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
+async def user_by_token(session: AsyncSession, token: str) -> User | None:
+    grant = decode_access_token(token)
+    if grant is None:
+        return None
+    user = await session.get(User, grant.user_id)
+    if user is None or user.token_version != grant.version:
+        return None
+    return user
+
+
 async def get_current_user(
     session: SessionDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> User:
-    user_id = decode_access_token(credentials.credentials) if credentials else None
-    user = await session.get(User, user_id) if user_id else None
+    user = await user_by_token(session, credentials.credentials) if credentials else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужно войти")
     return user

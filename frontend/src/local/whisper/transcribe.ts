@@ -1,4 +1,5 @@
 import { detectDevice } from "./device";
+import { audioTransferList } from "./transfer";
 import type {
   ProgressHandler,
   Segment,
@@ -73,6 +74,6 @@ export async function transcribe(
     signal?.addEventListener("abort", onAbort);
 
     const request: WorkerRequest = { id, audio, model, device, language };
-    target.postMessage(request);
+    target.postMessage(request, audioTransferList(audio));
   });
 }

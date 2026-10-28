@@ -16,8 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.courses import get_own_course
 from app.api.lectures import QUEUE_UNAVAILABLE, add_to_course
 from app.core.config import get_settings
-from app.core.deps import SessionDep
-from app.core.security import decode_access_token
+from app.core.deps import SessionDep, user_by_token
 from app.models import Lecture, LectureStatus, SourceType, User
 from app.pipeline.events import publish_status
 from app.pipeline.media import MediaError, original_path, probe_upload
@@ -87,8 +86,7 @@ async def hook_user(session: AsyncSession, hook: Hook) -> User:
     values = next((v for name, v in header.items() if name.lower() == "authorization"), [])
     value = values[0] if values else ""
     scheme, _, token = value.partition(" ")
-    user_id = decode_access_token(token) if scheme.lower() == "bearer" else None
-    user = await session.get(User, user_id) if user_id else None
+    user = await user_by_token(session, token) if scheme.lower() == "bearer" else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужно войти")
     return user
@@ -120,6 +118,14 @@ async def pre_create(session: AsyncSession, hook: Hook) -> dict[str, Any]:
     course_id = course_id_from(upload)
     if course_id is not None:
         await get_own_course(session, course_id, user)
+    settings = get_settings()
+    uploads_dir = settings.storage_dir / "uploads"
+    pending = await asyncio.to_thread(pending_uploads, uploads_dir, user.id.hex)
+    if pending >= settings.upload_max_pending:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Слишком много незавершённых загрузок, дождитесь окончания текущих",
+        )
     return {"ChangeFileInfo": {"ID": user.id.hex + secrets.token_hex(16)}}
 
 
@@ -188,6 +194,10 @@ async def pre_finish(session: AsyncSession, hook: Hook) -> dict[str, Any]:
             await session.commit()
             await publish_status(lecture.id, user.id, LectureStatus.failed, QUEUE_UNAVAILABLE)
     return {"HTTPResponse": json_response(status.HTTP_200_OK, {"lecture_id": str(lecture.id)})}
+
+
+def pending_uploads(directory: Path, prefix: str) -> int:
+    return sum(1 for _ in directory.glob(f"{prefix}*.info"))
 
 
 def upload_complete(path: Path, info_path: Path) -> bool:

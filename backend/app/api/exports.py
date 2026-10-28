@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Annotated
@@ -15,12 +14,15 @@ from app.core.deps import CurrentUser, SessionDep, bearer, get_current_user
 from app.core.security import ExportFormat, create_export_token, decode_export_token
 from app.models import Lecture, User
 from app.schemas.lecture import ExportLinkOut
-from app.services.pdf import lecture_html, render_pdf
+from app.services.pdf import lecture_html, render_pdf_limited
+from app.services.rate_limit import enforce_rate_limit
 from app.services.subtitles import Segment, build_cues, content_disposition, to_srt, to_vtt
 
 router = APIRouter(prefix="/lectures/{lecture_id}", tags=["exports"])
 
 PRIVATE_HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+
+PDF_RATE_MESSAGE = "Слишком много выгрузок PDF, попробуйте через минуту"
 
 ENDPOINTS: dict[ExportFormat, str] = {"pdf": "export_pdf", "srt": "export_srt", "vtt": "export_vtt"}
 
@@ -118,15 +120,27 @@ async def export_vtt(
     return subtitles_response(lecture, to_vtt, "vtt", "text/vtt")
 
 
-@router.get("/export.pdf", response_class=Response)
+@router.get(
+    "/export.pdf",
+    response_class=Response,
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много выгрузок PDF"}},
+)
 async def export_pdf(
     lecture_id: uuid.UUID,
     user: Annotated[User, Depends(export_user("pdf"))],
     session: SessionDep,
 ) -> Response:
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:export-pdf:{user.id}",
+        settings.pdf_export_rate_limit,
+        settings.pdf_export_rate_window_seconds,
+        PDF_RATE_MESSAGE,
+    )
     lecture = await exportable_lecture(session, user, lecture_id, "pdf")
-    html = lecture_html(lecture, get_settings().public_url.rstrip("/"))
-    content = await asyncio.to_thread(render_pdf, html)
+    html = lecture_html(lecture, settings.public_url.rstrip("/"))
+    content = await render_pdf_limited(html)
     return Response(
         content,
         media_type="application/pdf",
