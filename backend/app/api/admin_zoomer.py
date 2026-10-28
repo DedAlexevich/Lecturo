@@ -63,8 +63,10 @@ async def upload_zoomer_video(
             raise zoomer.too_large()
         container = await zoomer.save_upload(request.stream(), incoming)
         info = await zoomer.inspect_clip(incoming, container)
-    except zoomer.ZoomerError as error:
+    except BaseException as error:
         await asyncio.to_thread(incoming.unlink, missing_ok=True)
+        if not isinstance(error, zoomer.ZoomerError):
+            raise
         record_action(
             session,
             actor,
@@ -126,6 +128,9 @@ async def update_zoomer_video(
         changes["title"] = changes["title"].strip() or video.title
     if "source" in changes:
         changes["source"] = changes["source"].strip() or video.source
+    changes = {field: value for field, value in changes.items() if getattr(video, field) != value}
+    if not changes:
+        return zoomer.video_out(video)
     for field, value in changes.items():
         setattr(video, field, value)
     record_action(
