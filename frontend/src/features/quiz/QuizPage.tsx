@@ -124,7 +124,7 @@ export function QuizPage() {
   const stepQuery = useQuizStep(id, ready);
   const create = useCreateQuiz(id);
   const refreshQuiz = useRefreshQuiz(id);
-  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const { requireConsent, waiting: consentWaiting, dialog: consentDialog } = useAiTransferConsent();
   const [moment, setMoment] = useState<number | null>(null);
 
   const step = stepQuery.data ?? null;
@@ -137,6 +137,7 @@ export function QuizPage() {
   }, [building, step?.status, refreshQuiz]);
 
   const start = () => requireConsent(() => create.mutate());
+  const starting = create.isPending || consentWaiting;
 
   if (lecture.isError) {
     const missing = lecture.error instanceof ApiError && (lecture.error.status === 404 || lecture.error.status === 422);
@@ -185,7 +186,7 @@ export function QuizPage() {
         {(createError ?? rebuildError) && (
           <div className="quiz-error" role="alert">
             <p>{createError ?? rebuildError}</p>
-            <Button variant="secondary" size="sm" onClick={start} loading={create.isPending}>
+            <Button variant="secondary" size="sm" onClick={start} loading={starting}>
               Попробовать ещё раз
             </Button>
           </div>
@@ -196,7 +197,7 @@ export function QuizPage() {
           questions={quiz.data.questions}
           duration={lecture.data?.duration_sec ?? null}
           onRegenerate={start}
-          regenerating={create.isPending}
+          regenerating={starting}
           onMoment={lecture.data && hasMomentPlayer(lecture.data) ? setMoment : undefined}
         />
         {lecture.data && <MomentDialog lecture={lecture.data} seconds={moment} onClose={() => setMoment(null)} />}
@@ -208,7 +209,7 @@ export function QuizPage() {
         step={step}
         empty={quiz.data !== null && quiz.data !== undefined}
         onStart={start}
-        starting={create.isPending}
+        starting={starting}
         error={createError}
       />
     );

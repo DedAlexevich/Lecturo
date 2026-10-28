@@ -31,7 +31,7 @@ export function AddLectureDialog() {
   const courses = useCourseOptions(open);
   const upload = useTusUpload(me?.id);
   const addLink = useAddLink();
-  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const { requireConsent, waiting: consentWaiting, dialog: consentDialog } = useAiTransferConsent();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -181,7 +181,7 @@ export function AddLectureDialog() {
                   <LinkPanel
                     key={linkKey}
                     courseField={courseField(addLink.isPending)}
-                    pending={addLink.isPending}
+                    pending={addLink.isPending || consentWaiting}
                     error={addLink.error}
                     onSubmit={submitLink}
                     onClose={close}
