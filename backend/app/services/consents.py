@@ -43,7 +43,7 @@ def require_signup_consents(accept_terms: bool, accept_personal_data: bool) -> N
         )
 
 
-def require_telegram_signup_consents(accept_terms: bool, accept_personal_data: bool) -> None:
+def require_provider_signup_consents(accept_terms: bool, accept_personal_data: bool) -> None:
     if not (accept_terms and accept_personal_data):
         raise HTTPException(status.HTTP_403_FORBIDDEN, CONSENT_REQUIRED)
 

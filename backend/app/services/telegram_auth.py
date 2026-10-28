@@ -5,15 +5,12 @@ import time
 from urllib.parse import parse_qsl
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
-from app.models import AuthIdentity, AuthProvider, User
+from app.models import AuthProvider, User
 from app.schemas.user import TelegramLoginIn
-from app.services.consents import record_signup_consents, require_telegram_signup_consents
+from app.services import oauth_flow
 
 AUTH_MAX_AGE_SECONDS = 24 * 60 * 60
 WEBAPP_AUTH_MAX_AGE_SECONDS = 60 * 60
@@ -66,17 +63,6 @@ def verify_webapp_init_data(init_data: str) -> dict:
     return telegram_user
 
 
-async def find_identity(session: AsyncSession, telegram_id: int) -> AuthIdentity | None:
-    return await session.scalar(
-        select(AuthIdentity)
-        .where(
-            AuthIdentity.provider == AuthProvider.telegram,
-            AuthIdentity.provider_user_id == str(telegram_id),
-        )
-        .options(selectinload(AuthIdentity.user))
-    )
-
-
 async def get_or_create_telegram_user(
     session: AsyncSession,
     telegram_id: int,
@@ -84,29 +70,19 @@ async def get_or_create_telegram_user(
     accept_terms: bool = False,
     accept_personal_data: bool = False,
 ) -> User:
-    identity = await find_identity(session, telegram_id)
-    if identity is None:
-        require_telegram_signup_consents(accept_terms, accept_personal_data)
-        display_name = " ".join(
-            part for part in (profile.get("first_name"), profile.get("last_name")) if part
-        )
-        user = User(display_name=display_name[:120], telegram_chat_id=telegram_id)
-        record_signup_consents(user)
-        user.identities.append(
-            AuthIdentity(
-                provider=AuthProvider.telegram, provider_user_id=str(telegram_id), data=profile
-            )
-        )
-        session.add(user)
-        try:
-            await session.commit()
-            return user
-        except IntegrityError:
-            await session.rollback()
-            identity = await find_identity(session, telegram_id)
-            if identity is None:
-                raise
-    identity.data = profile
-    identity.user.telegram_chat_id = telegram_id
-    await session.commit()
-    return identity.user
+    display_name = " ".join(
+        part for part in (profile.get("first_name"), profile.get("last_name")) if part
+    )
+    user = await oauth_flow.get_or_create_provider_user(
+        session,
+        AuthProvider.telegram,
+        str(telegram_id),
+        profile,
+        User(display_name=display_name[:120], telegram_chat_id=telegram_id),
+        accept_terms,
+        accept_personal_data,
+    )
+    if user.telegram_chat_id != telegram_id:
+        user.telegram_chat_id = telegram_id
+        await session.commit()
+    return user
