@@ -7,8 +7,8 @@ from sqlalchemy import delete, func, select
 
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings
-from app.core.security import create_access_token
 from app.core.db import SessionLocal
+from app.core.security import create_access_token
 from app.main import app
 from app.models import Payment, PaymentKind, PaymentStatus, User
 from app.services import yookassa
