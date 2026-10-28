@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     storage_dir: Path = Path("/data/storage")
     youtube_proxy: str = ""
+    youtube_cookies: Path | None = None
 
     log_dir: Path | None = None
     log_service: str = "app"

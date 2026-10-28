@@ -144,7 +144,31 @@ bash youtube-proxy-setup.sh <ip основного сервера>
 docker exec lecturo-worker-1 sh -c 'python -m yt_dlp --proxy "$YOUTUBE_PROXY" -f bestaudio -o "/tmp/yt.%(ext)s" https://www.youtube.com/watch?v=jNQXAC9IVRw && rm /tmp/yt.*'
 ```
 
-Если YouTube отвечает «Sign in to confirm you're not a bot», значит IP прокси попал под проверку YouTube и нужен другой зарубежный сервер.
+Если YouTube отвечает «Sign in to confirm you're not a bot», значит IP прокси попал под проверку YouTube. Помогают cookies аккаунта YouTube (см. ниже) или другой зарубежный сервер.
+
+### Cookies аккаунта YouTube
+
+С cookies yt-dlp ходит в YouTube от имени аккаунта, и проверка на бота срабатывает реже. Лучше завести отдельный аккаунт: при активном скачивании YouTube может его ограничить.
+
+1. В браузере открыть приватное окно, войти в аккаунт на youtube.com.
+2. Выгрузить cookies в формате Netscape (`cookies.txt`), например расширением «Get cookies.txt LOCALLY», и сразу закрыть приватное окно, не выходя из аккаунта: иначе YouTube обновит cookies и выгруженные перестанут работать.
+3. Положить файл на основной сервер и перезапустить сервисы:
+
+```sh
+scp cookies.txt admin@<ip>:/tmp/cookies.txt
+ssh admin@<ip>
+su -
+install -d -o 1000 -g 1000 -m 700 /opt/lecturo/data/youtube
+install -o 1000 -g 1000 -m 600 /tmp/cookies.txt /opt/lecturo/data/youtube/cookies.txt
+rm /tmp/cookies.txt
+cd /opt/lecturo && docker compose up -d api worker
+```
+
+Файл используется только для ссылок YouTube и только если он есть. Приложение его не перезаписывает, поэтому когда cookies устареют (снова появится «Sign in to confirm you're not a bot»), файл нужно выгрузить заново. Проверка:
+
+```sh
+docker exec lecturo-worker-1 sh -c 'python -m yt_dlp --proxy "$YOUTUBE_PROXY" --cookies "$YOUTUBE_COOKIES" -f bestaudio -o "/tmp/yt.%(ext)s" https://www.youtube.com/watch?v=jNQXAC9IVRw && rm /tmp/yt.*'
+```
 
 ## Мониторинг и логи
 

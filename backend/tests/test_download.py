@@ -938,3 +938,24 @@ async def test_inspect_link_explains_yt_dlp_failure(monkeypatch, url, message, e
     monkeypatch.setattr(download, "ensure_public_host", public)
     with pytest.raises(LinkError, match=expected):
         await inspect_link(url)
+
+
+def test_youtube_uses_cookies_file(monkeypatch, tmp_path):
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text("# Netscape HTTP Cookie File\n")
+    monkeypatch.setenv("YOUTUBE_COOKIES", str(cookies))
+    download.get_settings.cache_clear()
+    try:
+        assert download.ydl_options("https://youtu.be/dQw4w9WgXcQ")["cookiefile"] == str(cookies)
+        assert "cookiefile" not in download.ydl_options("https://vkvideo.ru/video-1_2")
+    finally:
+        download.get_settings.cache_clear()
+
+
+def test_missing_cookies_file_is_ignored(monkeypatch, tmp_path):
+    monkeypatch.setenv("YOUTUBE_COOKIES", str(tmp_path / "missing.txt"))
+    download.get_settings.cache_clear()
+    try:
+        assert "cookiefile" not in download.ydl_options("https://youtu.be/dQw4w9WgXcQ")
+    finally:
+        download.get_settings.cache_clear()
