@@ -13,7 +13,7 @@ from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
 from app.models import AuthIdentity, AuthProvider, User
-from app.services.vk_auth import code_challenge
+from app.services.oauth_flow import code_challenge
 from app.services.yandex_auth import YandexClient, get_yandex_client
 
 CLIENT_ID = "yandex-client"

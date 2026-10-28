@@ -1,5 +1,6 @@
 import { Link } from "react-router";
-import { formatDate, formatDuration, statusLabels } from "../home/format";
+import { formatDuration } from "../../lib/duration";
+import { formatDate, statusLabels } from "../home/format";
 import type { Lecture } from "../home/queries";
 
 type CourseLectureListProps = {

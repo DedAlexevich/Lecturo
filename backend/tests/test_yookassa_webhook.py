@@ -5,13 +5,14 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.api.billing import get_yookassa_factory
 from app.core.config import Settings, get_settings
 from app.core.db import SessionLocal
 from app.main import app
 from app.models import (
+    BusinessEvent,
     HourPackage,
     Lecture,
     Payment,
@@ -19,9 +20,11 @@ from app.models import (
     PaymentStatus,
     SourceType,
     Subscription,
+    UsageEntry,
+    UsageSource,
     User,
 )
-from app.services import yookassa
+from app.services import quota, yookassa
 
 SETTINGS = Settings(
     yookassa_shop_id="shop",
@@ -438,6 +441,41 @@ async def test_refund_revokes_package(client, user, auth_headers, fake):
     assert quota.json()["package_left_sec"] == 0
     stored = await load_payment(payment)
     assert stored.raw["refunded_amount"] == {"value": "199.00", "currency": "RUB"}
+    assert stored.status == PaymentStatus.refunded
+    history = await client.get("/api/v1/billing/payments", headers=auth_headers)
+    assert [item["status"] for item in history.json()] == ["refunded"]
+
+
+async def test_refund_then_lecture_cancel_keeps_package_empty(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded")
+    await client.post(WEBHOOK, json=notification(payment))
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=user.id, title="Лекция", source_type=SourceType.upload)
+        session.add(lecture)
+        await session.flush()
+        db_user = await session.get(User, user.id)
+        db_user.quota_week_start = datetime.now(UTC)
+        session.add(
+            UsageEntry(
+                user_id=user.id,
+                lecture_id=lecture.id,
+                source=UsageSource.package,
+                package_id=(await packages_of(user))[0].id,
+                seconds=600,
+            )
+        )
+        await session.commit()
+        lecture_id = lecture.id
+    refund_remote(fake, payment)
+    await client.post(WEBHOOK, json=refund_notification(payment))
+
+    async with SessionLocal() as session:
+        await quota.refund_lecture(session, lecture_id)
+        await session.commit()
+
+    [package] = await packages_of(user)
+    assert package.seconds_left == 0
 
 
 async def test_refund_shortens_subscription_and_moves_next_one(client, user, auth_headers, fake):
@@ -483,3 +521,46 @@ async def test_refund_of_unpaid_payment_skips_yookassa(client, user, fake):
 
     assert response.status_code == 200
     assert fake.requests == []
+
+
+async def event_kinds(yookassa_id: str) -> list[str]:
+    async with SessionLocal() as session:
+        rows = await session.scalars(
+            select(BusinessEvent.kind)
+            .where(BusinessEvent.details["yookassa_id"].astext == yookassa_id)
+            .order_by(BusinessEvent.created_at)
+        )
+        return list(rows)
+
+
+async def drop_events(yookassa_id: str) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            delete(BusinessEvent).where(BusinessEvent.details["yookassa_id"].astext == yookassa_id)
+        )
+        await session.commit()
+
+
+async def test_webhook_leaves_business_events(client, user, fake):
+    payment = await make_payment(user, "subscription")
+    fake.set_remote(payment, "succeeded")
+
+    await client.post(WEBHOOK, json=notification(payment))
+    await client.post(WEBHOOK, json=notification(payment))
+
+    kinds = await event_kinds(payment.yookassa_id)
+    await drop_events(payment.yookassa_id)
+    assert kinds.count("webhook_received") == 1
+    assert kinds.count("payment_succeeded") == 1
+    assert kinds.count("subscription_granted") == 1
+
+
+async def test_rejected_webhook_is_recorded(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+
+    response = await client.post(WEBHOOK, json=notification(payment))
+
+    kinds = await event_kinds(payment.yookassa_id)
+    await drop_events(payment.yookassa_id)
+    assert response.status_code == 400
+    assert "webhook_rejected" in kinds

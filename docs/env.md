@@ -33,6 +33,7 @@ cp .env.example .env
 | `PUBLIC_URL` | Публичный адрес сайта, например `https://lecturo.example`. Из него строятся ссылки в письмах, ссылки на шаринг и адрес возврата после оплаты. Бот показывает кнопку «Открыть Lecturo» только если адрес начинается с `https://` | на сервере | `http://localhost` | `backend/app/services/mail.py`, `api/billing.py`, `api/shares.py`, `bot/app/config.py` |
 | `SECRET_KEY` | Секрет для подписи токенов входа (JWT), ссылок на экспорт и видео. Длинная случайная строка, например из `openssl rand -hex 32`. Если `PUBLIC_URL` не указывает на localhost или начинается с `https://`, ключ должен быть не короче 32 символов и отличаться от значения по умолчанию и из `.env.example`, иначе `api` и `worker` не стартуют. После смены все пользователи будут разлогинены | на сервере | `dev-secret-change-me-before-production` | `backend/app/core/security.py` |
 | `POSTGRES_PASSWORD` | Пароль пользователя `lecturo` в Postgres. Из него же собираются `DATABASE_URL` для `api`, `worker` и `bot` | на сервере | `lecturo` | `docker-compose.yml` (db, api, worker, bot) |
+| `FORWARDED_ALLOW_IPS` | С каких адресов `api` принимает `X-Forwarded-For`. По умолчанию это частные диапазоны docker: порт `api` наружу не открыт, до него доходят только контейнеры проекта и сам сервер | нет | `172.16.0.0/12,192.168.0.0/16,10.0.0.0/8` | `docker-compose.yml` (api) |
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |
 | `DATA_DIR` | Папка на хосте для данных: `postgres`, `storage`, `bot-redis`, `caddy`. Путь абсолютный или относительный к корню репозитория. См. [data.md](data.md) | нет | `./data` | `docker-compose.yml` (db, bot-redis, api, worker, tusd, caddy), `scripts/migrate-volumes.sh` |
@@ -167,6 +168,7 @@ docker compose exec worker python -m app.pipeline.reindex
 | `SMTP_USER` | Логин. Если пуст, авторизация не выполняется | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_PASSWORD` | Пароль. Для Яндекса и Gmail нужен пароль приложения | обычно да | пусто | `backend/app/services/mail.py` |
 | `SMTP_FROM` | Адрес в поле «От». Локально при пустом значении берётся `SMTP_USER`, на сервере подставляется `noreply@<домен>`, поэтому для внешнего SMTP там его нужно заполнить | на сервере с внешним SMTP | пусто, на сервере `Lecturo <noreply@<домен>>` | `backend/app/services/mail.py`, `infra/compose.prod.yml` |
+| `COMPLAINTS_EMAIL` | Адрес, на который приходит письмо о каждой новой жалобе на публичную ссылку. Пусто: жалоба только сохраняется в базе и пишется в лог | нет | пусто | `backend/app/api/shares.py` |
 | `MAIL_DOMAIN` | Домен, от имени которого `mail` отправляет и подписывает письма. Только один домен без схемы и порта, например `lecturo.example`. Если в `SITE_ADDRESS` несколько адресов или схема, задайте `MAIL_DOMAIN` явно, иначе `mail` не запустится | нет | значение `SITE_ADDRESS` | `infra/compose.prod.yml`, `infra/mail` |
 
 Яндекс Почта:
@@ -288,6 +290,22 @@ Gmail:
 | `FREE_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у бесплатных пользователей | `3` | `backend/app/services/quota.py`, `backend/app/pipeline/media.py` |
 | `SUBSCRIPTION_VIDEO_RETENTION_DAYS` | Сколько дней хранится видео у подписчиков | `30` | `backend/app/services/quota.py` |
 | `LOCAL_EMBEDDINGS_WEEKLY_SECONDS` | Недельный лимит секунд для результатов, посчитанных на устройстве пользователя (10 часов) | `36000` | `backend/app/api/local_results.py` |
+
+## Администраторы
+
+| Переменная | Описание | По умолчанию | Где используется |
+|---|---|---|---|
+| `INITIAL_ADMINS` | Почты или Telegram id через запятую. При старте api, если в базе ещё нет ни одного администратора, найденные пользователи получают права администратора. Если администратор уже есть, переменная ничего не меняет. Подробнее в [deploy.md](deploy.md#первый-администратор) | пусто | `backend/app/main.py`, `backend/app/services/admin.py` |
+
+## Админ-панель: логи и бэкапы
+
+| Переменная | Описание | По умолчанию | Где используется |
+|---|---|---|---|
+| `LOG_STREAM_LIMIT` | Сколько потоков логов в реальном времени можно держать открытыми одновременно | `3` | `backend/app/api/admin_logs.py` |
+| `BACKUP_MAX_UPLOAD_MB` | Максимальный размер дампа, который можно загрузить в панели, МБ. Caddy пропускает до 2 ГБ на `/api/v1/admin/backups/upload` | `2048` | `backend/app/services/admin_backups.py`, `infra/Caddyfile` |
+| `RESTORE_IDLE_WAIT_SECONDS` | Сколько секунд восстановление из панели ждёт, пока воркер закончит текущую обработку лекций | `300` | `backend/app/services/admin_backups.py` |
+
+Папка бэкапов внутри контейнера `api` всегда `/backups`: `docker-compose.yml` монтирует туда `BACKUP_DIR` с хоста, а значение переменной внутри контейнера переопределяет.
 
 ## Проверка
 

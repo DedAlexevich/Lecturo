@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, tokenStorage } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { meQueryKey } from "../../app/useMe";
@@ -16,9 +17,9 @@ function unwrap<T>(result: Result<T>): T {
   return result.data as T;
 }
 
-function detailOf(error: unknown) {
+function messageOf(error: unknown) {
   if (!(error instanceof ApiError)) return undefined;
-  const detail = (error.body as { detail?: unknown } | undefined)?.detail;
+  const detail = detailOf(error.body);
   return typeof detail === "string" ? detail : undefined;
 }
 
@@ -28,13 +29,13 @@ export function settingsError(error: unknown, forbidden = "Не удалось �
     case 403:
       return forbidden;
     case 409:
-      return detailOf(error) ?? "Действие сейчас недоступно";
+      return messageOf(error) ?? "Действие сейчас недоступно";
     case 429:
       return "Слишком много попыток. Подождите немного и повторите";
     case 503:
       return "Сервис временно недоступен. Попробуйте позже";
     case 401:
-      return detailOf(error) ?? "Не удалось подтвердить данные";
+      return messageOf(error) ?? "Не удалось подтвердить данные";
     case 422:
       return "Проверьте введённые данные";
     default:

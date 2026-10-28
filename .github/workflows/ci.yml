@@ -58,8 +58,10 @@ jobs:
         run: |
           mkdir -p ~/apt-archives/partial
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives="$HOME/apt-archives" ffmpeg libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-inter fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::Archives="$HOME/apt-archives" ffmpeg libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-inter fonts-dejavu-core postgresql-common
           sudo chown -R "$USER" ~/apt-archives
+      - run: sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y && sudo apt-get install -y --no-install-recommends postgresql-client-16
+      - run: echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .

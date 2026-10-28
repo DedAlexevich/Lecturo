@@ -30,6 +30,7 @@ export function LegalPage() {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
       <EmptyState
+        level={1}
         title={notFound ? "Такого документа нет" : "Не удалось загрузить документ"}
         description={notFound ? "Возможно, ссылка устарела." : "Проверьте соединение и попробуйте ещё раз."}
         action={

@@ -13,7 +13,8 @@ from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
 from app.models import AuthIdentity, AuthProvider, User
-from app.services.vk_auth import VkClient, code_challenge, get_vk_client
+from app.services.oauth_flow import code_challenge
+from app.services.vk_auth import VkClient, get_vk_client
 
 pytestmark = pytest.mark.usefixtures("reset_auth_rate_limits")
 
@@ -391,6 +392,26 @@ async def test_link_with_wrong_nonce_is_rejected(client, vk, cleanup):
     state = await start_link(client, user)
     body = callback_body(state) | {"nonce": "another-browser"}
     response = await client.post("/api/v1/me/identities/vk", json=body, headers=headers(user))
+    assert response.status_code == 400
+    assert vk.requests == []
+
+
+async def test_wrong_nonce_does_not_burn_state(client, vk, vk_id, cleanup):
+    await create_user(cleanup, [(AuthProvider.vk, vk_id)])
+    state = await start_login(client)
+    wrong = callback_body(state) | {"nonce": "another-browser"}
+    assert (await client.post("/api/v1/auth/vk/callback", json=wrong)).status_code == 400
+    assert (
+        await client.post("/api/v1/auth/vk/callback", json=callback_body(state))
+    ).status_code == 200
+
+
+async def test_broken_state_record_is_rejected(client, vk):
+    redis = Redis.from_url(get_settings().redis_url)
+    await redis.set("vk:state:broken", "not json", ex=60)
+    await redis.aclose()
+    body = callback_body("broken") | {"nonce": "any"}
+    response = await client.post("/api/v1/auth/vk/callback", json=body)
     assert response.status_code == 400
     assert vk.requests == []
 

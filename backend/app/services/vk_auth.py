@@ -1,28 +1,18 @@
-import base64
-import hashlib
-import json
 import logging
-import secrets
 import uuid
 from typing import Annotated
-from urllib.parse import urlencode
 
 import httpx
 from fastapi import Depends, HTTPException, status
-from redis.exceptions import RedisError
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings, get_settings
-from app.core.redis import get_redis
-from app.models import AuthIdentity, AuthProvider, User
-from app.services.consents import record_signup_consents, require_telegram_signup_consents
+from app.models import AuthProvider, User
+from app.services import oauth_flow
+from app.services.oauth_flow import OAuthClient, OAuthFlow
 
 logger = logging.getLogger(__name__)
 
-STATE_TTL_SECONDS = 10 * 60
 REQUEST_TIMEOUT_SECONDS = 10.0
 VK_PROFILE_FIELDS = ("first_name", "last_name", "avatar")
 NOT_CONFIGURED = "Вход через VK не настроен"
@@ -100,13 +90,11 @@ def require_vk_enabled(settings: Settings) -> None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, NOT_CONFIGURED)
 
 
-def code_challenge(verifier: str) -> str:
-    digest = hashlib.sha256(verifier.encode()).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+VK_FLOW = OAuthFlow("vk", INVALID_STATE, VK_UNAVAILABLE)
 
 
-def state_key(state: str) -> str:
-    return f"vk:state:{state}"
+def vk_oauth_client(settings: Settings) -> OAuthClient:
+    return OAuthClient(settings.vk_authorize_url, settings.vk_client_id, settings.vk_redirect_uri)
 
 
 async def start_flow(
@@ -116,49 +104,14 @@ async def start_flow(
     accept_personal_data: bool = False,
 ) -> tuple[str, str]:
     require_vk_enabled(settings)
-    state = secrets.token_urlsafe(32)
-    nonce = secrets.token_urlsafe(32)
-    verifier = secrets.token_urlsafe(64)
-    record = {
-        "verifier": verifier,
-        "nonce": nonce,
-        "user_id": str(user_id) if user_id else None,
-        "accept_terms": accept_terms,
-        "accept_personal_data": accept_personal_data,
-    }
-    try:
-        await get_redis(settings.redis_url).set(
-            state_key(state), json.dumps(record), ex=STATE_TTL_SECONDS
-        )
-    except (OSError, RedisError):
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, VK_UNAVAILABLE) from None
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": settings.vk_client_id,
-            "redirect_uri": settings.vk_redirect_uri,
-            "state": state,
-            "code_challenge": code_challenge(verifier),
-            "code_challenge_method": "S256",
-        }
+    return await oauth_flow.start_flow(
+        VK_FLOW,
+        vk_oauth_client(settings),
+        settings.redis_url,
+        user_id,
+        accept_terms,
+        accept_personal_data,
     )
-    return f"{settings.vk_authorize_url}?{query}", nonce
-
-
-async def take_flow(settings: Settings, state: str, nonce: str, user_id: uuid.UUID | None) -> dict:
-    redis = get_redis(settings.redis_url)
-    try:
-        raw = await redis.getdel(state_key(state))
-    except (OSError, RedisError):
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, VK_UNAVAILABLE) from None
-    if raw is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
-    record = json.loads(raw)
-    if not secrets.compare_digest(record["nonce"], nonce) or record["user_id"] != (
-        str(user_id) if user_id else None
-    ):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
-    return record
 
 
 async def complete_flow(
@@ -171,18 +124,10 @@ async def complete_flow(
     user_id: uuid.UUID | None = None,
 ) -> tuple[str, dict, dict]:
     require_vk_enabled(settings)
-    record = await take_flow(settings, state, nonce, user_id)
+    record = await oauth_flow.take_flow(VK_FLOW, settings.redis_url, state, nonce, user_id)
     access_token = await client.exchange_code(code, record["verifier"], device_id, state)
     vk_id, profile = await client.fetch_profile(access_token)
     return vk_id, profile, record
-
-
-async def find_vk_identity(session: AsyncSession, vk_id: str) -> AuthIdentity | None:
-    return await session.scalar(
-        select(AuthIdentity)
-        .where(AuthIdentity.provider == AuthProvider.vk, AuthIdentity.provider_user_id == vk_id)
-        .options(selectinload(AuthIdentity.user))
-    )
 
 
 async def get_or_create_vk_user(
@@ -192,26 +137,15 @@ async def get_or_create_vk_user(
     accept_terms: bool = False,
     accept_personal_data: bool = False,
 ) -> User:
-    identity = await find_vk_identity(session, vk_id)
-    if identity is None:
-        require_telegram_signup_consents(accept_terms, accept_personal_data)
-        display_name = " ".join(
-            part for part in (profile.get("first_name"), profile.get("last_name")) if part
-        )
-        user = User(display_name=(display_name or "Пользователь VK")[:120])
-        record_signup_consents(user)
-        user.identities.append(
-            AuthIdentity(provider=AuthProvider.vk, provider_user_id=vk_id, data=profile)
-        )
-        session.add(user)
-        try:
-            await session.commit()
-            return user
-        except IntegrityError:
-            await session.rollback()
-            identity = await find_vk_identity(session, vk_id)
-            if identity is None:
-                raise
-    identity.data = profile
-    await session.commit()
-    return identity.user
+    display_name = " ".join(
+        part for part in (profile.get("first_name"), profile.get("last_name")) if part
+    )
+    return await oauth_flow.get_or_create_provider_user(
+        session,
+        AuthProvider.vk,
+        vk_id,
+        profile,
+        User(display_name=(display_name or "Пользователь VK")[:120]),
+        accept_terms,
+        accept_personal_data,
+    )

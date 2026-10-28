@@ -288,6 +288,56 @@ async def reset_complaint_limit():
     await redis.aclose()
 
 
+async def test_complaint_from_signed_in_user_keeps_reporter_and_mails_admin(
+    client, complaint_share, verified_user, auth_headers, monkeypatch
+):
+    sent = []
+
+    async def capture(to, subject, body):
+        sent.append((to, subject, body))
+
+    monkeypatch.setattr("app.api.shares.send_mail", capture)
+    monkeypatch.setattr(get_settings(), "complaints_email", "abuse@lecturo.test")
+    response = await client.post(
+        f"/api/v1/public/{complaint_share['token']}/complaints",
+        json={"reason": "Чужая лекция"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 204
+    async with SessionLocal() as session:
+        complaint = await session.scalar(
+            select(Complaint).where(Complaint.lecture_id == complaint_share["lecture_id"])
+        )
+    assert complaint.reporter_id == verified_user.id
+    [(to, subject, body)] = sent
+    assert to == "abuse@lecturo.test"
+    assert str(complaint.id) in body
+    assert str(verified_user.id) in body
+    assert "Чужая лекция" in body
+
+
+async def test_complaint_with_invalid_token_is_anonymous(client, complaint_share, monkeypatch):
+    sent = []
+
+    async def capture(to, subject, body):
+        sent.append(to)
+
+    monkeypatch.setattr("app.api.shares.send_mail", capture)
+    monkeypatch.setattr(get_settings(), "complaints_email", "")
+    response = await client.post(
+        f"/api/v1/public/{complaint_share['token']}/complaints",
+        json={"reason": "Нарушение"},
+        headers={"Authorization": "Bearer broken"},
+    )
+    assert response.status_code == 204
+    async with SessionLocal() as session:
+        complaint = await session.scalar(
+            select(Complaint).where(Complaint.lecture_id == complaint_share["lecture_id"])
+        )
+    assert complaint.reporter_id is None
+    assert sent == []
+
+
 async def test_complaint_saved_and_logged(client, complaint_share, verified_user, caplog):
     with caplog.at_level(logging.WARNING, logger="app.api.shares"):
         response = await client.post(

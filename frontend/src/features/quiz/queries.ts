@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { api } from "../../api/client";
+import { detailOf } from "../../api/errors";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { lectureQueryKey } from "../../pages/lecture/useLecture";
-import { detailOf } from "../upload/errors";
 
 export type Quiz = components["schemas"]["QuizOut"];
 export type QuizQuestion = components["schemas"]["QuizQuestion"];

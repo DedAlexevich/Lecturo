@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 MIN_CHUNK_SECONDS = 30.0
 MAX_CHUNK_SECONDS = 60.0
-BATCH_SIZE = 32
 DESCRIBE_BATCH_SIZE = 25
 DESCRIBE_CONCURRENCY = 3
 MAX_DESCRIPTION_CHARS = 140
@@ -50,20 +49,15 @@ class Chunk:
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
     local = lecture.processed_locally or lecture.source_type == SourceType.local
-    chunks = await describe_chunks(
-        None if local else get_llm(),
-        [
-            *split_into_chunks(await load_segments(session, lecture)),
-            *await load_section_chunks(session, lecture.id),
-        ],
-        await known_descriptions(session, lecture.id),
-    )
-    embeddings = get_embeddings()
-    vectors: list[list[float]] = []
-    for offset in range(0, len(chunks), BATCH_SIZE):
-        batch = chunks[offset : offset + BATCH_SIZE]
-        vectors.extend(await embeddings.embed_documents([chunk.text for chunk in batch]))
-        await report(len(vectors) / len(chunks))
+    chunks = [
+        *split_into_chunks(await load_segments(session, lecture)),
+        *await load_section_chunks(session, lecture.id),
+    ]
+    known = await known_descriptions(session, lecture.id)
+    await session.commit()
+    chunks = await describe_chunks(None if local else get_llm(), chunks, known)
+    texts = [chunk.text for chunk in chunks]
+    vectors = await get_embeddings().embed_documents(texts) if texts else []
     await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))
     session.add_all(
         to_search_chunk(lecture.id, chunk, vector)

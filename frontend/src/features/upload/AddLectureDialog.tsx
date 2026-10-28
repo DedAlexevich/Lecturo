@@ -31,7 +31,7 @@ export function AddLectureDialog() {
   const courses = useCourseOptions(open);
   const upload = useTusUpload(me?.id);
   const addLink = useAddLink();
-  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const { requireConsent, waiting: consentWaiting, dialog: consentDialog } = useAiTransferConsent();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -45,9 +45,14 @@ export function AddLectureDialog() {
   const selectedCourse = courses.data?.some((course) => course.id === courseId) ? courseId : "";
 
   const { reset: resetLink } = addLink;
+  const { active: uploading, reset: resetUpload } = upload;
 
   const close = useCallback(() => {
     resetLink();
+    if (!uploading) {
+      setPickedFile(null);
+      resetUpload();
+    }
     setSearchParams(
       (params) => {
         params.delete("add");
@@ -55,7 +60,7 @@ export function AddLectureDialog() {
       },
       { replace: true },
     );
-  }, [resetLink, setSearchParams]);
+  }, [resetLink, uploading, resetUpload, setSearchParams]);
 
   const refreshLists = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["lectures"] });
@@ -181,7 +186,7 @@ export function AddLectureDialog() {
                   <LinkPanel
                     key={linkKey}
                     courseField={courseField(addLink.isPending)}
-                    pending={addLink.isPending}
+                    pending={addLink.isPending || consentWaiting}
                     error={addLink.error}
                     onSubmit={submitLink}
                     onClose={close}

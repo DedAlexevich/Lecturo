@@ -6,6 +6,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { api } from "../api/client";
 import { ApiError } from "./queryClient";
 import styles from "./Layout.module.css";
+import { MaintenanceNotice } from "./MaintenanceNotice";
 import { signOut, useToken } from "./session";
 import { useMe } from "./useMe";
 import { CookieNotice } from "../features/consent/CookieNotice";
@@ -18,19 +19,24 @@ import { Spinner } from "../ui/Spinner";
 import { ThemeToggle } from "../ui/ThemeToggle";
 
 const navItems = [
-  { to: "/", label: "Лекции" },
-  { to: "/account", label: "Кабинет" },
-  { to: "/local", label: "На устройстве" },
+  { to: "/", label: "Лекции", end: true },
+  { to: "/account", label: "Кабинет", end: true },
+  { to: "/local", label: "На устройстве", end: true },
 ];
 
+const adminNavItem = { to: "/admin", label: "Админка", end: false };
+
 function Navigation({ className }: { className: string }) {
+  const { data: me } = useMe();
+  const items = me?.is_admin ? [...navItems, adminNavItem] : navItems;
+
   return (
     <nav className={className}>
-      {navItems.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
-          end
+          end={item.end}
           className={({ isActive }) => (isActive ? `${styles.navLink} ${styles.navLinkActive}` : styles.navLink)}
         >
           {item.label}
@@ -100,11 +106,6 @@ export function Layout() {
           <Link to="/" className={styles.logo}>
             <Logo />
           </Link>
-          {signedIn && (
-            <button type="button" className={styles.textButton} onClick={signOut}>
-              Выйти
-            </button>
-          )}
           {!signedIn && <Link to="/local" className={styles.textButton}>На устройстве</Link>}
           {!signedIn && !onLoginPage && (
             <Link to="/login" className={styles.textButton}>
@@ -114,6 +115,7 @@ export function Layout() {
         </header>
         <main className={styles.main}>
           <TelegramBridge />
+          <MaintenanceNotice />
           <LegalUpdateNotice />
           {signedIn && <WaitingNotice />}
           <Suspense fallback={<Spinner label="Загрузка" />}>

@@ -37,6 +37,19 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+async def get_admin_user(
+    session: SessionDep,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> User:
+    user = await user_by_token(session, credentials.credentials) if credentials else None
+    if user is None or not user.is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+    return user
+
+
+AdminUser = Annotated[User, Depends(get_admin_user)]
+
+
 async def require_subscription(session: SessionDep, user: CurrentUser) -> User:
     if not await has_subscription(session, user):
         raise HTTPException(
