@@ -1155,6 +1155,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Audit */
+        get: operations["get_audit_api_v1_admin_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/admins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admins */
+        get: operations["get_admins_api_v1_admin_admins_get"];
+        put?: never;
+        /** Add Admin */
+        post: operations["add_admin_api_v1_admin_admins_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/admins/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Admin */
+        delete: operations["remove_admin_api_v1_admin_admins__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1166,6 +1218,68 @@ export interface components {
             telegram?: components["schemas"]["TelegramLoginIn"] | null;
             /** Telegram Init Data */
             telegram_init_data?: string | null;
+        };
+        /**
+         * AdminAction
+         * @enum {string}
+         */
+        AdminAction: "admin_granted" | "admin_revoked";
+        /** AdminGrantIn */
+        AdminGrantIn: {
+            /** Identifier */
+            identifier: string;
+        };
+        /** AdminOut */
+        AdminOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AuditEntryOut */
+        AuditEntryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Actor Label */
+            actor_label: string;
+            action: components["schemas"]["AdminAction"];
+            /** Target Type */
+            target_type: string;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Label */
+            target_label: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        /** AuditPage */
+        AuditPage: {
+            /** Total */
+            total: number;
+            /** Items */
+            items: components["schemas"]["AuditEntryOut"][];
         };
         /**
          * AuthProvider
@@ -2017,6 +2131,8 @@ export interface components {
             /** Identities */
             identities: components["schemas"]["IdentityOut"][];
             telegram_notifications: components["schemas"]["TelegramNotifications"];
+            /** Is Admin */
+            is_admin: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -4764,6 +4880,150 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LectureOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_audit_api_v1_admin_audit_get: {
+        parameters: {
+            query?: {
+                action?: components["schemas"]["AdminAction"] | null;
+                actor_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admins_api_v1_admin_admins_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOut"][];
+                };
+            };
+        };
+    };
+    add_admin_api_v1_admin_admins_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGrantIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOut"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Пользователь уже администратор */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_admin_api_v1_admin_admins__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Этот пользователь не администратор */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Нельзя снять последнего администратора */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

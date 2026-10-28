@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import (
+    admin,
     auth,
     billing,
     courses,
@@ -42,5 +43,6 @@ for module in (
     billing,
     legal,
     local_results,
+    admin,
 ):
     api_router.include_router(module.router)

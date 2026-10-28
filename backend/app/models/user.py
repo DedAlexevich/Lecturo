@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Enum,
@@ -49,6 +50,7 @@ class User(UUIDPk, CreatedAt, Base):
     quota_week_start: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     identities: Mapped[list["AuthIdentity"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
