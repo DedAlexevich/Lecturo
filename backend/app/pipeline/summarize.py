@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -30,6 +31,8 @@ CHAPTERS_REQUIRED_FROM_SECONDS = 3 * 60.0
 TITLE_MAX_LENGTH = 300
 MAP_ATTEMPTS = 2
 REDUCE_ATTEMPTS = 2
+SECTION_SECONDS = 15 * 60.0
+SECTION_CONCURRENCY = 3
 RAW_PART_CHAR_LIMIT = 6000
 DIGEST_CACHE_TTL_SECONDS = 3 * 24 * 3600
 LATEX_BACKSLASH = re.compile(r"\\\\|\\(?=([A-Za-z]{2,}))")
@@ -401,9 +404,9 @@ async def digest_parts(
     return digests
 
 
-def reduce_prompt(duration: float, plan: ChapterPlan) -> str:
+def reduce_prompt(name: str, duration: float, plan: ChapterPlan) -> str:
     return render_prompt(
-        "reduce",
+        name,
         duration=format_duration(duration),
         min_chapters=plan.min_count,
         max_chapters=plan.max_count,
@@ -424,17 +427,90 @@ def reduce_request(title: str, digests: list[PartDigest]) -> str:
     return json.dumps({"title": title, "parts": parts}, ensure_ascii=False)
 
 
-async def reduce_parts(
-    llm: LLM, title: str, duration: float, plan: ChapterPlan, digests: list[PartDigest]
-) -> dict[str, Any]:
-    system = reduce_prompt(duration, plan)
-    request = reduce_request(title, digests)
+async def reduce_parts(llm: LLM, system: str, request: str) -> dict[str, Any]:
     for _ in range(REDUCE_ATTEMPTS - 1):
         try:
             return parse_json(await llm.complete(system, request, json_mode=True))
         except ValueError:
             logger.warning("Ответ LLM с главами не разобран, запрос повторяется")
     return parse_json(await llm.complete(system, request, json_mode=True))
+
+
+async def reduce_chapters(llm: LLM, system: str, request: str) -> dict[str, Any]:
+    try:
+        return await reduce_parts(llm, system, request)
+    except OpenAICompatibleTruncated:
+        logger.warning("Ответ LLM с главами обрезан, главы взяты из частей")
+        return {}
+
+
+def group_chapters(
+    chapters: list[ChapterDraft], seconds: float = SECTION_SECONDS
+) -> list[list[ChapterDraft]]:
+    groups: list[list[ChapterDraft]] = []
+    for chapter in chapters:
+        if groups and chapter.end - groups[-1][0].start <= seconds:
+            groups[-1].append(chapter)
+        else:
+            groups.append([chapter])
+    return groups
+
+
+def section_request(title: str, group: list[ChapterDraft], digests: list[PartDigest]) -> str:
+    start, end = group[0].start, group[-1].end
+    chapters = [
+        {
+            "title": chapter.title,
+            "start": int(chapter.start),
+            "end": int(chapter.end),
+            "summary": chapter.summary,
+        }
+        for chapter in group
+    ]
+    parts = [
+        {"start": int(digest.start), "end": int(digest.end), "summary": digest.summary}
+        for digest in digests
+        if digest.start < end and digest.end > start
+    ]
+    return json.dumps({"title": title, "chapters": chapters, "parts": parts}, ensure_ascii=False)
+
+
+def chapters_markdown(chapters: list[ChapterDraft]) -> str:
+    return "\n\n".join(f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters)
+
+
+async def write_section(
+    llm: LLM, system: str, request: str, group: list[ChapterDraft], limit: asyncio.Semaphore
+) -> str:
+    async with limit:
+        try:
+            content = await llm.complete(system, request)
+        except OpenAICompatibleTruncated:
+            logger.warning(
+                "Конспект глав %s–%s (с) обрезан, взяты краткие содержания глав",
+                int(group[0].start),
+                int(group[-1].end),
+            )
+            return chapters_markdown(group)
+    return content.strip() or chapters_markdown(group)
+
+
+async def write_sections(
+    llm: LLM,
+    title: str,
+    duration: float,
+    chapters: list[ChapterDraft],
+    digests: list[PartDigest],
+) -> str:
+    system = render_prompt("reduce_section", duration=format_duration(duration))
+    limit = asyncio.Semaphore(SECTION_CONCURRENCY)
+    sections = await asyncio.gather(
+        *(
+            write_section(llm, system, section_request(title, group, digests), group, limit)
+            for group in group_chapters(chapters)
+        )
+    )
+    return "\n\n".join(sections)
 
 
 def snap_to_segment(start: float, segment_starts: list[float]) -> float:
@@ -565,13 +641,26 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
     cache = DigestCache(lecture.id)
     try:
         digests = await digest_parts(llm, parts, short, cache, report)
-        data = await reduce_parts(llm, lecture.title, duration, plan, digests)
+        request = reduce_request(lecture.title, digests)
+        summary_md: str | None = None
+        if short:
+            try:
+                data = await reduce_parts(llm, reduce_prompt("reduce", duration, plan), request)
+                summary_md = str(data.get("summary_md") or "").strip()
+            except OpenAICompatibleTruncated:
+                logger.warning(
+                    "Ответ LLM с главами и конспектом обрезан, конспект собирается по главам"
+                )
+        if summary_md is None:
+            data = await reduce_chapters(
+                llm, reduce_prompt("reduce_chapters", duration, plan), request
+            )
         chapters = split_oversized(
             build_chapters(data.get("chapters"), segments, digests), segments, digests, plan
         )
-        content = str(data.get("summary_md") or "").strip() or "\n\n".join(
-            f"## {chapter.title}\n\n{chapter.summary}" for chapter in chapters
-        )
+        if summary_md is None:
+            summary_md = await write_sections(llm, lecture.title, duration, chapters, digests)
+        content = summary_md or chapters_markdown(chapters)
 
         await clear_previous(session, lecture)
         session.add(Summary(lecture_id=lecture.id, content_md=content))
