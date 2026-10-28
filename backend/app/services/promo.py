@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -24,6 +24,11 @@ DISABLED = "Этот промокод больше не действует"
 EXPIRED = "Срок действия промокода истёк"
 EXHAUSTED = "Промокод закончился: его уже использовали максимальное число раз"
 ALREADY_USED = "Вы уже использовали этот промокод"
+WAITING_PAYMENT = (
+    "Промокод уже привязан к неоплаченному платежу. Оплатите его по ссылке в истории платежей "
+    "или подождите, пока ЮKassa его отменит"
+)
+STALE_RESERVATION = timedelta(minutes=10)
 NOT_DISCOUNT = "Этот промокод не даёт скидку. Примените его в поле «Промокод» в кабинете"
 ONLY_AT_PAYMENT = "Скидка применится при оплате"
 
@@ -48,6 +53,22 @@ def active_redemptions(promo_id: uuid.UUID):
     )
 
 
+async def release_stale(
+    session: AsyncSession, promo_id: uuid.UUID, user_id: uuid.UUID, now: datetime
+) -> None:
+    stale = select(Payment.id).where(
+        Payment.user_id == user_id,
+        Payment.status == PaymentStatus.pending,
+        Payment.yookassa_id.is_(None),
+        Payment.created_at < now - STALE_RESERVATION,
+    )
+    await session.execute(
+        delete(PromoRedemption).where(
+            PromoRedemption.promo_id == promo_id, PromoRedemption.payment_id.in_(stale)
+        )
+    )
+
+
 async def lock_usable(
     session: AsyncSession, code: str, user_id: uuid.UUID, now: datetime
 ) -> PromoCode:
@@ -63,11 +84,17 @@ async def lock_usable(
         raise PromoError(DISABLED)
     if promo.valid_until is not None and promo.valid_until <= now:
         raise PromoError(EXPIRED)
+    await release_stale(session, promo.id, user_id, now)
     used_by_user = await session.scalar(
         active_redemptions(promo.id).where(PromoRedemption.user_id == user_id)
     )
     if used_by_user:
-        raise PromoError(ALREADY_USED)
+        waiting = await session.scalar(
+            active_redemptions(promo.id).where(
+                PromoRedemption.user_id == user_id, Payment.status == PaymentStatus.pending
+            )
+        )
+        raise PromoError(WAITING_PAYMENT if waiting else ALREADY_USED)
     if promo.max_redemptions is not None:
         used = await session.scalar(active_redemptions(promo.id))
         if used >= promo.max_redemptions:

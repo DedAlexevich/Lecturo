@@ -14,6 +14,7 @@ from app.models import (
     AdminAuditEntry,
     HourPackage,
     Payment,
+    PaymentKind,
     PaymentStatus,
     PromoCode,
     PromoKind,
@@ -241,9 +242,40 @@ async def test_canceled_payment_frees_discount_code(
 
     assert first.status_code == 200
     assert second.status_code == 422
+    assert "неоплаченному платежу" in second.json()["detail"]
     assert third.status_code == 200
     assert third.json()["discount_kopecks"] == 2990
     assert other_promo.status_code == 409
+
+
+async def test_stale_reservation_without_yookassa_payment_is_released(
+    client: AsyncClient, user: User, codes: list[str], fake: FakeYooKassa
+):
+    promo = await add_code(codes, PromoKind.discount, discount_percent=10, max_redemptions=1)
+    async with SessionLocal() as session:
+        stuck = Payment(
+            user_id=user.id,
+            kind=PaymentKind.package,
+            product_code="hours_5",
+            amount_kopecks=17910,
+            discount_kopecks=1990,
+            idempotence_key="key-stuck",
+            raw={},
+            created_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+        session.add(stuck)
+        await session.flush()
+        session.add(PromoRedemption(promo_id=promo.id, user_id=user.id, payment_id=stuck.id))
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/billing/payments",
+        json={"product_code": "hours_10", "accept_offer": True, "promo_code": promo.code},
+        headers={**headers(user), "Idempotence-Key": "key-after-stuck"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["discount_kopecks"] == 3490
 
 
 async def test_non_discount_code_is_rejected_at_payment(
