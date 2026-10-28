@@ -44,6 +44,13 @@ cp .env.example .env
 | `BACKUP_DB_SERVICE` | Сервис compose с Postgres, к которому подключаются скрипты бэкапа | нет | `db` | `infra/backup` |
 | `BACKUP_DB_CONTAINER` | Имя контейнера с Postgres. Если задано, скрипты бэкапа идут через `docker exec` в него, а не через compose | нет | пусто | `infra/backup` |
 | `BACKUP_CHECK_CONTAINER` | Имя временного контейнера Postgres, в котором `check.sh` проверяет восстановление бэкапа | нет | `lecturo-backup-check` | `infra/backup/check.sh` |
+| `BACKUP_AGE_RECIPIENT` | Публичный ключ age владельца (`age1...`). Если задан, бэкап на сервере вместе с ключом DKIM шифруется в `lecturo-<дата>-<время>.tar.age`, иначе остаётся незашифрованный `.dump`. См. [deploy.md](deploy.md#ключ-шифрования) | на сервере | пусто | `infra/backup` |
+| `BACKUP_AGE_IDENTITY` | Путь к приватному ключу age. Задаётся только на время запуска `restore.sh` для `.tar.age`, в `.env` не хранится | для восстановления | пусто | `infra/backup/restore.sh` |
+| `BACKUP_S3_BUCKET` | Бакет Yandex Object Storage для копии бэкапов вне сервера. Если не задан вместе с ключами, выгрузка пропускается. См. [deploy.md](deploy.md#копия-в-yandex-object-storage) | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_ACCESS_KEY_ID` | Идентификатор статического ключа сервисного аккаунта с ролью `storage.uploader` на этот бакет | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_SECRET_ACCESS_KEY` | Секрет этого ключа | на сервере | пусто | `infra/backup/common.sh` |
+| `BACKUP_S3_ENDPOINT` | Адрес S3 API | нет | `https://storage.yandexcloud.net` | `infra/backup/common.sh` |
+| `BACKUP_S3_REGION` | Регион для подписи запросов | нет | `ru-central1` | `infra/backup/common.sh` |
 
 `DATABASE_URL` и `REDIS_URL` в `.env` писать не нужно: `docker-compose.yml` задаёт их сам. Остальные настройки backend, которых нет в `.env.example` (`ACCESS_TOKEN_TTL_MINUTES`, `STORAGE_DIR`, `YOOKASSA_API_URL`, `LOCAL_*`, `AUTH_MAIL_*`, `ACCOUNT_DELETE_*`), имеют значения по умолчанию в `backend/app/core/config.py`, менять их обычно не требуется.
 
@@ -185,7 +192,7 @@ Gmail:
 | `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
 | `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота и алертов. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml`, `infra/health-alert.sh` |
 | `YOUTUBE_PROXY` | Прокси для скачивания аудио с YouTube, например `socks5h://ytproxy:<пароль>@<ip>:1080`. С сервера в РФ YouTube недоступен, поэтому ссылки YouTube качаются через зарубежный сервер, остальные источники идут напрямую. Если пусто, YouTube качается напрямую. Как поднять прокси, описано в [deploy.md](deploy.md#прокси-для-youtube) | только на сервере | пусто | `backend/app/pipeline/download.py` |
-| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/health-alert.sh` |
+| `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца, куда бот присылает сообщение, если сайт перестал отвечать, бэкап упал или устарел. Подробнее в [deploy.md](deploy.md#мониторинг-и-логи) | для алертов на сервере | пусто | `infra/notify.sh` |
 
 Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
