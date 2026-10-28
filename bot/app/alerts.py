@@ -153,7 +153,7 @@ ON CONFLICT (user_id) DO UPDATE SET
 RECORD_ALERT_SETTINGS = """
 INSERT INTO admin_audit_log
     (actor_id, actor_label, action, target_type, target_id, target_label, details)
-VALUES ($1, $2, 'alert_settings_changed', 'user', $1::text, $2, $3::jsonb)
+VALUES ($1::uuid, $2, 'alert_settings_changed', 'user', $1::uuid::text, $2, $3::jsonb)
 """
 
 QUEUE_TEST_ALERT = "INSERT INTO admin_alert_deliveries (user_id, text) VALUES ($1, $2)"
