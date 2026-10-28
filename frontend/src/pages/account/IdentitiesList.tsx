@@ -4,6 +4,7 @@ import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { useToast } from "../../ui/Toast";
+import { ProviderButton } from "../auth/ProviderButton";
 import { TelegramButton, telegramEnabled } from "../auth/TelegramButton";
 import { VkButton } from "../auth/VkButton";
 import { YandexButton } from "../auth/YandexButton";
@@ -15,7 +16,7 @@ import { validateEmail, validateNewPassword } from "../auth/validation";
 import { formatDate } from "./format";
 import { getMiniAppInitData } from "./miniApp";
 import styles from "./SettingsSection.module.css";
-import { settingsError, useLinkEmail, useLinkTelegram, useUnlink, type Me, type Provider, type TelegramUser } from "./settings";
+import { settingsError, useLinkEmail, useLinkTelegram, useUnlink, type Me, type Provider, type TelegramLink } from "./settings";
 
 const providerNames: Record<Provider, string> = { telegram: "Telegram", email: "Почта", vk: "VK", yandex: "Яндекс" };
 
@@ -150,35 +151,44 @@ function VerifyEmail({ email }: { email: string }) {
 export function LinkTelegram() {
   const link = useLinkTelegram();
   const toast = useToast();
+  const [error, setError] = useState<unknown>();
   const { mutate } = link;
 
-  const onAuth = useCallback(
-    (user: TelegramUser) => mutate(user, { onSuccess: () => toast.show("Telegram привязан", "success") }),
+  const linkWith = useCallback(
+    (body: TelegramLink) => {
+      setError(undefined);
+      mutate(body, { onSuccess: () => toast.show("Telegram привязан", "success") });
+    },
     [mutate, toast],
   );
 
   const initData = getMiniAppInitData();
   if (!initData && !telegramEnabled) return <span className={styles.muted}>Сейчас недоступно</span>;
+  const failure = link.isError ? link.error : error;
 
   return (
     <div className={styles.identityAction}>
       {initData ? (
-        <Button
-          variant="secondary"
+        <ProviderButton
+          provider="telegram"
+          label="Привязать этот Telegram"
           size="sm"
           loading={link.isPending}
-          onClick={() =>
-            mutate({ telegram_init_data: initData }, { onSuccess: () => toast.show("Telegram привязан", "success") })
-          }
-        >
-          Привязать этот Telegram
-        </Button>
+          onClick={() => linkWith({ telegram_init_data: initData })}
+        />
       ) : (
-        <TelegramButton onAuth={onAuth} />
+        <TelegramButton
+          label="Привязать"
+          ariaLabel="Привязать Telegram"
+          size="sm"
+          loading={link.isPending}
+          onAuth={linkWith}
+          onError={setError}
+        />
       )}
-      {link.isError && (
+      {failure !== undefined && (
         <p className={styles.alert} role="alert">
-          {settingsError(link.error)}
+          {settingsError(failure)}
         </p>
       )}
     </div>
@@ -189,7 +199,13 @@ function LinkVk() {
   const [error, setError] = useState<unknown>();
   return (
     <div className={styles.identityAction}>
-      <VkButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
+      <VkButton
+        flow={{ mode: "link", redirect: "/account" }}
+        label="Привязать"
+        ariaLabel="Привязать VK"
+        size="sm"
+        onError={setError}
+      />
       {error !== undefined && (
         <p className={styles.alert} role="alert">
           {settingsError(error)}
@@ -203,7 +219,13 @@ function LinkYandex() {
   const [error, setError] = useState<unknown>();
   return (
     <div className={styles.identityAction}>
-      <YandexButton flow={{ mode: "link", redirect: "/account" }} label="Привязать" size="sm" onError={setError} />
+      <YandexButton
+        flow={{ mode: "link", redirect: "/account" }}
+        label="Привязать"
+        ariaLabel="Привязать Яндекс"
+        size="sm"
+        onError={setError}
+      />
       {error !== undefined && (
         <p className={styles.alert} role="alert">
           {settingsError(error)}

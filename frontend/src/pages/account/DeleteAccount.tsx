@@ -108,7 +108,13 @@ export function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
             <div className={styles.confirmTelegram}>
               <p>Для подтверждения нажмите кнопку Telegram: аккаунт удалится сразу после входа.</p>
               {telegramEnabled ? (
-                <TelegramButton onAuth={confirmTelegram} />
+                <TelegramButton
+                  label="Подтвердить через Telegram"
+                  fullWidth
+                  loading={remove.isPending}
+                  onAuth={confirmTelegram}
+                  onError={(error) => toast.show(settingsError(error), "error")}
+                />
               ) : (
                 <p className={styles.alert}>Подтверждение через Telegram сейчас недоступно.</p>
               )}

@@ -67,7 +67,15 @@ export function SocialLogin() {
     <>
       <div className="auth__divider">или</div>
       <div className="auth-social">
-        {showTelegram && <TelegramButton onAuth={handleAuth} />}
+        {showTelegram && (
+          <TelegramButton
+            label="Войти через Telegram"
+            fullWidth
+            loading={login.isPending && pending === undefined}
+            onAuth={handleAuth}
+            onError={(error) => toast.show(messageOf(error), "error")}
+          />
+        )}
         {vkEnabled && (
           <VkButton
             flow={{ mode: "login", redirect: redirectTarget(location.state) }}
