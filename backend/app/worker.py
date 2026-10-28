@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import httpx
@@ -22,6 +23,8 @@ from app.services.legal_notices import process_legal_revisions
 
 STARTUP_CHECK_TIMEOUT_SECONDS = 15
 
+logger = logging.getLogger(__name__)
+
 
 async def check_providers(
     settings: Settings, transport: httpx.AsyncBaseTransport | None = None
@@ -37,7 +40,10 @@ async def check_providers(
 
 async def startup(ctx: dict[str, Any]) -> None:
     configure_logging()
-    await check_providers(get_settings())
+    try:
+        await check_providers(get_settings())
+    except Exception:
+        logger.exception("Проверка провайдеров при старте воркера не прошла")
     await resume_interrupted_lectures(ctx["redis"])
 
 
@@ -49,6 +55,7 @@ class WorkerSettings:
     max_tries = 100
     keep_result = 0
     allow_abort_jobs = True
+    health_check_interval = 30
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
         cron(process_legal_revisions, minute=set(range(0, 60, 10))),

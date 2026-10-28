@@ -63,3 +63,18 @@ async def test_unavailable_embeddings_api_fails_without_retries():
     with pytest.raises(OpenAICompatibleError, match="503"):
         await check_providers(OPENAI_EMBEDDINGS, httpx.MockTransport(handler))
     assert len(requests) == 1
+
+
+async def test_startup_survives_unavailable_provider(monkeypatch):
+    resumed = []
+
+    async def fail(settings):
+        raise OpenAICompatibleError("503")
+
+    async def resume(redis):
+        resumed.append(redis)
+
+    monkeypatch.setattr("app.worker.check_providers", fail)
+    monkeypatch.setattr("app.worker.resume_interrupted_lectures", resume)
+    await startup({"redis": "redis"})
+    assert resumed == ["redis"]
