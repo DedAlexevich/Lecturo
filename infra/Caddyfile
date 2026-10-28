@@ -127,9 +127,9 @@
 	@zoomer_file path_regexp zoomer ^/zoomer/([0-9a-f-]{36})\.(mp4|jpg)$
 	handle @zoomer_file {
 		forward_auth api:8000 {
-			uri /api/v1/zoomer/videos/{re.zoomer.1}/access?file={re.zoomer.2}
+			uri /api/v1/zoomer/videos/{re.zoomer.1}/access
 		}
-		header Cache-Control "public, max-age=3600"
+		header Cache-Control "no-cache"
 		root * /srv/storage/zoomer
 		uri strip_prefix /zoomer
 		file_server
