@@ -19,9 +19,11 @@ from app.models import (
     PaymentStatus,
     SourceType,
     Subscription,
+    UsageEntry,
+    UsageSource,
     User,
 )
-from app.services import yookassa
+from app.services import quota, yookassa
 
 SETTINGS = Settings(
     yookassa_shop_id="shop",
@@ -438,6 +440,41 @@ async def test_refund_revokes_package(client, user, auth_headers, fake):
     assert quota.json()["package_left_sec"] == 0
     stored = await load_payment(payment)
     assert stored.raw["refunded_amount"] == {"value": "199.00", "currency": "RUB"}
+    assert stored.status == PaymentStatus.refunded
+    history = await client.get("/api/v1/billing/payments", headers=auth_headers)
+    assert [item["status"] for item in history.json()] == ["refunded"]
+
+
+async def test_refund_then_lecture_cancel_keeps_package_empty(client, user, fake):
+    payment = await make_payment(user, "hours_5")
+    fake.set_remote(payment, "succeeded")
+    await client.post(WEBHOOK, json=notification(payment))
+    async with SessionLocal() as session:
+        lecture = Lecture(owner_id=user.id, title="Лекция", source_type=SourceType.upload)
+        session.add(lecture)
+        await session.flush()
+        db_user = await session.get(User, user.id)
+        db_user.quota_week_start = datetime.now(UTC)
+        session.add(
+            UsageEntry(
+                user_id=user.id,
+                lecture_id=lecture.id,
+                source=UsageSource.package,
+                package_id=(await packages_of(user))[0].id,
+                seconds=600,
+            )
+        )
+        await session.commit()
+        lecture_id = lecture.id
+    refund_remote(fake, payment)
+    await client.post(WEBHOOK, json=refund_notification(payment))
+
+    async with SessionLocal() as session:
+        await quota.refund_lecture(session, lecture_id)
+        await session.commit()
+
+    [package] = await packages_of(user)
+    assert package.seconds_left == 0
 
 
 async def test_refund_shortens_subscription_and_moves_next_one(client, user, auth_headers, fake):
