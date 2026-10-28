@@ -88,6 +88,14 @@
 		reverse_proxy api:8000
 	}
 
+	@zoomer_upload path /api/v1/admin/zoomer/videos
+	handle @zoomer_upload {
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy api:8000
+	}
+
 	handle /api/* {
 		request_body {
 			max_size 10MB
@@ -116,24 +124,15 @@
 		respond 404
 	}
 
-	@zoomer_listing path /zoomer/
-	handle @zoomer_listing {
-		header Cache-Control "no-cache"
-		root * /srv/zoomer
-		uri strip_prefix /zoomer
-		file_server browse {
-			hide .*
+	@zoomer_file path_regexp zoomer ^/zoomer/([0-9a-f-]{36})\.(mp4|jpg)$
+	handle @zoomer_file {
+		forward_auth api:8000 {
+			uri /api/v1/zoomer/videos/{re.zoomer.1}/access?file={re.zoomer.2}
 		}
-	}
-
-	@zoomer_clip path_regexp (?i)^/zoomer/[^/]+\.(mp4|webm)$
-	handle @zoomer_clip {
-		header Cache-Control "public, max-age=86400"
-		root * /srv/zoomer
+		header Cache-Control "public, max-age=3600"
+		root * /srv/storage/zoomer
 		uri strip_prefix /zoomer
-		file_server {
-			hide .*
-		}
+		file_server
 	}
 
 	@zoomer_other path /zoomer /zoomer/*
