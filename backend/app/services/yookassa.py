@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 import uuid
@@ -6,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
-from sqlalchemy import exists, func, select
+from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.services.auth import normalize_email
 from app.services.quota import list_products
 
 YOOKASSA_ID = re.compile(r"[\w-]{1,64}")
+REFUND_SUCCEEDED = "refund.succeeded"
 logger = logging.getLogger(__name__)
 
 
@@ -133,6 +135,15 @@ def payment_request(
     return body
 
 
+def stored_raw(remote: dict[str, Any]) -> dict[str, Any]:
+    fields = ("id", "status", "amount", "refunded_amount", "captured_at")
+    raw = {key: remote[key] for key in fields if key in remote}
+    url = (remote.get("confirmation") or {}).get("confirmation_url")
+    if url:
+        raw["confirmation"] = {"confirmation_url": url}
+    return raw
+
+
 def confirmation_url(payment: Payment) -> str | None:
     return ((payment.raw or {}).get("confirmation") or {}).get("confirmation_url")
 
@@ -148,6 +159,10 @@ def payment_out(payment: Payment) -> PaymentOut:
         created_at=payment.created_at,
         paid_at=payment.paid_at,
     )
+
+
+def yookassa_idempotence_key(user_id: uuid.UUID, idempotence_key: str) -> str:
+    return hashlib.sha256(f"{user_id}:{idempotence_key}".encode()).hexdigest()[:64]
 
 
 async def find_by_key(
@@ -199,14 +214,16 @@ async def create_payment(
 
     body = payment_request(payment, product, email, return_url, settings)
     try:
-        response = await client.create_payment(idempotence_key, body)
+        response = await client.create_payment(
+            yookassa_idempotence_key(user_id, idempotence_key), body
+        )
     except YooKassaError as error:
         if error.rejected:
             await session.delete(payment)
             await session.commit()
         raise
     payment.yookassa_id = response["id"]
-    payment.raw = response
+    payment.raw = stored_raw(response)
     await session.commit()
     return payment
 
@@ -220,9 +237,14 @@ async def list_payments(session: AsyncSession, user_id: uuid.UUID) -> list[Payme
     return list(result.all())
 
 
+def is_refund(body: dict[str, Any]) -> bool:
+    return body.get("event") == REFUND_SUCCEEDED
+
+
 def notification_payment_id(body: dict[str, Any]) -> str:
     payment_object = body.get("object")
-    yookassa_id = payment_object.get("id") if isinstance(payment_object, dict) else None
+    key = "payment_id" if is_refund(body) else "id"
+    yookassa_id = payment_object.get(key) if isinstance(payment_object, dict) else None
     if not isinstance(yookassa_id, str) or not YOOKASSA_ID.fullmatch(yookassa_id):
         raise NotificationError("В уведомлении нет id платежа")
     return yookassa_id
@@ -298,7 +320,7 @@ async def apply_succeeded(
     if parse_amount(remote.get("amount")) != payment.amount_kopecks:
         logger.error("Сумма платежа %s не совпадает с ЮKassa, начисление отменено", payment.id)
         payment.status = PaymentStatus.canceled
-        payment.raw = remote
+        payment.raw = stored_raw(remote)
         return
     if payment.kind == PaymentKind.subscription:
         await grant_subscription(session, payment, now, settings)
@@ -306,17 +328,97 @@ async def apply_succeeded(
         grant_package(session, payment, settings)
     payment.status = PaymentStatus.succeeded
     payment.paid_at = parse_time(remote.get("captured_at")) or now
-    payment.raw = remote
+    payment.raw = stored_raw(remote)
 
 
-async def has_pending_payment(session: AsyncSession, yookassa_id: str) -> bool:
+def awaits_notification(refund: bool) -> ColumnElement[bool]:
+    if refund:
+        return (Payment.status == PaymentStatus.succeeded) & ~Payment.raw.has_key("refunded_amount")
+    return Payment.status == PaymentStatus.pending
+
+
+async def awaits_payment(session: AsyncSession, yookassa_id: str, refund: bool) -> bool:
     return await session.scalar(
-        select(
-            exists().where(
-                Payment.yookassa_id == yookassa_id, Payment.status == PaymentStatus.pending
-            )
+        select(exists().where(Payment.yookassa_id == yookassa_id, awaits_notification(refund)))
+    )
+
+
+async def load_notified_payment(
+    session: AsyncSession, client: YooKassaClient, yookassa_id: str
+) -> tuple[Payment | None, dict[str, Any]]:
+    remote = await client.get_payment(yookassa_id)
+    if remote.get("id") != yookassa_id:
+        raise NotificationError("ЮKassa вернула другой платёж")
+    payment = await session.scalar(
+        select(Payment).where(Payment.yookassa_id == yookassa_id).with_for_update()
+    )
+    if payment is None:
+        logger.warning("Уведомление о неизвестном платеже %s", yookassa_id)
+        return None, remote
+    if (remote.get("metadata") or {}).get("payment_id") != str(payment.id):
+        logger.warning("Платёж %s в ЮKassa привязан к другой записи", yookassa_id)
+        return None, remote
+    return payment, remote
+
+
+async def revoke_subscription(session: AsyncSession, payment: Payment, now: datetime) -> None:
+    await session.get(User, payment.user_id, with_for_update=True)
+    subscription = await session.scalar(
+        select(Subscription).where(Subscription.payment_id == payment.id)
+    )
+    if subscription is None:
+        return
+    cut_at = max(subscription.starts_at, min(subscription.ends_at, now))
+    removed = subscription.ends_at - cut_at
+    if not removed:
+        return
+    later = await session.scalars(
+        select(Subscription).where(
+            Subscription.user_id == payment.user_id,
+            Subscription.id != subscription.id,
+            Subscription.starts_at >= subscription.ends_at,
         )
     )
+    for next_one in later:
+        next_one.starts_at -= removed
+        next_one.ends_at -= removed
+    subscription.ends_at = cut_at
+
+
+async def revoke_package(session: AsyncSession, payment: Payment) -> None:
+    await session.get(User, payment.user_id, with_for_update=True)
+    packages = await session.scalars(
+        select(HourPackage).where(HourPackage.payment_id == payment.id).with_for_update()
+    )
+    for package in packages:
+        package.seconds_left = 0
+
+
+async def process_refund(
+    session: AsyncSession,
+    client: YooKassaClient,
+    yookassa_id: str,
+    settings: Settings,
+    now: datetime | None = None,
+) -> Payment | None:
+    payment, remote = await load_notified_payment(session, client, yookassa_id)
+    if payment is None or payment.status != PaymentStatus.succeeded:
+        return payment
+    if "refunded_amount" in (payment.raw or {}):
+        return payment
+    refunded = parse_amount(remote.get("refunded_amount")) or 0
+    if refunded < payment.amount_kopecks:
+        if refunded:
+            logger.warning("Частичный возврат по платежу %s, оплата не отозвана", payment.id)
+        return payment
+    if payment.user_id is not None:
+        if payment.kind == PaymentKind.subscription:
+            await revoke_subscription(session, payment, now or datetime.now(UTC))
+        else:
+            await revoke_package(session, payment)
+    payment.raw = stored_raw(remote)
+    await session.commit()
+    return payment
 
 
 async def process_notification(
@@ -326,19 +428,8 @@ async def process_notification(
     settings: Settings,
     now: datetime | None = None,
 ) -> Payment | None:
-    remote = await client.get_payment(yookassa_id)
-    if remote.get("id") != yookassa_id:
-        raise NotificationError("ЮKassa вернула другой платёж")
-    payment = await session.scalar(
-        select(Payment).where(Payment.yookassa_id == yookassa_id).with_for_update()
-    )
-    if payment is None:
-        logger.warning("Уведомление о неизвестном платеже %s", yookassa_id)
-        return None
-    if (remote.get("metadata") or {}).get("payment_id") != str(payment.id):
-        logger.warning("Платёж %s в ЮKassa привязан к другой записи", yookassa_id)
-        return None
-    if payment.status != PaymentStatus.pending:
+    payment, remote = await load_notified_payment(session, client, yookassa_id)
+    if payment is None or payment.status != PaymentStatus.pending:
         return payment
 
     status = remote.get("status")
@@ -354,6 +445,6 @@ async def process_notification(
         await apply_succeeded(session, payment, remote, now or datetime.now(UTC), settings)
     elif status == PaymentStatus.canceled:
         payment.status = PaymentStatus.canceled
-        payment.raw = remote
+        payment.raw = stored_raw(remote)
     await session.commit()
     return payment
