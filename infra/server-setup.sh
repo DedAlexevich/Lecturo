@@ -23,10 +23,23 @@ repo_url=https://github.com/DedAlexevich/Lecturo.git
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade
-apt-get install -y ca-certificates curl git ufw fail2ban unattended-upgrades age
+apt-get install -y ca-certificates curl gnupg git ufw fail2ban unattended-upgrades age
 
 if ! command -v docker >/dev/null; then
-  curl -fsSL https://get.docker.com | sh
+  . /etc/os-release
+  docker_key=/etc/apt/keyrings/docker.asc
+  install -d -m 755 /etc/apt/keyrings
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o "$docker_key"
+  docker_key_fingerprint=$(gpg --show-keys --with-colons "$docker_key" | awk -F: '$1 == "fpr" {print $10; exit}')
+  if [ "$docker_key_fingerprint" != 9DC858229FC7DD38854AE2D88D81803C0EBFCD88 ]; then
+    rm -f "$docker_key"
+    echo "unexpected Docker apt key fingerprint: $docker_key_fingerprint" >&2
+    exit 1
+  fi
+  chmod 644 "$docker_key"
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=$docker_key] https://download.docker.com/linux/$ID $VERSION_CODENAME stable" > /etc/apt/sources.list.d/docker.list
+  apt-get update
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 systemctl enable --now docker
 
@@ -60,6 +73,7 @@ if [ ! -d "$app_dir/.git" ]; then
   git clone "$repo_url" "$app_dir"
 fi
 chown -R deploy:deploy "$app_dir"
+sh "$app_dir/infra/data-owner.sh" "$app_dir/data/storage" "$app_dir/data/logs"
 
 if [ ! -f "$app_dir/.env" ]; then
   sed \
