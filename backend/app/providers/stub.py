@@ -57,7 +57,9 @@ def stub_quiz(user: str) -> str:
 
 
 class StubLLM:
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
         if json_mode and '"questions"' in system:
             return stub_quiz(user)
         if json_mode and '"descriptions"' in system:

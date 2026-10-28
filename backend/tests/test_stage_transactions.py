@@ -41,7 +41,7 @@ class WatchedLLM:
         self.llm = llm
         self.watch = watch
 
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None) -> str:
         self.watch.check()
         return await self.llm.complete(system, user, json_mode=json_mode)
 
