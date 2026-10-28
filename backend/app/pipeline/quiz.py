@@ -21,7 +21,11 @@ from app.pipeline.summarize import (
 )
 from app.pipeline.timecodes import locate_timestamp
 from app.providers import LLM, get_llm
-from app.providers.openai_compat import OpenAICompatibleError, OpenAICompatibleTruncated
+from app.providers.openai_compat import (
+    OpenAICompatibleError,
+    OpenAICompatibleTruncated,
+    OpenAICompatibleUnavailable,
+)
 from app.schemas.lecture import QuizQuestion
 
 MIN_QUESTIONS = 6
@@ -224,6 +228,8 @@ async def generate_questions(
             logger.warning("Ответ с квизом обрезан, запрос сокращён")
             compact = True
             failure = error
+        except OpenAICompatibleUnavailable:
+            raise
         except OpenAICompatibleError as error:
             logger.warning("Запрос квиза не удался: %s", error)
             failure = error
@@ -297,6 +303,8 @@ async def generate_part(
                 )
             except InvalidQuiz:
                 continue
+        except OpenAICompatibleUnavailable:
+            raise
         except OpenAICompatibleError as error:
             logger.warning("Запрос части квиза не удался: %s", error)
             continue
@@ -382,6 +390,8 @@ async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) ->
             questions = await generate_questions(
                 llm, full_request, compact_request, segments, lecture_end, report
             )
+        except OpenAICompatibleUnavailable:
+            raise
         except OpenAICompatibleError:
             logger.warning("Квиз одним запросом не получился, собираю по частям")
             questions = await generate_by_parts(

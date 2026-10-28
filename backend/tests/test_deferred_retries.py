@@ -258,7 +258,7 @@ async def test_quiz_fails_after_last_deferral(user, monkeypatch):
 
 async def test_quiz_permanent_error_fails_at_once(user, monkeypatch):
     error = OpenAICompatibleError("/chat/completions: API ответил 401: unauthorized")
-    monkeypatch.setattr(quiz, "get_llm", lambda: FlakyQuizLLM(outages=1, error=error))
+    monkeypatch.setattr(quiz, "get_llm", lambda: FlakyQuizLLM(outages=100, error=error))
     lecture = await test_quiz.create_ready_lecture(user)
 
     assert await tasks.process_quiz(LATE_TRY, str(lecture.id)) == StepStatus.failed
