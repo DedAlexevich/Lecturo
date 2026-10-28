@@ -182,6 +182,7 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         notes = await load_course_notes(session, course_uuid)
         if not notes:
             return "empty"
+        await session.commit()
         try:
             draft = await compose_exam_sheet(get_llm(), course_title, notes)
             await save_exam_sheet(

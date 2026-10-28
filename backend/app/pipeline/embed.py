@@ -49,14 +49,13 @@ class Chunk:
 async def embed(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
     local = lecture.processed_locally or lecture.source_type == SourceType.local
-    chunks = await describe_chunks(
-        None if local else get_llm(),
-        [
-            *split_into_chunks(await load_segments(session, lecture)),
-            *await load_section_chunks(session, lecture.id),
-        ],
-        await known_descriptions(session, lecture.id),
-    )
+    chunks = [
+        *split_into_chunks(await load_segments(session, lecture)),
+        *await load_section_chunks(session, lecture.id),
+    ]
+    known = await known_descriptions(session, lecture.id)
+    await session.commit()
+    chunks = await describe_chunks(None if local else get_llm(), chunks, known)
     texts = [chunk.text for chunk in chunks]
     vectors = await get_embeddings().embed_documents(texts) if texts else []
     await session.execute(delete(SearchChunk).where(SearchChunk.lecture_id == lecture.id))

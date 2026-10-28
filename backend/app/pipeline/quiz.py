@@ -169,9 +169,9 @@ async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) ->
         select(Chapter).where(Chapter.lecture_id == lecture.id).order_by(Chapter.idx)
     )
     lecture_end = lecture.duration_sec or segments[-1].end
-    questions = await generate_questions(
-        get_llm(), quiz_request(lecture, list(chapters), segments), segments, lecture_end, report
-    )
+    request = quiz_request(lecture, list(chapters), segments)
+    await session.commit()
+    questions = await generate_questions(get_llm(), request, segments, lecture_end, report)
     await session.execute(
         insert(Quiz)
         .values(lecture_id=lecture.id, questions=questions)
