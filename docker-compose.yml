@@ -104,7 +104,7 @@ services:
     restart: unless-stopped
 
   tusd:
-    image: tusproject/tusd:v2.6.0
+    image: tusproject/tusd:v2.10.1
     user: "0:0"
     entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/tusd.log", "tusd"]
     environment:
