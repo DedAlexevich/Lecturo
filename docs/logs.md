@@ -37,11 +37,22 @@ grep ERROR data/logs/worker.log*
 docker compose logs -f api worker
 ```
 
-Файлы создаются от имени root внутри контейнеров. Лог Caddy и его ротации имеют права `640`: читать их могут root и участники группы-владельца; остальным нужен `sudo`. Изменять и удалять логи нельзя.
+Файлы создаются от имени root внутри контейнеров. Логи Caddy, tusd и mail, включая ротации, имеют права `640`: читать их могут root и участники группы-владельца; остальным нужен `sudo`. Изменять и удалять логи нельзя.
+
+После первого деплоя фильтра секретов очистите прежние файлы Caddy: в них могут остаться значения токенов, записанные до обновления. На сервере укажите фактический каталог логов вместо `/path/to/data/logs`:
+
+```
+sudo find /path/to/data/logs -maxdepth 1 -type f \( -name 'caddy.log*' -o -name 'caddy-*.log' \) -exec truncate -s 0 -- {} +
+caddy_container=$(docker compose ps -q caddy)
+caddy_docker_log=$(docker inspect --format='{{.LogPath}}' "$caddy_container")
+sudo truncate -s 0 "$caddy_docker_log"
+```
 
 ## Как это устроено
 
 Для `api`, `worker` и `bot` путь и имя файла задают переменные `LOG_DIR` и `LOG_SERVICE` из `docker-compose.yml`. Без `LOG_DIR` (например, при запуске тестов или `uvicorn` на хосте) логи идут только в stdout. Caddy пишет файл сам: путь, размер и число копий заданы в блоках `log` файла `infra/Caddyfile` (размер и число копий берутся из `LOG_MAX_MB` и `LOG_BACKUP_COUNT`). Для `tusd` и `mail` точка входа заменена на `infra/log-to-file.sh`: скрипт запускает сервис, копирует его вывод и в stdout, и в файл, держит файл открытым и ротирует его по размеру в байтах.
+
+Access- и runtime/error-логи Caddy во всех каналах удаляют query-параметры `token`, `signature` и `share`, а заголовок `Referer` не записывают: в нём может находиться ссылка сброса пароля или подтверждения почты. Фильтры настроены отдельно для файла, stdout и access-лога.
 
 ## Чтение из админ-панели
 

@@ -28,6 +28,7 @@ services:
       DKIM_SELECTOR: ${DKIM_SELECTOR:-mail}
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      LOG_FILE_MODE: "640"
     volumes:
       - ${DATA_DIR:-./data}/mail/dkim:/etc/opendkim/keys
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo

@@ -1,16 +1,32 @@
 {
-	log {
+	log default {
 		output file /var/log/lecturo/caddy.log {
 			roll_size {$LOG_MAX_MB:10}MiB
 			roll_keep {$LOG_BACKUP_COUNT:5}
 			roll_uncompressed
 			mode 0640
 		}
-		format console
+		format filter {
+			wrap console
+			request>uri query {
+				delete token
+				delete signature
+				delete share
+			}
+			request>headers>Referer delete
+		}
 	}
 	log stdout {
 		output stdout
-		format console
+		format filter {
+			wrap console
+			request>uri query {
+				delete token
+				delete signature
+				delete share
+			}
+			request>headers>Referer delete
+		}
 		exclude http.log.access
 	}
 }
@@ -36,6 +52,7 @@
 				delete signature
 				delete share
 			}
+			request>headers>Referer delete
 		}
 	}
 

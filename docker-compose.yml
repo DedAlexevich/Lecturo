@@ -110,6 +110,7 @@ services:
     environment:
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      LOG_FILE_MODE: "640"
     command:
       - -upload-dir=/data/storage/uploads
       - -base-path=/files/
