@@ -218,7 +218,11 @@ class YandexSpeechToText:
             raise
         state = {"object_key": key, "operation_id": operation_id}
         if operations:
-            await operations.save(name, state)
+            try:
+                await operations.save(name, state)
+            except Exception:
+                await asyncio.shield(self._delete(client, key))
+                raise
         response = await self._finish(client, state, duration, on_progress, operations, name)
         await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
         return parse_recognition(response)

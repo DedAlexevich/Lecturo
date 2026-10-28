@@ -421,3 +421,23 @@ async def test_failed_operation_forgets_saved_state(tmp_path: Path):
 
     assert operations.states == {}
     assert [name for name, _ in operations.saved] == ["full", "full"]
+
+
+async def test_object_is_removed_when_operation_cannot_be_saved(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    speechkit = SpeechKit()
+
+    class DeletedStep(MemoryOperations):
+        async def save(self, name: str, state: dict[str, str]) -> None:
+            if "operation_id" in state:
+                raise RuntimeError("шаг удалён")
+            await super().save(name, state)
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(speechkit.handler)
+    )
+    with pytest.raises(RuntimeError, match="шаг удалён"):
+        await provider.transcribe(audio, operations=DeletedStep())
+
+    assert speechkit.methods() == ["PUT", "start", "DELETE"]
