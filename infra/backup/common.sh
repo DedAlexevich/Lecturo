@@ -9,13 +9,7 @@ warn() {
   echo "warning: $*" >&2
 }
 
-env_value() {
-  local value="${!1:-}"
-  if [ -z "$value" ] && [ -f .env ]; then
-    value=$(sed -n "s/^$1=//p" .env | tail -n 1 | tr -d "\"'\r")
-  fi
-  echo "${value:-$2}"
-}
+source infra/env.sh
 
 backup_dir=$(env_value BACKUP_DIR ./backups)
 backup_keep=$(env_value BACKUP_KEEP 7)
