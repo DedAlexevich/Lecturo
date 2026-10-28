@@ -35,6 +35,7 @@ export function useUserCard(userId: string) {
   return useQuery({
     queryKey: userQueryKey(userId),
     staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const { data, error, response } = await api.GET("/api/v1/admin/users/{user_id}", {
         params: { path: { user_id: userId } },

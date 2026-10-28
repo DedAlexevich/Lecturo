@@ -51,7 +51,7 @@ CANNOT_BLOCK_SELF = "Нельзя заблокировать себя"
 CANNOT_BLOCK_ADMIN = "Сначала снимите права администратора"
 ALREADY_BLOCKED = "Аккаунт уже заблокирован"
 NOT_BLOCKED = "Аккаунт не заблокирован"
-BLOCKED_CANNOT_BE_ADMIN = "Сначала разблокируйте аккаунт"
+QUERY_TOO_SHORT = "Нужно хотя бы два символа"
 
 
 def telegram_username(user: User) -> str | None:
@@ -66,6 +66,8 @@ async def search_users(
 ) -> list[UserBriefOut]:
     now = now or datetime.now(UTC)
     value = query.strip()
+    if len(value) < 2:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, QUERY_TOO_SHORT)
     username = value.removeprefix("@")
     conditions = [
         User.email.icontains(value, autoescape=True),
@@ -214,8 +216,6 @@ async def finish_action(
 
 async def make_admin(session: AsyncSession, actor: User, user_id: uuid.UUID) -> UserCardOut:
     user = await get_user(session, user_id)
-    if user.blocked_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, BLOCKED_CANNOT_BE_ADMIN)
     await grant_admin(session, actor, user, "panel")
     await session.refresh(user, ["identities"])
     return await build_card(session, user)

@@ -18,6 +18,7 @@ ALREADY_ADMIN = "Пользователь уже администратор"
 NOT_ADMIN = "Этот пользователь не администратор"
 LAST_ADMIN = "Нельзя снять последнего администратора"
 USER_NOT_FOUND = "Пользователь не найден"
+BLOCKED_CANNOT_BE_ADMIN = "Сначала разблокируйте аккаунт"
 
 
 def is_secret_key(key: str) -> bool:
@@ -99,6 +100,8 @@ async def grant_admin(session: AsyncSession, actor: User | None, target: User, s
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     if target.is_admin:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_ADMIN)
+    if actor is not None and target.blocked_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, BLOCKED_CANNOT_BE_ADMIN)
     target.is_admin = True
     record_action(
         session,

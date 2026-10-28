@@ -189,11 +189,17 @@ async def test_make_admin_from_card(client: AsyncClient, make_user: MakeUser, ad
     granted = await client.post(f"/api/v1/admin/users/{target.id}/admin", headers=headers(admin))
     again = await client.post(f"/api/v1/admin/users/{target.id}/admin", headers=headers(admin))
     refused = await client.post(f"/api/v1/admin/users/{blocked.id}/admin", headers=headers(admin))
+    refused_by_email = await client.post(
+        "/api/v1/admin/admins", json={"identifier": blocked.email}, headers=headers(admin)
+    )
+    blank = await client.get("/api/v1/admin/users", params={"q": "   "}, headers=headers(admin))
 
     assert granted.status_code == 200
     assert granted.json()["is_admin"] is True
     assert again.status_code == 409
     assert refused.status_code == 409
+    assert refused_by_email.status_code == 409
+    assert blank.status_code == 422
     entries = await actions_of(admin)
     assert [(entry.action, entry.target_id) for entry in entries] == [
         ("admin_granted", str(target.id))
