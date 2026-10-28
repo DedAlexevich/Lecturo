@@ -12,7 +12,13 @@ from app.core.db import SessionLocal
 from app.core.security import create_access_token
 from app.main import app
 from app.models import AdminAction, AdminAuditEntry, AuthIdentity, AuthProvider, User
-from app.services.admin import bootstrap_admins, record_action, revoke_admin, without_secrets
+from app.services.admin import (
+    bootstrap_admins,
+    grant_admin,
+    record_action,
+    revoke_admin,
+    without_secrets,
+)
 
 MakeUser = Callable[..., Awaitable[User]]
 
@@ -203,12 +209,45 @@ async def test_two_admins_revoking_each_other_keep_one(
 
     failures = [result for result in results if isinstance(result, HTTPException)]
     assert len(failures) == 1
-    assert failures[0].status_code == 409
+    assert failures[0].status_code == 404
     async with SessionLocal() as session:
         left = await session.scalar(
             select(User.id).where(User.id.in_([first.id, second.id]), User.is_admin)
         )
     assert left is not None
+
+
+async def revoke_admin_in_new_session(actor: User, target_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await revoke_admin(session, actor, target_id)
+
+
+async def test_revoked_admin_cannot_act_with_old_user_object(make_user: MakeUser):
+    first = await make_user(is_admin=True)
+    second = await make_user(is_admin=True)
+    third = await make_user(is_admin=True)
+    regular = await make_user()
+
+    await revoke_admin_in_new_session(first, second.id)
+    with pytest.raises(HTTPException) as revoke_error:
+        await revoke_admin_in_new_session(second, third.id)
+    with pytest.raises(HTTPException) as grant_error:
+        async with SessionLocal() as session:
+            target = await session.get(User, regular.id)
+            assert target is not None
+            await grant_admin(session, second, target, "panel")
+
+    assert revoke_error.value.status_code == 404
+    assert grant_error.value.status_code == 404
+    async with SessionLocal() as session:
+        flags = dict(
+            (
+                await session.execute(
+                    select(User.id, User.is_admin).where(User.id.in_([third.id, regular.id]))
+                )
+            ).all()
+        )
+    assert flags == {third.id: True, regular.id: False}
 
 
 async def test_audit_filters_and_pages(client: AsyncClient, make_user: MakeUser):
@@ -243,10 +282,15 @@ def test_audit_details_drop_secrets():
         "access_token": "abc",
         "nested": {"api_key": "k", "telegram_init_data": "x", "reason": "ok"},
         "items": [{"secret": "s", "name": "n"}],
+        "code": "123",
+        "country_code": "RU",
+        "monkey": 1,
     }
 
     assert without_secrets(details) == {
         "source": "panel",
+        "country_code": "RU",
+        "monkey": 1,
         "nested": {"reason": "ok"},
         "items": [{"name": "n"}],
     }

@@ -11,18 +11,8 @@ from app.services.auth import normalize_email
 
 logger = logging.getLogger(__name__)
 
-SECRET_MARKERS = (
-    "password",
-    "token",
-    "secret",
-    "hash",
-    "key",
-    "signature",
-    "init_data",
-    "code",
-    "cookie",
-    "authorization",
-)
+SECRET_SUFFIXES = ("password", "token", "secret", "hash", "key", "signature", "init_data")
+SECRET_NAMES = {*SECRET_SUFFIXES, "code", "cookie", "authorization"}
 BOOTSTRAP_LOCK_ID = 429_001
 ALREADY_ADMIN = "Пользователь уже администратор"
 NOT_ADMIN = "Этот пользователь не администратор"
@@ -32,7 +22,9 @@ USER_NOT_FOUND = "Пользователь не найден"
 
 def is_secret_key(key: str) -> bool:
     lowered = key.lower()
-    return any(marker in lowered for marker in SECRET_MARKERS)
+    return lowered in SECRET_NAMES or lowered.endswith(
+        tuple(f"_{suffix}" for suffix in SECRET_SUFFIXES)
+    )
 
 
 def without_secrets(value: object) -> object:
@@ -92,7 +84,19 @@ async def find_user(session: AsyncSession, identifier: str) -> User | None:
 
 
 async def grant_admin(session: AsyncSession, actor: User | None, target: User, source: str) -> None:
-    await session.refresh(target, with_for_update=True)
+    ids = [target.id] if actor is None else [target.id, actor.id]
+    locked = {
+        user.id: user
+        for user in await session.scalars(
+            select(User)
+            .where(User.id.in_(ids))
+            .order_by(User.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    }
+    if actor is not None and not locked[actor.id].is_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     if target.is_admin:
         raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_ADMIN)
     target.is_admin = True
@@ -110,8 +114,16 @@ async def grant_admin(session: AsyncSession, actor: User | None, target: User, s
 
 async def revoke_admin(session: AsyncSession, actor: User, target_id: uuid.UUID) -> None:
     admins = (
-        await session.scalars(select(User).where(User.is_admin).order_by(User.id).with_for_update())
+        await session.scalars(
+            select(User)
+            .where(User.is_admin)
+            .order_by(User.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
     ).all()
+    if all(admin.id != actor.id for admin in admins):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     target = next((admin for admin in admins if admin.id == target_id), None)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_ADMIN)
