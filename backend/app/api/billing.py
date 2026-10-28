@@ -21,6 +21,7 @@ from app.schemas.billing import (
     WaitingOut,
 )
 from app.services import business_events, quota, yookassa
+from app.services.admin_alerts import report_webhook_error
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
@@ -160,21 +161,26 @@ async def yookassa_webhook(
         client = yookassa_factory()
     except ValueError as error:
         await reject_webhook(yookassa_id, "Оплата недоступна")
+        await report_webhook_error(session, yookassa_id, "оплата не настроена на сервере")
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Оплата недоступна") from error
     try:
         payment = await process(session, client, yookassa_id, get_settings())
     except yookassa.NotificationError as error:
         await reject_webhook(yookassa_id, str(error))
+        await report_webhook_error(session, yookassa_id, str(error))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
     except yookassa.PaymentError as error:
         logger.error("Не удалось начислить оплату %s: %s", yookassa_id, error)
         await reject_webhook(yookassa_id, str(error))
+        await report_webhook_error(session, yookassa_id, f"не удалось начислить оплату: {error}")
         raise HTTPException(422, str(error)) from error
     except yookassa.YooKassaError as error:
         await reject_webhook(yookassa_id, str(error))
         if error.rejected:
+            await report_webhook_error(session, yookassa_id, "платёж не найден в ЮKassa")
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Платёж не найден в ЮKassa") from error
         logger.error("Не удалось проверить платёж %s в ЮKassa: %s", yookassa_id, error)
+        await report_webhook_error(session, yookassa_id, "ЮKassa не отвечает")
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "ЮKassa недоступна, повторите позже"
         ) from error

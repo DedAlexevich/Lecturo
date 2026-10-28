@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api import (
     admin,
+    admin_alerts,
     admin_backups,
     admin_logs,
     admin_users,
@@ -50,6 +51,7 @@ for module in (
     admin,
     admin_logs,
     admin_backups,
+    admin_alerts,
     maintenance,
     admin_users,
 ):

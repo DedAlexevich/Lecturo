@@ -30,6 +30,7 @@ class AdminAction(enum.StrEnum):
     subscription_extended = "subscription_extended"
     user_blocked = "user_blocked"
     user_unblocked = "user_unblocked"
+    alert_settings_changed = "alert_settings_changed"
 
 
 class AdminAuditEntry(UUIDPk, CreatedAt, Base):

@@ -1,4 +1,5 @@
 from app.models.admin import AdminAction, AdminAuditEntry, BusinessEvent, BusinessEventKind
+from app.models.alert import AlertDelivery, AlertKind, AlertSettings, AlertSignal, AlertState
 from app.models.base import EMBEDDING_DIM, Base
 from app.models.billing import (
     HourPackage,
@@ -33,6 +34,11 @@ __all__ = [
     "EMBEDDING_DIM",
     "AdminAction",
     "AdminAuditEntry",
+    "AlertDelivery",
+    "AlertKind",
+    "AlertSettings",
+    "AlertSignal",
+    "AlertState",
     "AuthIdentity",
     "AuthProvider",
     "AuthToken",
