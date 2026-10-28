@@ -22,10 +22,6 @@ def media_signature(
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
 
 
-def video_signature(lecture_id: uuid.UUID, expires: int, share_token: str | None) -> str:
-    return media_signature("video", lecture_id, expires, share_token)
-
-
 def signed_query(kind: MediaKind, lecture_id: uuid.UUID, share_token: str | None) -> str:
     expires = (
         math.ceil((time.time() + VIDEO_LINK_TTL_SEC) / VIDEO_LINK_STEP_SEC) * VIDEO_LINK_STEP_SEC
