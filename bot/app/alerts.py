@@ -20,6 +20,7 @@ KINDS = {
     "queue_stalled": "Очередь обработки",
     "disk_low": "Место на диске",
     "memory_low": "Память",
+    "backup": "Бэкапы",
     "payment": "Платежи",
     "webhook_error": "Ошибки вебхуков ЮKassa",
 }

@@ -25,6 +25,7 @@ class AlertKind(enum.StrEnum):
     queue_stalled = "queue_stalled"
     disk_low = "disk_low"
     memory_low = "memory_low"
+    backup = "backup"
     payment = "payment"
     webhook_error = "webhook_error"
 
