@@ -76,7 +76,7 @@ if [ ! -d "$app_dir/.git" ]; then
 fi
 chown -R deploy:deploy "$app_dir"
 install -d -m 700 -o deploy "$app_dir/backups"
-sh "$app_dir/infra/data-owner.sh" "$app_dir/backups" "$app_dir/data/storage" "$app_dir/data/logs"
+sh "$app_dir/infra/data-owner.sh" "$app_dir/backups" "$app_dir/data/logs" "$app_dir/data/storage"
 
 if [ ! -f "$app_dir/.env" ]; then
   sed \
@@ -85,6 +85,7 @@ if [ ! -f "$app_dir/.env" ]; then
     -e "s|^SECRET_KEY=.*|SECRET_KEY=$(openssl rand -hex 32)|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" \
     -e "s|^COMPOSE_FILE=.*|COMPOSE_FILE=docker-compose.yml:infra/compose.prod.yml|" \
+    -e "s|^BACKUP_DIR=.*|BACKUP_DIR=./backups|" \
     "$app_dir/.env.example" > "$app_dir/.env"
   chown deploy:deploy "$app_dir/.env"
   chmod 600 "$app_dir/.env"
