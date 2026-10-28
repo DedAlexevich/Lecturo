@@ -320,6 +320,11 @@ async def test_admin_creates_lists_and_disables(
         json={"code": code.lower(), "kind": "subscription_days", "days": 7},
         headers=headers(admin),
     )
+    naive = await client.post(
+        "/api/v1/admin/promo-codes",
+        json={"kind": "hours", "hours": 1, "valid_until": "2099-12-31T23:59:59"},
+        headers=headers(admin),
+    )
     mismatch = await client.post(
         "/api/v1/admin/promo-codes",
         json={"kind": "discount", "hours": 4},
@@ -341,6 +346,7 @@ async def test_admin_creates_lists_and_disables(
     assert len(code) == 8
     assert duplicate.status_code == 409
     assert mismatch.status_code == 422
+    assert naive.status_code == 422
     assert applied.status_code == 200
     [row] = [item for item in listed.json() if item["code"] == code]
     assert row["redeemed"] == 1

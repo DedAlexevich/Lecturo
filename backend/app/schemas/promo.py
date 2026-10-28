@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import AwareDatetime, Field, model_validator
 
 from app.models import PaymentStatus, PromoKind
 from app.schemas.common import Schema
@@ -32,7 +32,7 @@ class PromoCreateIn(Schema):
     discount_percent: int | None = Field(default=None, ge=1, le=99)
     discount_kopecks: int | None = Field(default=None, ge=100, le=10_000_000)
     max_redemptions: int | None = Field(default=None, ge=1, le=1_000_000)
-    valid_until: datetime | None = None
+    valid_until: AwareDatetime | None = None
     note: str = Field(default="", max_length=200)
 
     @model_validator(mode="after")
