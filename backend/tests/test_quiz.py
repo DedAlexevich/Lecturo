@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from arq import Retry
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import select, update
 
@@ -578,15 +579,16 @@ def test_finished_items_without_questions_key_is_empty():
     assert quiz.finished_items('{"title": "x"') == []
 
 
-async def test_provider_error_does_not_stop_after_first_attempt(user, monkeypatch):
+async def test_provider_outage_defers_quiz_without_inner_retries(user, monkeypatch):
     failure = OpenAICompatibleUnavailable("/chat/completions: API ответил 503")
     llm = ScriptedProvider(failure, VALID)
     monkeypatch.setattr(quiz, "get_llm", lambda: llm)
     lecture = await create_ready_lecture(user)
 
-    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.done
+    with pytest.raises(Retry):
+        await tasks.process_quiz({}, str(lecture.id))
 
-    assert len(llm.requests) == 2
+    assert len(llm.requests) == 1
 
 
 async def test_quiz_fails_when_provider_keeps_failing(user, monkeypatch):
