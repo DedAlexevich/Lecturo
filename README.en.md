@@ -61,8 +61,7 @@ Server-side recognition uses Yandex SpeechKit, notes and quizzes are written by 
 <td width="50%"><img src="docs/assets/readme/quiz.png" alt="Answer explanation with a link to the lecture moment"><p align="center">Answer explanation with a link to the lecture moment</p></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/assets/readme/chapters.png" alt="Chapters with timecodes"><p align="center">Chapters with timecodes</p></td>
-<td width="50%"><img src="docs/assets/readme/local.png" alt="Local mode"><p align="center">Local mode</p></td>
+<td colspan="2" align="center"><img src="docs/assets/readme/chapters.png" alt="Chapters with timecodes" width="50%"><p align="center">Chapters with timecodes</p></td>
 </tr>
 </table>
 
