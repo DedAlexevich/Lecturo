@@ -3,6 +3,7 @@
 		output file /var/log/lecturo/caddy.log {
 			roll_size {$LOG_MAX_MB:10}MiB
 			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
 			mode 0640
 		}
 		format console
@@ -25,6 +26,7 @@
 		output file /var/log/lecturo/caddy.log {
 			roll_size {$LOG_MAX_MB:10}MiB
 			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
 			mode 0640
 		}
 		format filter {
