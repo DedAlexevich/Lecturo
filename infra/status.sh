@@ -3,9 +3,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
-env_value() {
-  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true
-}
+source infra/env.sh
 
 public_url=$(env_value PUBLIC_URL)
 public_url=${public_url:-http://localhost}

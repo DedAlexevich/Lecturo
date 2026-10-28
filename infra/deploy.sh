@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+env_keys() {
+  sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' "$1" | sort -u
+}
+
+warn_missing_env() {
+  local missing
+  missing=$(comm -23 <(env_keys .env.example) <(env_keys .env) | paste -sd ' ')
+  if [ -n "$missing" ]; then
+    echo "warning: keys from .env.example are missing in .env: $missing" >&2
+  fi
+}
+
 compose_up() {
   docker compose up -d --remove-orphans --wait --wait-timeout 300
 }
@@ -50,6 +62,7 @@ main() {
   local previous previous_revision new_head dump=""
   previous=$(git rev-parse HEAD)
   git reset --quiet --hard "$target"
+  warn_missing_env
 
   if ! docker compose build; then
     echo "build failed, code returned to $previous" >&2

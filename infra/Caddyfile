@@ -1,6 +1,33 @@
 {
-	log {
-		format console
+	log default {
+		output file /var/log/lecturo/caddy.log {
+			roll_size {$LOG_MAX_MB:10}MiB
+			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
+			mode 0640
+		}
+		format filter {
+			wrap console
+			request>uri query {
+				delete token
+				delete signature
+				delete share
+			}
+			request>headers>Referer delete
+		}
+	}
+	log stdout {
+		output stdout
+		format filter {
+			wrap console
+			request>uri query {
+				delete token
+				delete signature
+				delete share
+			}
+			request>headers>Referer delete
+		}
+		exclude http.log.access
 	}
 }
 
@@ -12,6 +39,12 @@
 	encode zstd gzip
 
 	log {
+		output file /var/log/lecturo/caddy.log {
+			roll_size {$LOG_MAX_MB:10}MiB
+			roll_keep {$LOG_BACKUP_COUNT:5}
+			roll_uncompressed
+			mode 0640
+		}
 		format filter {
 			wrap console
 			request>uri query {
@@ -19,6 +52,7 @@
 				delete signature
 				delete share
 			}
+			request>headers>Referer delete
 		}
 	}
 

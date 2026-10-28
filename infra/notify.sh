@@ -3,9 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-env_value() {
-  grep -E "^$1=" .env 2>/dev/null | tail -n 1 | cut -d= -f2- || true
-}
+source infra/env.sh
 
 token=$(env_value TELEGRAM_BOT_TOKEN)
 chat_id=$(env_value ALERT_TELEGRAM_CHAT_ID)

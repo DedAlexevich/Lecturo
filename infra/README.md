@@ -7,7 +7,10 @@
 | `compose.prod.yml` | настройки compose для сервера |
 | `Caddyfile` | конфигурация Caddy |
 | `mail/` | образ сервиса `mail`: Postfix и OpenDKIM для писем сайта, см. [docs/deploy.md](../docs/deploy.md#почта) |
-| `status.sh`, `health-alert.sh`, `install-monitoring.sh` | сводка по серверу и алерты в Telegram, см. [docs/deploy.md](../docs/deploy.md#мониторинг-и-логи) |
+| `status.sh`, `health-alert.sh`, `install-monitoring.sh`, `notify.sh`, `unit-failed.sh` | сводка по серверу и алерты в Telegram (сервисы, бэкапы, место на диске), см. [docs/deploy.md](../docs/deploy.md#мониторинг-и-логи) |
+| `env.sh` | функция `env_value`: значение из окружения или `.env` без кавычек и `\r`, общая для всех скриптов |
+| `log-to-file.sh` | копирует вывод `tusd` и `mail` в `data/logs` с ротацией, см. [docs/logs.md](../docs/logs.md) |
+| `youtube-proxy-setup.sh` | SOCKS5-прокси для YouTube на зарубежном сервере, см. [docs/deploy.md](../docs/deploy.md#прокси-для-youtube) |
 | `backup/` | бэкапы базы, см. ниже |
 
 ## Бэкапы базы

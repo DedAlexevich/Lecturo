@@ -10,13 +10,7 @@ warn() {
   echo "warning: $*" >&2
 }
 
-env_value() {
-  local value="${!1:-}"
-  if [ -z "$value" ] && [ -f .env ]; then
-    value=$(sed -n "s/^$1=//p" .env | tail -n 1 | tr -d "\"'\r")
-  fi
-  echo "${value:-$2}"
-}
+source infra/env.sh
 
 backup_dir=$(env_value BACKUP_DIR ./backups)
 db_service=$(env_value BACKUP_DB_SERVICE db)
@@ -43,7 +37,7 @@ dump_database() {
   local target=$1
   local part
   part="$(dirname "$target")/.$(basename "$target").part"
-  umask 077
+  umask 007
   mkdir -p "$(dirname "$target")"
   rm -rf "$(dirname "$target")"/.*.dump.part "$(dirname "$target")"/.stage-*
   if ! db_exec sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$part"; then

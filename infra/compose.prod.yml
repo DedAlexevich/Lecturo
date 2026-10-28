@@ -1,10 +1,19 @@
+x-smtp: &smtp
+  SMTP_HOST: ${SMTP_HOST:-mail}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_FROM: "${SMTP_FROM:-Lecturo <noreply@${MAIL_DOMAIN:-${SITE_ADDRESS}}>}"
+
 services:
   db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
     ports: !reset []
     restart: always
 
   db-backup:
     profiles: ["local"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}
 
   redis:
     ports: !reset []
@@ -15,18 +24,26 @@ services:
 
   api:
     environment:
-      SMTP_HOST: ${SMTP_HOST:-mail}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_FROM: "${SMTP_FROM:-Lecturo <noreply@${MAIL_DOMAIN:-${SITE_ADDRESS}}>}"
+      <<: *smtp
+      DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}@db:5432/lecturo
+    networks:
+      - default
+      - mail
     restart: always
 
   mail:
     build: ./infra/mail
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - mail
     entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/mail.log", "entrypoint.sh"]
     environment:
       MAIL_DOMAIN: ${MAIL_DOMAIN:-${SITE_ADDRESS}}
+      DKIM_SELECTOR: ${DKIM_SELECTOR:-mail}
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      LOG_FILE_MODE: "640"
     volumes:
       - ${DATA_DIR:-./data}/mail/dkim:/etc/opendkim/keys
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
@@ -43,6 +60,12 @@ services:
     restart: always
 
   worker:
+    environment:
+      <<: *smtp
+      DATABASE_URL: postgresql+asyncpg://lecturo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}@db:5432/lecturo
+    networks:
+      - default
+      - mail
     restart: always
     stop_grace_period: 60s
 
@@ -50,6 +73,8 @@ services:
     restart: always
 
   bot:
+    environment:
+      DATABASE_URL: postgresql://lecturo:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set}@db:5432/lecturo
     extra_hosts:
       - "api.telegram.org:${TELEGRAM_API_IP:-149.154.167.220}"
     restart: always
@@ -66,3 +91,6 @@ services:
       - "443:443"
       - "443:443/udp"
     restart: always
+
+networks:
+  mail:

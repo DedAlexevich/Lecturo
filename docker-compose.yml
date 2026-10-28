@@ -4,9 +4,18 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+x-unprivileged: &unprivileged
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.7-pg16-bookworm@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+    security_opt:
+      - no-new-privileges:true
+    oom_score_adj: -500
     environment:
       POSTGRES_USER: lecturo
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lecturo}
@@ -23,7 +32,11 @@ services:
     restart: unless-stopped
 
   db-backup:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:0.8.7-pg16-bookworm@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+    security_opt:
+      - no-new-privileges:true
+    group_add:
+      - "1500"
     entrypoint: ["/bin/sh", "/schedule.sh"]
     environment:
       PGHOST: db
@@ -42,7 +55,9 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:d9436322172a5b482c187bf1f363d3c4fea086fcca6b9c8a94de8f0f39ed3193
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
@@ -53,7 +68,9 @@ services:
     restart: unless-stopped
 
   bot-redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:d9436322172a5b482c187bf1f363d3c4fea086fcca6b9c8a94de8f0f39ed3193
+    security_opt:
+      - no-new-privileges:true
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always"]
     volumes:
       - ${DATA_DIR:-./data}/bot-redis:/data
@@ -64,7 +81,28 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  data-owner:
+    image: tusproject/tusd:v2.6.0@sha256:b00c762725d6840394541f2bfcb3c1ca8072070d3d207be9885aac5e78d32710
+    user: "0:0"
+    entrypoint: ["/bin/sh", "/data-owner.sh", "/backups", "/var/log/lecturo", "/data/storage"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - FSETID
+    volumes:
+      - ${BACKUP_DIR:-${DATA_DIR:-./data}/backups}:/backups
+      - ${DATA_DIR:-./data}/storage:/data/storage
+      - ${DATA_DIR:-./data}/logs:/var/log/lecturo
+      - ./infra/data-owner.sh:/data-owner.sh:ro
+    logging: *default-logging
+
   migrate:
+    <<: *unprivileged
     build: ./backend
     command: ["alembic", "upgrade", "head"]
     env_file:
@@ -80,7 +118,11 @@ services:
     restart: "no"
 
   api:
+    <<: *unprivileged
     build: ./backend
+    mem_limit: 768m
+    group_add:
+      - "1500"
     env_file:
       - path: .env
         required: false
@@ -101,6 +143,8 @@ services:
       retries: 20
       start_period: 60s
     depends_on:
+      data-owner:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
       db:
@@ -111,7 +155,9 @@ services:
     restart: unless-stopped
 
   worker:
+    <<: *unprivileged
     build: ./backend
+    mem_limit: 1g
     command: arq app.worker.WorkerSettings
     env_file:
       - path: .env
@@ -131,6 +177,8 @@ services:
       retries: 3
       start_period: 120s
     depends_on:
+      data-owner:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
       redis:
@@ -141,12 +189,13 @@ services:
     restart: unless-stopped
 
   tusd:
-    image: tusproject/tusd:v2.6.0
-    user: "0:0"
+    <<: *unprivileged
+    image: tusproject/tusd:v2.6.0@sha256:b00c762725d6840394541f2bfcb3c1ca8072070d3d207be9885aac5e78d32710
     entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/tusd.log", "tusd"]
     environment:
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      LOG_FILE_MODE: "640"
     command:
       - -upload-dir=/data/storage/uploads
       - -base-path=/files/
@@ -159,10 +208,14 @@ services:
       - ${DATA_DIR:-./data}/storage:/data/storage
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
       - ./infra/log-to-file.sh:/log-to-file.sh:ro
+    depends_on:
+      data-owner:
+        condition: service_completed_successfully
     logging: *default-logging
     restart: unless-stopped
 
   bot:
+    <<: *unprivileged
     build: ./bot
     env_file:
       - path: .env
@@ -180,6 +233,8 @@ services:
       retries: 3
       start_period: 30s
     depends_on:
+      data-owner:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
       db:
@@ -190,6 +245,9 @@ services:
     restart: unless-stopped
 
   frontend:
+    <<: *unprivileged
+    cap_add:
+      - NET_BIND_SERVICE
     build:
       context: ./frontend
       args:
@@ -198,14 +256,15 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2-alpine
-    entrypoint: ["/bin/sh", "/log-to-file.sh", "/var/log/lecturo/caddy.log", "caddy"]
-    command: ["run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    <<: *unprivileged
+    cap_add:
+      - NET_BIND_SERVICE
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
-      LOG_FILE_MODE: "640"
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -215,7 +274,6 @@ services:
       - ${DATA_DIR:-./data}/zoomer:/srv/zoomer:ro
       - ${DATA_DIR:-./data}/caddy:/data
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
-      - ./infra/log-to-file.sh:/log-to-file.sh:ro
     depends_on:
       api:
         condition: service_healthy
