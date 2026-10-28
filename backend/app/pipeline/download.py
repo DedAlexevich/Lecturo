@@ -144,6 +144,9 @@ class PublicYoutubeDL(YoutubeDL):
     def build_request_director(self, handlers, preferences=None):
         return super().build_request_director([PublicRequestsRH], preferences)
 
+    def save_cookies(self):
+        pass
+
 
 @dataclass(frozen=True)
 class LinkInfo:
@@ -166,10 +169,15 @@ def is_youtube(url: str) -> bool:
 
 
 def ydl_options(url: str) -> dict[str, Any]:
-    proxy = get_settings().youtube_proxy
-    if proxy and is_youtube(url):
-        return {**BASE_OPTIONS, "proxy": proxy}
-    return BASE_OPTIONS
+    if not is_youtube(url):
+        return BASE_OPTIONS
+    settings = get_settings()
+    options = dict(BASE_OPTIONS)
+    if settings.youtube_proxy:
+        options["proxy"] = settings.youtube_proxy
+    if settings.youtube_cookies and settings.youtube_cookies.is_file():
+        options["cookiefile"] = str(settings.youtube_cookies)
+    return options
 
 
 def ydl_url(url: str) -> str:
