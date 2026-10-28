@@ -3,9 +3,11 @@ import { Link, useSearchParams } from "react-router";
 import { Button } from "../../../ui/Button";
 import { Input } from "../../../ui/Input";
 import { Spinner } from "../../../ui/Spinner";
-import { formatShortDate } from "../../account/format";
+import { formatDate, formatShortDate } from "../../account/format";
 import shared from "../AdminPage.module.css";
-import { useUserSearch } from "./api";
+import { useUserSearch, type UserBrief } from "./api";
+import { formatHours } from "./format";
+import { UserActionButtons, UserActionDialog, type ActionKind } from "./UserActionDialog";
 import styles from "./Users.module.css";
 
 function SearchForm({ initial, onSearch }: { initial: string; onSearch: (value: string) => void }) {
@@ -21,7 +23,7 @@ function SearchForm({ initial, onSearch }: { initial: string; onSearch: (value: 
   return (
     <form className={styles.search} onSubmit={submit} role="search">
       <label className={styles.searchLabel} htmlFor={inputId}>
-        Почта, Telegram id или @username
+        Почта, имя, Telegram id или @username
       </label>
       <Input
         id={inputId}
@@ -37,18 +39,61 @@ function SearchForm({ initial, onSearch }: { initial: string; onSearch: (value: 
         Найти
       </Button>
       <p id={hintId} className={styles.searchHint}>
-        По почте ищется часть адреса, по Telegram только точное совпадение. Каждый поиск и просмотр карточки
-        попадает в журнал.
+        Подойдёт часть почты, имени или username, регистр не важен. Telegram id нужен целиком. Каждый поиск и
+        просмотр карточки попадает в журнал.
       </p>
     </form>
   );
 }
 
-export function UsersSection() {
+const searchLimit = 20;
+
+function nameOf(user: UserBrief) {
+  return user.display_name.trim() || user.email || "Без имени";
+}
+
+function planOf(user: UserBrief) {
+  const plan = user.subscription_until ? `Подписка до ${formatDate(user.subscription_until)}` : "Бесплатный";
+  return user.package_left_sec > 0 ? `${plan}, пакет ${formatHours(user.package_left_sec)}` : plan;
+}
+
+type Picked = { user: UserBrief; kind: ActionKind };
+
+function ResultRow({ user, meId, onPick }: { user: UserBrief; meId: string; onPick: (picked: Picked) => void }) {
+  return (
+    <li className={styles.resultRow}>
+      <Link className={styles.result} to={`/admin/users/${user.id}`}>
+        <span className={styles.resultName}>
+          {nameOf(user)}
+          {user.is_admin && <span className={styles.mark}>Админ</span>}
+          {user.blocked && <span className={`${styles.mark} ${styles.markDanger}`}>Заблокирован</span>}
+        </span>
+        <span className={styles.resultMeta}>
+          {user.email ?? "Без почты"}
+          {user.telegram_username && ` · @${user.telegram_username}`}
+        </span>
+        <span className={styles.resultPlan}>{planOf(user)}</span>
+        <span className={styles.resultDate}>с {formatShortDate(user.created_at)}</span>
+      </Link>
+      <div className={styles.resultActions}>
+        <UserActionButtons
+          userId={user.id}
+          meId={meId}
+          isAdmin={user.is_admin}
+          blocked={user.blocked}
+          onPick={(kind) => onPick({ user, kind })}
+        />
+      </div>
+    </li>
+  );
+}
+
+export function UsersSection({ meId }: { meId: string }) {
   const titleId = useId();
   const [params, setParams] = useSearchParams();
   const query = (params.get("q") ?? "").trim();
   const { data, isFetching, isError, refetch } = useUserSearch(query);
+  const [picked, setPicked] = useState<Picked | null>(null);
 
   const search = (value: string) => {
     const next = new URLSearchParams(params);
@@ -66,7 +111,7 @@ export function UsersSection() {
           Пользователи
         </h2>
         {data && query.length >= 2 && (
-          <p className={shared.muted}>{data.length === 20 ? "Показаны первые 20" : `Найдено: ${data.length}`}</p>
+          <p className={shared.muted}>{data.length === searchLimit ? `Показаны первые ${searchLimit}` : `Найдено: ${data.length}`}</p>
         )}
       </div>
       <SearchForm key={query} initial={query} onSearch={search} />
@@ -85,25 +130,21 @@ export function UsersSection() {
         </div>
       )}
       {query.length >= 2 && data && data.length === 0 && (
-        <p className={shared.empty}>По запросу «{query}» никого нет. Проверьте адрес или поищите по Telegram.</p>
+        <p className={shared.empty}>По запросу «{query}» никого нет. Попробуйте другую часть почты, имени или username.</p>
       )}
       {query.length >= 2 && data && data.length > 0 && (
         <ul className={styles.results}>
           {data.map((user) => (
-            <li key={user.id}>
-              <Link className={styles.result} to={`/admin/users/${user.id}`}>
-                <span className={styles.resultName}>
-                  {user.display_name.trim() || user.email || "Без имени"}
-                  {user.is_admin && <span className={styles.mark}>Админ</span>}
-                  {user.blocked && <span className={`${styles.mark} ${styles.markDanger}`}>Заблокирован</span>}
-                </span>
-                <span className={styles.resultMeta}>{user.email ?? "Без почты"}</span>
-                <span className={styles.resultDate}>с {formatShortDate(user.created_at)}</span>
-              </Link>
-            </li>
+            <ResultRow key={user.id} user={user} meId={meId} onPick={setPicked} />
           ))}
         </ul>
       )}
+      <UserActionDialog
+        userId={picked?.user.id ?? ""}
+        userName={picked ? nameOf(picked.user) : ""}
+        kind={picked?.kind ?? null}
+        onClose={() => setPicked(null)}
+      />
     </section>
   );
 }

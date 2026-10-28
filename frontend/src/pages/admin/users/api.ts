@@ -11,6 +11,7 @@ export type LectureStatus = components["schemas"]["LectureStatus"];
 
 const usersQueryKey = ["admin", "users"] as const;
 const auditQueryKey = ["admin", "audit"] as const;
+const adminsQueryKey = ["admin", "admins"] as const;
 
 export function userQueryKey(userId: string) {
   return [...usersQueryKey, "card", userId] as const;
@@ -45,27 +46,36 @@ export function useUserCard(userId: string) {
 }
 
 export type UserAction =
+  | { kind: "admin" }
   | { kind: "hours"; hours: number; reason: string }
   | { kind: "subscription"; days: number; reason: string }
   | { kind: "block"; reason: string }
   | { kind: "unblock"; reason: string };
 
+function sendAction(userId: string, action: UserAction) {
+  const path = { path: { user_id: userId } };
+  switch (action.kind) {
+    case "admin":
+      return api.POST("/api/v1/admin/users/{user_id}/admin", { params: path });
+    case "hours":
+      return api.POST("/api/v1/admin/users/{user_id}/hours", {
+        params: path,
+        body: { hours: action.hours, reason: action.reason },
+      });
+    case "subscription":
+      return api.POST("/api/v1/admin/users/{user_id}/subscription", {
+        params: path,
+        body: { days: action.days, reason: action.reason },
+      });
+    case "block":
+      return api.POST("/api/v1/admin/users/{user_id}/block", { params: path, body: { reason: action.reason } });
+    case "unblock":
+      return api.POST("/api/v1/admin/users/{user_id}/unblock", { params: path, body: { reason: action.reason } });
+  }
+}
+
 async function runAction(userId: string, action: UserAction) {
-  const path = { params: { path: { user_id: userId } } };
-  const result =
-    action.kind === "hours"
-      ? await api.POST("/api/v1/admin/users/{user_id}/hours", {
-          ...path,
-          body: { hours: action.hours, reason: action.reason },
-        })
-      : action.kind === "subscription"
-        ? await api.POST("/api/v1/admin/users/{user_id}/subscription", {
-            ...path,
-            body: { days: action.days, reason: action.reason },
-          })
-        : action.kind === "block"
-          ? await api.POST("/api/v1/admin/users/{user_id}/block", { ...path, body: { reason: action.reason } })
-          : await api.POST("/api/v1/admin/users/{user_id}/unblock", { ...path, body: { reason: action.reason } });
+  const result = await sendAction(userId, action);
   if (result.data === undefined) throw new ApiError(result.response.status, result.error);
   return result.data;
 }
@@ -79,6 +89,7 @@ export function useUserAction(userId: string) {
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: [...usersQueryKey, "search"] }),
         queryClient.invalidateQueries({ queryKey: auditQueryKey }),
+        queryClient.invalidateQueries({ queryKey: adminsQueryKey }),
       ]);
     },
   });

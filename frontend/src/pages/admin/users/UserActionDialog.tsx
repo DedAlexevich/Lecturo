@@ -13,6 +13,7 @@ import styles from "./Users.module.css";
 export type ActionKind = UserAction["kind"];
 
 const titles: Record<ActionKind, string> = {
+  admin: "Назначить админом",
   hours: "Начислить часы",
   subscription: "Продлить подписку",
   block: "Заблокировать аккаунт",
@@ -25,6 +26,7 @@ const amountLimits = {
 };
 
 function describe(kind: ActionKind, amount: number) {
+  if (kind === "admin") return "Права администратора выданы";
   if (kind === "hours") return `Начислено ${amount} ч`;
   if (kind === "subscription") return `Подписка продлена на ${formatDays(amount)}`;
   if (kind === "block") return "Аккаунт заблокирован";
@@ -46,18 +48,21 @@ function ActionForm({ userId, userName, kind, onClose }: DialogProps & { kind: A
   const toast = useToast();
   const value = Number(amount);
   const amountValid = !limits || (Number.isInteger(value) && value >= limits.min && value <= limits.max);
-  const reasonValid = reason.trim().length >= 3;
+  const needsReason = kind !== "admin";
+  const reasonValid = !needsReason || reason.trim().length >= 3;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!amountValid || !reasonValid) return;
     const text = reason.trim();
     const payload: UserAction =
-      kind === "hours"
-        ? { kind, hours: value, reason: text }
-        : kind === "subscription"
-          ? { kind, days: value, reason: text }
-          : { kind, reason: text };
+      kind === "admin"
+        ? { kind }
+        : kind === "hours"
+          ? { kind, hours: value, reason: text }
+          : kind === "subscription"
+            ? { kind, days: value, reason: text }
+            : { kind, reason: text };
     action.mutate(payload, {
       onSuccess: () => {
         toast.show(describe(kind, value), "success");
@@ -72,6 +77,12 @@ function ActionForm({ userId, userName, kind, onClose }: DialogProps & { kind: A
         <p>
           {userName} сразу выйдет на всех устройствах и не сможет войти, пока аккаунт не разблокируют. Лекции и
           платежи останутся.
+        </p>
+      )}
+      {kind === "admin" && (
+        <p>
+          {userName} получит доступ ко всей админ-панели: карточкам пользователей, логам, бэкапам и ручным действиям.
+          Назначение попадёт в журнал, снять права можно в разделе «Администраторы».
         </p>
       )}
       {kind === "unblock" && <p>{userName} снова сможет войти. Старые сессии не вернутся, нужно войти заново.</p>}
@@ -95,18 +106,20 @@ function ActionForm({ userId, userName, kind, onClose }: DialogProps & { kind: A
           )}
         </Field>
       )}
-      <Field label="Причина" hint="Попадёт в журнал действий. От 3 до 500 символов.">
-        {(control) => (
-          <textarea
-            {...control}
-            className={`input ${styles.reason}`}
-            rows={3}
-            maxLength={500}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        )}
-      </Field>
+      {needsReason && (
+        <Field label="Причина" hint="Попадёт в журнал действий. От 3 до 500 символов.">
+          {(control) => (
+            <textarea
+              {...control}
+              className={`input ${styles.reason}`}
+              rows={3}
+              maxLength={500}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          )}
+        </Field>
+      )}
       {action.isError && (
         <p className={shared.alert} role="alert">
           {errorMessage(action.error, "Не получилось, попробуйте ещё раз")}
@@ -135,5 +148,47 @@ export function UserActionDialog(props: DialogProps) {
     <Dialog open={kind !== null} onClose={onClose} title={kind ? titles[kind] : ""}>
       {kind && <ActionForm key={kind} {...props} kind={kind} />}
     </Dialog>
+  );
+}
+
+type ButtonsProps = {
+  userId: string;
+  meId: string;
+  isAdmin: boolean;
+  blocked: boolean;
+  onPick: (kind: ActionKind) => void;
+};
+
+export function UserActionButtons({ userId, meId, isAdmin, blocked, onPick }: ButtonsProps) {
+  const canBlock = userId !== meId && !isAdmin;
+  return (
+    <>
+      {!isAdmin && !blocked && (
+        <Button size="sm" variant="secondary" onClick={() => onPick("admin")}>
+          Назначить админом
+        </Button>
+      )}
+      <Button size="sm" variant="secondary" onClick={() => onPick("hours")}>
+        Начислить часы
+      </Button>
+      <Button size="sm" variant="secondary" onClick={() => onPick("subscription")}>
+        Продлить подписку
+      </Button>
+      {blocked ? (
+        <Button size="sm" variant="secondary" onClick={() => onPick("unblock")}>
+          Разблокировать
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={!canBlock}
+          title={canBlock ? undefined : "Себя и администраторов заблокировать нельзя"}
+          onClick={() => onPick("block")}
+        >
+          Заблокировать
+        </Button>
+      )}
+    </>
   );
 }

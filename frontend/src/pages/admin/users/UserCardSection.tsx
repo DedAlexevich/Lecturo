@@ -4,11 +4,12 @@ import { NotFoundPage } from "../../../app/NotFoundPage";
 import { ApiError } from "../../../app/queryClient";
 import { Button } from "../../../ui/Button";
 import { Spinner } from "../../../ui/Spinner";
-import { formatDate, formatDateTime, formatDuration, formatRubles, formatShortDate } from "../../account/format";
+import { formatDuration } from "../../../lib/duration";
+import { formatDate, formatDateTime, formatRubles, formatShortDate } from "../../account/format";
 import shared from "../AdminPage.module.css";
 import { useUserCard, type UserCard } from "./api";
 import { formatHours, lectureStatusLabels, paymentStatusLabels, providerLabels, sourceLabels } from "./format";
-import { UserActionDialog, type ActionKind } from "./UserActionDialog";
+import { UserActionButtons, UserActionDialog, type ActionKind } from "./UserActionDialog";
 import styles from "./Users.module.css";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -209,7 +210,6 @@ function Card({ card, meId }: { card: UserCard; meId: string }) {
   const titleId = useId();
   const [action, setAction] = useState<ActionKind | null>(null);
   const blocked = card.blocked_at !== null;
-  const canBlock = card.id !== meId && !card.is_admin;
 
   return (
     <section className={shared.panel} aria-labelledby={titleId}>
@@ -227,27 +227,13 @@ function Card({ card, meId }: { card: UserCard; meId: string }) {
           </p>
         </div>
         <div className={styles.cardActions}>
-          <Button size="sm" variant="secondary" onClick={() => setAction("hours")}>
-            Начислить часы
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setAction("subscription")}>
-            Продлить подписку
-          </Button>
-          {blocked ? (
-            <Button size="sm" variant="secondary" onClick={() => setAction("unblock")}>
-              Разблокировать
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={!canBlock}
-              title={canBlock ? undefined : "Себя и администраторов заблокировать нельзя"}
-              onClick={() => setAction("block")}
-            >
-              Заблокировать
-            </Button>
-          )}
+          <UserActionButtons
+            userId={card.id}
+            meId={meId}
+            isAdmin={card.is_admin}
+            blocked={blocked}
+            onPick={setAction}
+          />
         </div>
       </div>
       {blocked && card.blocked_at && (
