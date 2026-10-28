@@ -7,7 +7,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 from app.core.config import get_settings
-from app.models import Lecture
+from app.models import Lecture, LectureStatus
 from app.pipeline.download import is_yandex_disk
 
 VIDEO_LINK_TTL_SEC = 6 * 3600
@@ -48,7 +48,11 @@ def signed_stream_url(lecture_id: uuid.UUID, share_token: str | None = None) -> 
 def playable_video_url(lecture: Lecture, share_token: str | None = None) -> str | None:
     if lecture.video_path:
         return signed_video_url(lecture.id, share_token)
-    if lecture.source_url and is_yandex_disk(lecture.source_url):
+    if (
+        lecture.status != LectureStatus.failed
+        and lecture.source_url
+        and is_yandex_disk(lecture.source_url)
+    ):
         return signed_stream_url(lecture.id, share_token)
     return None
 
