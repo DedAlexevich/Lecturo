@@ -19,7 +19,7 @@ dependencies = [
     "httpx>=0.28",
     "yt-dlp[default,deno]>=2026.10.26,<2027",
     "weasyprint>=66",
-    "markdown-it-py>=3.0",
+    "markdown-it-py>=4.2.0",
     "mdit-py-plugins>=0.6,<0.7",
     "quickjs>=1.19.4,<2",
 ]
