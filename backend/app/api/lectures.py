@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
@@ -14,6 +15,7 @@ from app.api.courses import get_own_course
 from app.api.shares import shared_with
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, RequireSubscription, SessionDep
+from app.core.redis import get_redis
 from app.models import (
     Lecture,
     LectureStatus,
@@ -65,6 +67,7 @@ from app.services.rate_limit import enforce_rate_limit, is_rate_limited, reset_r
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 VIDEO_FORBIDDEN = "Нет доступа к видео"
+STREAM_CACHE_SECONDS = 15 * 60
 AUDIO_FORBIDDEN = "Нет доступа к аудио"
 LECTURE_NOT_FOUND = "Лекция не найдена"
 
@@ -219,7 +222,25 @@ async def audio_file(
     return FileResponse(audio_path, media_type="audio/ogg")
 
 
-@router.get("/{lecture_id}/stream")
+async def disk_media_url(lecture_id: uuid.UUID, source_url: str) -> str:
+    redis = get_redis(get_settings().redis_url)
+    key = f"stream:{lecture_id}"
+    if (cached := await redis.get(key)) is not None:
+        return cached.decode()
+    _, media_url = await resolve_yandex_disk(source_url)
+    host = urlparse(media_url).hostname or ""
+    if not host.endswith((".yandex.ru", ".yandex.net")):
+        raise LinkError("Яндекс Диск вернул неожиданную ссылку")
+    await redis.set(key, media_url, ex=STREAM_CACHE_SECONDS)
+    return media_url
+
+
+@router.get(
+    "/{lecture_id}/stream",
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+    responses={403: {}, 404: {}, 502: {}},
+)
 async def stream_source(
     lecture_id: uuid.UUID,
     session: SessionDep,
@@ -240,7 +261,7 @@ async def stream_source(
     if not is_yandex_disk(source_url):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Видео не найдено")
     try:
-        _, media_url = await resolve_yandex_disk(source_url)
+        media_url = await disk_media_url(lecture_id, source_url)
     except LinkError as error:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
     return RedirectResponse(media_url, status_code=status.HTTP_302_FOUND)
