@@ -171,7 +171,7 @@ async def get_video(session: AsyncSession, video_id: uuid.UUID) -> ZoomerVideo:
 
 
 def video_out(video: ZoomerVideo) -> ZoomerVideoOut:
-    ready = video.status == ZoomerVideoStatus.ready
+    public = video.status == ZoomerVideoStatus.ready and video.enabled
     return ZoomerVideoOut(
         id=video.id,
         title=video.title,
@@ -185,8 +185,8 @@ def video_out(video: ZoomerVideo) -> ZoomerVideoOut:
         height=video.height,
         size_bytes=video.size_bytes,
         vertical=is_vertical(video.width, video.height),
-        poster_url=f"/zoomer/{video.id}.jpg" if ready else None,
-        video_url=f"/zoomer/{video.id}.mp4" if ready and video.enabled else None,
+        poster_url=f"/zoomer/{video.id}.jpg" if public else None,
+        video_url=f"/zoomer/{video.id}.mp4" if public else None,
         created_at=video.created_at,
     )
 
@@ -209,12 +209,12 @@ async def public_clips(session: AsyncSession) -> list[ZoomerClipOut]:
     ]
 
 
-async def is_public(session: AsyncSession, video_id: uuid.UUID, poster: bool) -> bool:
+async def is_public(session: AsyncSession, video_id: uuid.UUID) -> bool:
     query = select(ZoomerVideo.id).where(
-        ZoomerVideo.id == video_id, ZoomerVideo.status == ZoomerVideoStatus.ready
+        ZoomerVideo.id == video_id,
+        ZoomerVideo.status == ZoomerVideoStatus.ready,
+        ZoomerVideo.enabled,
     )
-    if not poster:
-        query = query.where(ZoomerVideo.enabled)
     return await session.scalar(query) is not None
 
 

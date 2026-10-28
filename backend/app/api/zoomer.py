@@ -1,5 +1,4 @@
 import uuid
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Response, status
 
@@ -16,9 +15,7 @@ async def list_zoomer_clips(session: SessionDep) -> list[ZoomerClipOut]:
 
 
 @router.get("/videos/{video_id}/access", include_in_schema=False)
-async def zoomer_file_access(
-    video_id: uuid.UUID, session: SessionDep, file: Literal["mp4", "jpg"] = "mp4"
-) -> Response:
-    if not await zoomer.is_public(session, video_id, poster=file == "jpg"):
+async def zoomer_file_access(video_id: uuid.UUID, session: SessionDep) -> Response:
+    if not await zoomer.is_public(session, video_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, zoomer.NOT_FOUND)
     return Response(status_code=status.HTTP_200_OK)

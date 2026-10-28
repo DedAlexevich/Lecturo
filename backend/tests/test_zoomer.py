@@ -146,7 +146,6 @@ async def test_disabled_and_unprocessed_clips_are_not_served(
     access = f"/api/v1/zoomer/videos/{video_id}/access"
 
     assert (await client.get(access)).status_code == 404
-    assert (await client.get(access, params={"file": "jpg"})).status_code == 404
 
     await process_zoomer_video({}, video_id)
     assert (await client.get(access)).status_code == 200
@@ -157,7 +156,7 @@ async def test_disabled_and_unprocessed_clips_are_not_served(
     assert response.json()["enabled"] is False
     assert response.json()["video_url"] is None
     assert (await client.get(access)).status_code == 404
-    assert (await client.get(access, params={"file": "jpg"})).status_code == 200
+    assert response.json()["poster_url"] is None
     assert (await client.get("/api/v1/zoomer/videos")).json() == []
     assert (await client.get(f"/api/v1/zoomer/videos/{uuid.uuid4()}/access")).status_code == 404
 
