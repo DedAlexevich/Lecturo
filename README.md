@@ -61,8 +61,7 @@ Lecturo помогает учиться по записям лекций. Вы �
 <td width="50%"><img src="docs/assets/readme/quiz.png" alt="Разбор ответа и переход к моменту лекции"><p align="center">Разбор ответа и переход к моменту лекции</p></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/assets/readme/chapters.png" alt="Главы с таймкодами"><p align="center">Главы с таймкодами</p></td>
-<td width="50%"><img src="docs/assets/readme/local.png" alt="Локальный режим"><p align="center">Локальный режим</p></td>
+<td colspan="2" align="center"><img src="docs/assets/readme/chapters.png" alt="Главы с таймкодами" width="50%"><p align="center">Главы с таймкодами</p></td>
 </tr>
 </table>
 
