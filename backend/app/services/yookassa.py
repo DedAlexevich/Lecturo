@@ -416,6 +416,7 @@ async def process_refund(
             await revoke_subscription(session, payment, now or datetime.now(UTC))
         else:
             await revoke_package(session, payment)
+    payment.status = PaymentStatus.refunded
     payment.raw = stored_raw(remote)
     await session.commit()
     return payment
