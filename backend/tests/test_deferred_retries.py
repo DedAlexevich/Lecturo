@@ -207,11 +207,13 @@ class FlakyQuizLLM(test_quiz.ScriptedLLM):
         self.outages = outages
         self.error = error or OpenAICompatibleUnavailable("/chat/completions: нет ответа от API")
 
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
         if self.outages:
             self.outages -= 1
             raise self.error
-        return await super().complete(system, user, json_mode=json_mode)
+        return await super().complete(system, user, json_mode=json_mode, max_tokens=max_tokens)
 
 
 async def test_quiz_is_deferred_and_built_on_next_try(user, monkeypatch):
@@ -255,7 +257,9 @@ async def test_quiz_permanent_error_fails_at_once(user, monkeypatch):
 
 
 class UnavailableLLM:
-    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
         raise OpenAICompatibleUnavailable("/chat/completions: API ответил 503 после 4 попыток")
 
 
