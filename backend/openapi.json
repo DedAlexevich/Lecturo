@@ -2909,6 +2909,11 @@
         ],
         "summary": "Complain",
         "operationId": "complain_api_v1_public__token__complaints_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "token",

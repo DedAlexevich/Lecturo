@@ -2,14 +2,16 @@ import logging
 import secrets
 import uuid
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import ColumnElement, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
-from app.core.deps import CurrentUser, SessionDep
+from app.core.deps import CurrentUser, SessionDep, bearer, user_by_token
 from app.models import Complaint, Course, Lecture, LectureStatus, ShareLink, User, course_lectures
 from app.pipeline.video_access import signed_video_url
 from app.schemas.share import (
@@ -21,6 +23,7 @@ from app.schemas.share import (
     ShareIn,
     ShareOut,
 )
+from app.services.mail import send_mail
 from app.services.rate_limit import enforce_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -195,8 +198,26 @@ async def get_public_course_lecture(
     return await public_lecture(session, lecture_id, token)
 
 
+def complaint_mail(complaint: Complaint, owner_id: uuid.UUID) -> str:
+    reporter = str(complaint.reporter_id) if complaint.reporter_id else "без входа"
+    return (
+        f"Жалоба: {complaint.id}\n"
+        f"Лекция: {complaint.lecture_id}\n"
+        f"Владелец: {owner_id}\n"
+        f"Автор жалобы: {reporter}\n\n"
+        f"{complaint.reason}"
+    )
+
+
 @router.post("/public/{token}/complaints", status_code=status.HTTP_204_NO_CONTENT)
-async def complain(token: str, body: ComplaintIn, request: Request, session: SessionDep) -> None:
+async def complain(
+    token: str,
+    body: ComplaintIn,
+    request: Request,
+    session: SessionDep,
+    background: BackgroundTasks,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> None:
     settings = get_settings()
     ip = request.client.host if request.client else "unknown"
     await enforce_rate_limit(
@@ -216,7 +237,10 @@ async def complain(token: str, body: ComplaintIn, request: Request, session: Ses
     )
     if lecture_id is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_NOT_FOUND)
-    complaint = Complaint(lecture_id=lecture_id, reason=body.reason)
+    reporter = await user_by_token(session, credentials.credentials) if credentials else None
+    complaint = Complaint(
+        lecture_id=lecture_id, reporter_id=reporter.id if reporter else None, reason=body.reason
+    )
     session.add(complaint)
     await session.commit()
     logger.warning(
@@ -225,3 +249,10 @@ async def complain(token: str, body: ComplaintIn, request: Request, session: Ses
         lecture_id,
         share.owner_id,
     )
+    if settings.complaints_email:
+        background.add_task(
+            send_mail,
+            settings.complaints_email,
+            "Новая жалоба в Lecturo",
+            complaint_mail(complaint, share.owner_id),
+        )
