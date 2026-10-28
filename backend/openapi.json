@@ -3469,6 +3469,48 @@
         }
       }
     },
+    "/api/v1/billing/promo": {
+      "post": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Apply Promo",
+        "operationId": "apply_promo_api_v1_billing_promo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Промокод не подходит"
+          },
+          "429": {
+            "description": "Слишком много попыток"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/billing/waiting": {
       "get": {
         "tags": [
@@ -5191,6 +5233,192 @@
           }
         }
       }
+    },
+    "/api/v1/admin/promo-codes": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Promo Codes",
+        "operationId": "list_promo_codes_api_v1_admin_promo_codes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PromoCodeOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Promo Codes Api V1 Admin Promo Codes Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Promo Code",
+        "operationId": "create_promo_code_api_v1_admin_promo_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoCodeOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Такой промокод уже есть"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/promo-codes/{promo_id}/disable": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Disable Promo Code",
+        "operationId": "disable_promo_code_api_v1_admin_promo_codes__promo_id__disable_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "promo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Promo Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoCodeOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Промокод не найден"
+          },
+          "409": {
+            "description": "Промокод уже отключён"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/promo-codes/{promo_id}/redemptions": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Promo Redemptions",
+        "operationId": "list_promo_redemptions_api_v1_admin_promo_codes__promo_id__redemptions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "promo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Promo Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PromoRedemptionOut"
+                  },
+                  "title": "Response List Promo Redemptions Api V1 Admin Promo Codes  Promo Id  Redemptions Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Промокод не найден"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5258,7 +5486,9 @@
           "subscription_extended",
           "user_blocked",
           "user_unblocked",
-          "alert_settings_changed"
+          "alert_settings_changed",
+          "promo_created",
+          "promo_disabled"
         ],
         "title": "AdminAction"
       },
@@ -7164,6 +7394,18 @@
               }
             ],
             "title": "Receipt Email"
+          },
+          "promo_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promo Code"
           }
         },
         "type": "object",
@@ -7198,6 +7440,11 @@
           "amount_kopecks": {
             "type": "integer",
             "title": "Amount Kopecks"
+          },
+          "discount_kopecks": {
+            "type": "integer",
+            "title": "Discount Kopecks",
+            "default": 0
           },
           "status": {
             "$ref": "#/components/schemas/PaymentStatus"
@@ -7393,6 +7640,397 @@
           "display_name"
         ],
         "title": "ProfileUpdateIn"
+      },
+      "PromoCodeOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PromoKind"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
+          },
+          "discount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Kopecks"
+          },
+          "max_redemptions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Redemptions"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "redeemed": {
+            "type": "integer",
+            "title": "Redeemed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "code",
+          "kind",
+          "hours",
+          "days",
+          "discount_percent",
+          "discount_kopecks",
+          "max_redemptions",
+          "valid_until",
+          "disabled_at",
+          "note",
+          "redeemed"
+        ],
+        "title": "PromoCodeOut"
+      },
+      "PromoCreateIn": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{4,32}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PromoKind"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 366.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 99.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
+          },
+          "discount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000000.0,
+                "minimum": 100.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Kopecks"
+          },
+          "max_redemptions": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Redemptions"
+          },
+          "valid_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Until"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "PromoCreateIn"
+      },
+      "PromoIn": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "PromoIn"
+      },
+      "PromoKind": {
+        "type": "string",
+        "enum": [
+          "hours",
+          "subscription_days",
+          "discount"
+        ],
+        "title": "PromoKind"
+      },
+      "PromoOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PromoKind"
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours"
+          },
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days"
+          },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
+          },
+          "discount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Kopecks"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "kind",
+          "hours",
+          "days",
+          "discount_percent",
+          "discount_kopecks",
+          "applied",
+          "message"
+        ],
+        "title": "PromoOut"
+      },
+      "PromoRedemptionOut": {
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "user_label": {
+            "type": "string",
+            "title": "User Label"
+          },
+          "payment_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_amount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Amount Kopecks"
+          },
+          "discount_kopecks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_at",
+          "user_id",
+          "user_label",
+          "payment_status",
+          "payment_amount_kopecks",
+          "discount_kopecks"
+        ],
+        "title": "PromoRedemptionOut"
       },
       "ProvidersOut": {
         "properties": {
