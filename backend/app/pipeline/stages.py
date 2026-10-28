@@ -75,6 +75,7 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
     await session.commit()
 
     step = await get_step(session, lecture.id, StepName.transcribe)
+    await session.commit()
     lock = asyncio.Lock()
 
     async def on_progress(stage: str, fraction: float) -> None:

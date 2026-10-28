@@ -5,6 +5,7 @@ from app.core.config import Settings
 from app.models import StepName, StepStatus
 
 ETA_STEP_MINIMUM_SEC = 5.0
+LECTURE_TIMEOUT_SEC = 4 * 3600
 
 
 def recognition_seconds(duration_sec: float, settings: Settings) -> float:

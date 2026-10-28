@@ -554,6 +554,7 @@ async def summarize(session: AsyncSession, lecture: Lecture, report: Report) -> 
         await clear_previous(session, lecture)
         session.add(Summary(lecture_id=lecture.id, content_md=""))
         return
+    await session.commit()
 
     llm = get_llm()
     duration = segments[-1].end

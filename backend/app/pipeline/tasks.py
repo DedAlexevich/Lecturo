@@ -1,16 +1,15 @@
 import asyncio
-import contextlib
 import logging
 import uuid
 
-from arq import create_pool
-from arq.connections import ArqRedis, RedisSettings
-from arq.constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix
-from arq.jobs import Job, JobStatus
-from arq.utils import timestamp_ms
+from arq import Retry, create_pool
+from arq.connections import ArqRedis
+from arq.constants import default_queue_name, in_progress_key_prefix
+from arq.jobs import Job
+from redis.exceptions import RedisError
 from sqlalchemy import or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.models import (
     Lecture,
@@ -23,14 +22,27 @@ from app.models import (
     StepStatus,
 )
 from app.pipeline import download, embed, media, quiz, stages, summarize
+from app.pipeline.estimate import LECTURE_TIMEOUT_SEC
 from app.pipeline.events import add_notification, publish_status
+from app.pipeline.jobs import (
+    ACTIVE_JOB_STATUSES,
+    lecture_job_id,
+    queue_settings,
+    quiz_job_id,
+    regeneration_job_id,
+    video_job_id,
+)
 from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 
 logger = logging.getLogger(__name__)
 
-LECTURE_TIMEOUT_SEC = 4 * 3600
+REGENERATION_TIMEOUT_SEC = LECTURE_TIMEOUT_SEC
+VIDEO_TIMEOUT_SEC = 2 * 3600
+VIDEO_ATTEMPTS = 5
+VIDEO_RETRY_DELAY_SEC = 300
+VIDEO_TIMED_OUT = "Пережатие видео заняло слишком много времени"
 
 HANDLERS: dict[StepName, StepHandler] = {
     StepName.download: download.download,
@@ -44,8 +56,6 @@ HANDLERS: dict[StepName, StepHandler] = {
 REGENERATION_STEPS = [StepName.summarize, StepName.embed]
 REGENERATION_FAILED = "Не удалось пересоздать главы и конспект, попробуйте позже"
 QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
-
-ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
 PLANS: dict[SourceType, list[StepName]] = {
     SourceType.upload: [StepName.audio, StepName.transcribe, StepName.summarize, StepName.embed],
@@ -80,10 +90,85 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
         await purge_if_deleted(lecture_uuid)
 
 
+async def process_video(ctx: dict, lecture_id: str) -> str:
+    lecture_uuid = uuid.UUID(lecture_id)
+    try:
+        async with asyncio.timeout(VIDEO_TIMEOUT_SEC):
+            return await run_after_ready(lecture_uuid)
+    except StepFailed as failure:
+        if isinstance(failure.__cause__, OSError) and ctx.get("job_try", 1) < VIDEO_ATTEMPTS:
+            await return_after_ready_to_queue(lecture_uuid)
+            raise Retry(defer=VIDEO_RETRY_DELAY_SEC) from failure
+        await asyncio.to_thread(media.original_path(lecture_uuid).unlink, missing_ok=True)
+        return StepStatus.failed
+    except TimeoutError:
+        await fail_after_ready(lecture_uuid, VIDEO_TIMED_OUT)
+        await asyncio.to_thread(media.original_path(lecture_uuid).unlink, missing_ok=True)
+        return StepStatus.failed
+    except asyncio.CancelledError:
+        await return_to_queue([lecture_uuid])
+        raise
+    finally:
+        await purge_if_deleted(lecture_uuid)
+
+
+async def run_after_ready(lecture_id: uuid.UUID) -> str:
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        if lecture is None:
+            return "missing"
+        for name in AFTER_READY.get(lecture.source_type, []):
+            await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
+        return StepStatus.done
+
+
+async def return_after_ready_to_queue(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(AFTER_READY_STEPS),
+                ProcessingStep.status == StepStatus.failed,
+            )
+            .values(status=StepStatus.pending, progress=0.0, stage=None, error=None)
+        )
+        await session.commit()
+
+
+async def fail_after_ready(lecture_id: uuid.UUID, error: str) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(AFTER_READY_STEPS),
+                ProcessingStep.status == StepStatus.running,
+            )
+            .values(status=StepStatus.failed, error=error)
+        )
+        await session.commit()
+
+
+async def schedule_after_ready(session: AsyncSession, lecture: Lecture) -> None:
+    for name in AFTER_READY.get(lecture.source_type, []):
+        if (await get_step(session, lecture.id, name)).status != StepStatus.done:
+            await session.commit()
+            try:
+                await enqueue_video(lecture.id)
+            except (OSError, RedisError):
+                logger.warning("Не удалось поставить пережатие видео лекции %s", lecture.id)
+            return
+
+
 async def process_regeneration(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
-        return await run_regeneration(lecture_uuid)
+        async with asyncio.timeout(REGENERATION_TIMEOUT_SEC):
+            await reset_regeneration_steps(lecture_uuid)
+            return await run_regeneration(lecture_uuid)
+    except asyncio.CancelledError:
+        raise
     except BaseException:
         await restore_ready(lecture_uuid, REGENERATION_FAILED)
         raise
@@ -99,9 +184,9 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         try:
             for name in REGENERATION_STEPS:
                 await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
-        except StepFailed:
+        except StepFailed as failure:
             outcome = StepStatus.failed
-            failed = await get_step(session, lecture.id, StepName.summarize)
+            failed = await get_step(session, lecture.id, failure.args[0])
             error = failed.error
             await session.execute(
                 update(ProcessingStep)
@@ -123,6 +208,19 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         await session.commit()
         await publish_status(lecture.id, lecture.owner_id, lecture.status, error)
         return outcome
+
+
+async def reset_regeneration_steps(lecture_id: uuid.UUID) -> None:
+    async with SessionLocal() as session:
+        await session.execute(
+            update(ProcessingStep)
+            .where(
+                ProcessingStep.lecture_id == lecture_id,
+                ProcessingStep.step.in_(REGENERATION_STEPS),
+            )
+            .values(status=StepStatus.pending, progress=0.0, stage=None, error=None)
+        )
+        await session.commit()
 
 
 async def restore_ready(lecture_id: uuid.UUID, error: str) -> None:
@@ -213,9 +311,7 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             )
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
-        for name in AFTER_READY.get(lecture.source_type, []):
-            with contextlib.suppress(StepFailed):
-                await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
+        await schedule_after_ready(session, lecture)
         return lecture.status
 
 
@@ -316,12 +412,6 @@ async def refund(lecture_id: uuid.UUID) -> None:
         await session.commit()
 
 
-def queue_settings() -> RedisSettings:
-    settings = RedisSettings.from_dsn(get_settings().redis_url)
-    settings.conn_retries = 0
-    return settings
-
-
 async def enqueue(name: str, job_id: str, *args: str) -> None:
     redis = await create_pool(queue_settings())
     try:
@@ -330,24 +420,16 @@ async def enqueue(name: str, job_id: str, *args: str) -> None:
         await redis.aclose()
 
 
-def lecture_job_id(lecture_id: uuid.UUID) -> str:
-    return f"lecture:{lecture_id}"
-
-
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
     await enqueue("process_lecture", lecture_job_id(lecture_id), str(lecture_id))
 
 
-def regeneration_job_id(lecture_id: uuid.UUID) -> str:
-    return f"regenerate:{lecture_id}"
+async def enqueue_video(lecture_id: uuid.UUID) -> None:
+    await enqueue("process_video", video_job_id(lecture_id), str(lecture_id))
 
 
 async def enqueue_regeneration(lecture_id: uuid.UUID) -> None:
     await enqueue("process_regeneration", regeneration_job_id(lecture_id), str(lecture_id))
-
-
-def quiz_job_id(lecture_id: uuid.UUID) -> str:
-    return f"quiz:{lecture_id}"
 
 
 async def enqueue_quiz(lecture_id: uuid.UUID) -> None:
@@ -358,29 +440,5 @@ async def quiz_job_active(lecture_id: uuid.UUID) -> bool:
     redis = await create_pool(queue_settings())
     try:
         return await Job(quiz_job_id(lecture_id), redis).status() in ACTIVE_JOB_STATUSES
-    finally:
-        await redis.aclose()
-
-
-async def cancel_lecture_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(lecture_job_id(lecture_id))
-
-
-async def cancel_quiz_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(quiz_job_id(lecture_id))
-
-
-async def cancel_regeneration_job(lecture_id: uuid.UUID) -> bool:
-    return await abort_job(regeneration_job_id(lecture_id))
-
-
-async def abort_job(job_id: str) -> bool:
-    redis = await create_pool(queue_settings())
-    try:
-        job = Job(job_id, redis)
-        if await job.status() not in ACTIVE_JOB_STATUSES:
-            return False
-        await redis.zadd(abort_jobs_ss, {job.job_id: timestamp_ms()})
-        return True
     finally:
         await redis.aclose()

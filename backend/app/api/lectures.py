@@ -28,15 +28,13 @@ from app.models import (
 from app.pipeline.download import LinkError, inspect_link, link_key
 from app.pipeline.estimate import expected_seconds, remaining_seconds
 from app.pipeline.events import publish_status
+from app.pipeline.jobs import cancel_lecture_jobs
 from app.pipeline.runner import get_step
 from app.pipeline.stages import discard_operation_objects, lock_operation_objects
 from app.pipeline.tasks import (
     PLANS,
     QUEUE_UNAVAILABLE,
     REGENERATION_STEPS,
-    cancel_lecture_job,
-    cancel_quiz_job,
-    cancel_regeneration_job,
     enqueue_lecture,
     enqueue_quiz,
     enqueue_regeneration,
@@ -362,12 +360,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     await session.execute(delete(Lecture).where(Lecture.id == lecture_id))
     await session.commit()
 
-    try:
-        await cancel_lecture_job(lecture_id)
-        await cancel_quiz_job(lecture_id)
-        await cancel_regeneration_job(lecture_id)
-    except (OSError, RedisError):
-        pass
+    await cancel_lecture_jobs([lecture_id])
     await asyncio.to_thread(remove_files, files)
     await discard_operation_objects(stt_objects)
 

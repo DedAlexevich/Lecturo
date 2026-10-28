@@ -3,6 +3,7 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from arq.connections import RedisSettings
 from sqlalchemy import func, select
 
 from app.api import lectures as lectures_api
@@ -22,7 +23,7 @@ from app.models import (
     UsageEntry,
     User,
 )
-from app.pipeline import stages
+from app.pipeline import jobs, stages
 from app.pipeline.download import LinkError, LinkInfo
 from app.services import quota
 
@@ -441,11 +442,10 @@ async def test_add_link_ignores_same_link_of_other_user(client, stranger, auth_h
 def cancelled(monkeypatch):
     calls = []
 
-    async def fake_cancel(lecture_id):
-        calls.append(lecture_id)
-        return True
+    async def fake_cancel(lecture_ids):
+        calls.extend(lecture_ids)
 
-    monkeypatch.setattr(lectures_api, "cancel_lecture_job", fake_cancel)
+    monkeypatch.setattr(lectures_api, "cancel_lecture_jobs", fake_cancel)
     return calls
 
 
@@ -658,10 +658,7 @@ async def test_delete_retried_lecture_keeps_usage(client, user, auth_headers, ca
 
 
 async def test_delete_works_when_queue_is_down(client, user, auth_headers, monkeypatch):
-    async def queue_down(lecture_id):
-        raise ConnectionError("redis недоступен")
-
-    monkeypatch.setattr(lectures_api, "cancel_lecture_job", queue_down)
+    monkeypatch.setattr(jobs, "queue_settings", lambda: RedisSettings(port=1, conn_retries=0))
     lecture = await create_own_lecture(user)
 
     response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)

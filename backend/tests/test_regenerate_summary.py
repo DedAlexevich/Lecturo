@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import func, select, update
@@ -20,6 +22,7 @@ from app.models import (
     User,
 )
 from app.pipeline import summarize, tasks
+from app.pipeline.runner import STEP_ERRORS
 from tests.conftest import notifications
 from tests.test_summarize import FailingReduceLLM, ScriptedLLM
 
@@ -289,6 +292,96 @@ async def test_unexpected_error_restores_ready_state(
     assert content == "Старый конспект"
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.done
+    assert await notifications(lecture.id) == [
+        (NotificationKind.regenerate, NotificationOutcome.failed)
+    ]
+
+
+async def test_cancelled_regeneration_is_redone_on_retry(
+    client, user, auth_headers, queue, monkeypatch
+):
+    monkeypatch.setattr(summarize, "get_llm", ScriptedLLM)
+    lecture = await create_lecture(user)
+    await client.post(url(lecture), headers=auth_headers)
+    calls = []
+    summarize_step = tasks.HANDLERS[StepName.summarize]
+    embed_step = tasks.HANDLERS[StepName.embed]
+
+    async def tracked_summarize(session, lecture, report):
+        calls.append(StepName.summarize)
+        await summarize_step(session, lecture, report)
+
+    async def cancelled_once(session, lecture, report):
+        calls.append(StepName.embed)
+        if calls.count(StepName.embed) == 1:
+            raise asyncio.CancelledError
+        await embed_step(session, lecture, report)
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.summarize, tracked_summarize)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.embed, cancelled_once)
+
+    with pytest.raises(asyncio.CancelledError):
+        await tasks.process_regeneration({}, str(lecture.id))
+
+    assert await lecture_status(lecture.id) == LectureStatus.processing
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.embed].status != StepStatus.done
+    assert await notifications(lecture.id) == []
+
+    assert await tasks.process_regeneration({}, str(lecture.id)) == StepStatus.done
+
+    assert calls == [StepName.summarize, StepName.embed, StepName.summarize, StepName.embed]
+    assert await lecture_status(lecture.id) == LectureStatus.ready
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.summarize].status == StepStatus.done
+    assert steps[StepName.embed].status == StepStatus.done
+    assert steps[StepName.embed].attempts == 3
+
+
+async def test_embed_failure_is_reported_in_ready_event(
+    client, user, auth_headers, queue, monkeypatch
+):
+    monkeypatch.setattr(summarize, "get_llm", ScriptedLLM)
+    lecture = await create_lecture(user)
+    await client.post(url(lecture), headers=auth_headers)
+    published = []
+
+    async def broken_embed(session, lecture, report):
+        raise RuntimeError("эмбеддинги недоступны")
+
+    async def record(lecture_id, user_id, status, error=None):
+        published.append((status, error))
+
+    monkeypatch.setitem(tasks.HANDLERS, StepName.embed, broken_embed)
+    monkeypatch.setattr(tasks, "publish_status", record)
+
+    assert await tasks.process_regeneration({}, str(lecture.id)) == StepStatus.failed
+
+    assert published == [(LectureStatus.ready, STEP_ERRORS[StepName.embed])]
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.summarize].status == StepStatus.done
+    assert steps[StepName.embed].status == StepStatus.failed
+
+
+async def test_timed_out_regeneration_restores_ready_state(
+    client, user, auth_headers, queue, monkeypatch
+):
+    monkeypatch.setattr(summarize, "get_llm", ScriptedLLM)
+    lecture = await create_lecture(user)
+    await client.post(url(lecture), headers=auth_headers)
+
+    async def endless(session, lecture, report):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(tasks, "REGENERATION_TIMEOUT_SEC", 0.5)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.embed, endless)
+
+    with pytest.raises(TimeoutError):
+        await tasks.process_regeneration({}, str(lecture.id))
+
+    assert await lecture_status(lecture.id) == LectureStatus.ready
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.embed].status == StepStatus.failed
     assert await notifications(lecture.id) == [
         (NotificationKind.regenerate, NotificationOutcome.failed)
     ]
