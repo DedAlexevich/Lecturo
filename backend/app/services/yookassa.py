@@ -194,7 +194,7 @@ async def create_payment(
     email = user.email or (normalize_email(receipt_email) if receipt_email else None)
     if not email:
         raise PaymentError("Для чека нужен email: укажите адрес, на который отправить чек")
-    code = promo.normalize_code(promo_code) if promo_code else None
+    code = promo.normalize_code(promo_code or "") or None
     payment = await find_by_key(session, user_id, idempotence_key)
     if payment is None:
         price = product.price_rub * 100

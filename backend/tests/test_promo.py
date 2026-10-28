@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -149,6 +150,17 @@ async def test_failed_attempts_are_limited(client: AsyncClient, user: User, code
     blocked = await apply(client, user, promo.code)
 
     assert blocked.status_code == 429
+
+
+async def test_parallel_attempts_do_not_bypass_limit(client: AsyncClient, user: User):
+    limit = get_settings().promo_rate_limit
+
+    responses = await asyncio.gather(
+        *(apply(client, user, f"WRONG{i:03d}") for i in range(limit + 5))
+    )
+
+    codes = sorted(response.status_code for response in responses)
+    assert codes == [422] * limit + [429] * 5
 
 
 async def test_discount_code_is_only_checked_without_payment(

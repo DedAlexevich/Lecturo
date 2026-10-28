@@ -23,7 +23,7 @@ from app.schemas.billing import (
 from app.schemas.promo import PromoIn, PromoOut
 from app.services import business_events, promo, quota, yookassa
 from app.services.admin_alerts import report_webhook_error
-from app.services.rate_limit import count_failure, ensure_below_limit
+from app.services.rate_limit import enforce_rate_limit, reset_rate_limit
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
@@ -72,8 +72,9 @@ async def create_payment(
     if product is None:
         raise HTTPException(422, "Нет такого тарифа")
     return_url = resolve_return_url(body.return_url)
-    if body.promo_code:
-        await ensure_promo_attempts(user.id)
+    promo_code = promo.normalize_code(body.promo_code or "") or None
+    if promo_code:
+        await count_promo_attempt(user.id)
     try:
         client = yookassa_factory()
     except ValueError as error:
@@ -88,10 +89,9 @@ async def create_payment(
             return_url,
             get_settings(),
             body.receipt_email,
-            body.promo_code,
+            promo_code,
         )
     except promo.PromoError as error:
-        await count_promo_failure(user.id)
         raise HTTPException(422, str(error)) from error
     except yookassa.IdempotenceKeyConflict as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
@@ -102,6 +102,8 @@ async def create_payment(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Не удалось создать платёж, попробуйте позже"
         ) from error
+    if promo_code:
+        await forget_promo_attempts(user.id)
     await business_events.record_event(
         BusinessEventKind.payment_created,
         user,
@@ -117,18 +119,19 @@ def promo_attempts_key(user_id: uuid.UUID) -> str:
     return f"rate:promo:{user_id}"
 
 
-async def ensure_promo_attempts(user_id: uuid.UUID) -> None:
+async def count_promo_attempt(user_id: uuid.UUID) -> None:
     settings = get_settings()
-    await ensure_below_limit(
-        settings.redis_url, promo_attempts_key(user_id), settings.promo_rate_limit
+    await enforce_rate_limit(
+        settings.redis_url,
+        promo_attempts_key(user_id),
+        settings.promo_rate_limit,
+        settings.promo_rate_window_seconds,
+        "Слишком много попыток ввести промокод, попробуйте позже",
     )
 
 
-async def count_promo_failure(user_id: uuid.UUID) -> None:
-    settings = get_settings()
-    await count_failure(
-        settings.redis_url, promo_attempts_key(user_id), settings.promo_rate_window_seconds
-    )
+async def forget_promo_attempts(user_id: uuid.UUID) -> None:
+    await reset_rate_limit(get_settings().redis_url, promo_attempts_key(user_id))
 
 
 @router.post(
@@ -140,13 +143,14 @@ async def count_promo_failure(user_id: uuid.UUID) -> None:
 )
 async def apply_promo(body: PromoIn, user: CurrentUser, session: SessionDep) -> PromoOut:
     user_id = user.id
-    await ensure_promo_attempts(user_id)
+    await count_promo_attempt(user_id)
     try:
-        return await promo.apply_code(session, user, body.code)
+        result = await promo.apply_code(session, user, body.code)
     except promo.PromoError as error:
         await session.rollback()
-        await count_promo_failure(user_id)
         raise HTTPException(422, str(error)) from error
+    await forget_promo_attempts(user_id)
+    return result
 
 
 @router.get("/payments")
