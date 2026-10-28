@@ -4591,6 +4591,103 @@
         ]
       }
     },
+    "/api/v1/admin/alerts/settings": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Alert Settings",
+        "operationId": "get_alert_settings_api_v1_admin_alerts_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSettingsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Put Alert Settings",
+        "operationId": "put_alert_settings_api_v1_admin_alerts_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/alerts/test": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Send Test Alert",
+        "operationId": "send_test_alert_api_v1_admin_alerts_test_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "409": {
+            "description": "Telegram не привязан или бот не запущен"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/maintenance": {
       "get": {
         "tags": [
@@ -5160,7 +5257,8 @@
           "hours_granted",
           "subscription_extended",
           "user_blocked",
-          "user_unblocked"
+          "user_unblocked",
+          "alert_settings_changed"
         ],
         "title": "AdminAction"
       },
@@ -5230,6 +5328,75 @@
           "reason"
         ],
         "title": "AdminReasonIn"
+      },
+      "AlertKind": {
+        "type": "string",
+        "enum": [
+          "service_down",
+          "queue_stalled",
+          "disk_low",
+          "memory_low",
+          "backup",
+          "payment",
+          "webhook_error"
+        ],
+        "title": "AlertKind"
+      },
+      "AlertSettingsIn": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/AlertKind"
+            },
+            "type": "array",
+            "title": "Kinds"
+          },
+          "recoveries": {
+            "type": "boolean",
+            "title": "Recoveries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "kinds",
+          "recoveries"
+        ],
+        "title": "AlertSettingsIn"
+      },
+      "AlertSettingsOut": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "kinds": {
+            "items": {
+              "$ref": "#/components/schemas/AlertKind"
+            },
+            "type": "array",
+            "title": "Kinds"
+          },
+          "recoveries": {
+            "type": "boolean",
+            "title": "Recoveries"
+          },
+          "telegram": {
+            "$ref": "#/components/schemas/TelegramNotifications"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled",
+          "kinds",
+          "recoveries",
+          "telegram"
+        ],
+        "title": "AlertSettingsOut"
       },
       "AuditEntryOut": {
         "properties": {

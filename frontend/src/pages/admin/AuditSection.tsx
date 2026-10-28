@@ -27,12 +27,14 @@ const actionLabels: Record<AdminAction, string> = {
   subscription_extended: "Продлил подписку",
   user_blocked: "Заблокировал аккаунт",
   user_unblocked: "Разблокировал аккаунт",
+  alert_settings_changed: "Изменил свои настройки алертов",
 };
 
 const sourceLabels: Record<string, string> = {
   panel: "В панели",
   cli: "Командой на сервере",
   env: "Через INITIAL_ADMINS",
+  bot: "В боте",
 };
 
 const dateTime = new Intl.DateTimeFormat("ru-RU", {

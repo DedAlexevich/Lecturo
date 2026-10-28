@@ -1412,6 +1412,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/alerts/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Alert Settings */
+        get: operations["get_alert_settings_api_v1_admin_alerts_settings_get"];
+        /** Put Alert Settings */
+        put: operations["put_alert_settings_api_v1_admin_alerts_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/alerts/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send Test Alert */
+        post: operations["send_test_alert_api_v1_admin_alerts_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/maintenance": {
         parameters: {
             query?: never;
@@ -1581,7 +1616,7 @@ export interface components {
          * AdminAction
          * @enum {string}
          */
-        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked";
+        AdminAction: "admin_granted" | "admin_revoked" | "logs_stream_started" | "lecture_retried" | "backup_downloaded" | "backup_created" | "backup_create_failed" | "backup_uploaded" | "backup_deleted" | "backup_upload_rejected" | "restore_started" | "restore_finished" | "restore_failed" | "restore_denied" | "maintenance_disabled" | "users_searched" | "user_viewed" | "hours_granted" | "subscription_extended" | "user_blocked" | "user_unblocked" | "alert_settings_changed";
         /** AdminGrantIn */
         AdminGrantIn: {
             /** Identifier */
@@ -1608,6 +1643,30 @@ export interface components {
         AdminReasonIn: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * AlertKind
+         * @enum {string}
+         */
+        AlertKind: "service_down" | "queue_stalled" | "disk_low" | "memory_low" | "backup" | "payment" | "webhook_error";
+        /** AlertSettingsIn */
+        AlertSettingsIn: {
+            /** Enabled */
+            enabled: boolean;
+            /** Kinds */
+            kinds: components["schemas"]["AlertKind"][];
+            /** Recoveries */
+            recoveries: boolean;
+        };
+        /** AlertSettingsOut */
+        AlertSettingsOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Kinds */
+            kinds: components["schemas"]["AlertKind"][];
+            /** Recoveries */
+            recoveries: boolean;
+            telegram: components["schemas"]["TelegramNotifications"];
         };
         /** AuditEntryOut */
         AuditEntryOut: {
@@ -6245,6 +6304,86 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_alert_settings_api_v1_admin_alerts_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSettingsOut"];
+                };
+            };
+        };
+    };
+    put_alert_settings_api_v1_admin_alerts_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_alert_api_v1_admin_alerts_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Telegram не привязан или бот не запущен */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

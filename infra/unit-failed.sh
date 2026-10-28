@@ -8,4 +8,8 @@ if [ -n "$invocation" ]; then
 else
   log=$(journalctl -u "$unit" -n 20 --no-pager -o cat 2>&1 | tail -c 3000 || true)
 fi
-exec "$(dirname "$0")/notify.sh" "$(printf 'Lecturo: сбой %s на %s\n\n%s' "$unit" "$(hostname)" "$log")"
+kind=service_down
+case $unit in
+  *backup*) kind=backup ;;
+esac
+exec "$(dirname "$0")/alert.sh" "$kind" "$unit" event "$(printf 'Lecturo: сбой %s на %s\n\n%s' "$unit" "$(hostname)" "$log")"

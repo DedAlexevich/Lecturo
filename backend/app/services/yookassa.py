@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.pipeline.retention import extend_video_retention
 from app.schemas.billing import PaymentOut, ProductOut
+from app.services.admin_alerts import report_payment
 from app.services.auth import normalize_email
 from app.services.quota import list_products
 
@@ -418,6 +419,7 @@ async def process_refund(
             await revoke_package(session, payment)
     payment.status = PaymentStatus.refunded
     payment.raw = stored_raw(remote)
+    report_payment(session, payment, refund=True)
     await session.commit()
     return payment
 
@@ -444,6 +446,8 @@ async def process_notification(
         return payment
     if status == PaymentStatus.succeeded:
         await apply_succeeded(session, payment, remote, now or datetime.now(UTC), settings)
+        if payment.status == PaymentStatus.succeeded:
+            report_payment(session, payment, refund=False)
     elif status == PaymentStatus.canceled:
         payment.status = PaymentStatus.canceled
         payment.raw = stored_raw(remote)

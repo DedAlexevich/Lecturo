@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from redis.asyncio import Redis
 
+from app.alerts import admin_alerts_loop, build_alerts_router
 from app.config import load_settings
 from app.handlers import build_router
 from app.heartbeat import heartbeat_loop
@@ -45,6 +46,7 @@ async def run() -> None:
     pool = await connect(settings.database_url)
     bot = Bot(settings.token)
     dispatcher = Dispatcher()
+    dispatcher.include_router(build_alerts_router(pool, settings.admin_alert_interval))
     dispatcher.include_router(build_router(settings.public_url, pool))
     redis = Redis.from_url(settings.bot_redis_url)
     tasks = [heartbeat]
@@ -64,6 +66,9 @@ async def run() -> None:
                 name="quotas",
             ),
             asyncio.create_task(legal_notices_loop(pool, redis, bot), name="legal-notices"),
+            asyncio.create_task(
+                admin_alerts_loop(pool, bot, settings.admin_alert_interval), name="admin-alerts"
+            ),
         ]
     try:
         await bot.set_my_commands([BotCommand(command="start", description="Открыть Lecturo")])
