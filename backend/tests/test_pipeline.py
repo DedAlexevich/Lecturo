@@ -697,7 +697,7 @@ async def test_link_lecture_charges_downloaded_duration(user, sample_audio, monk
     async def allow(url):
         pass
 
-    def fake_fetch(url, target, progress):
+    def fake_fetch(url, target, progress, stop):
         path = target.with_suffix(".opus")
         shutil.copy(sample_audio, path)
         return path

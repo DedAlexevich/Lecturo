@@ -1,5 +1,7 @@
+import asyncio
 import functools
 import threading
+import time
 import uuid
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -413,7 +415,7 @@ async def test_download_saves_audio_path(public_host, probed_duration, monkeypat
     download.get_settings.cache_clear()
     calls = []
 
-    def fake_fetch(url, target, progress):
+    def fake_fetch(url, target, progress, stop):
         calls.append(url)
         progress["fraction"] = 1.0
         return target.with_suffix(".opus")
@@ -471,7 +473,7 @@ def storage(monkeypatch, tmp_path):
     download.get_settings.cache_clear()
 
 
-def fetch_file(url, target, progress):
+def fetch_file(url, target, progress, stop):
     path = target.with_suffix(".opus")
     path.write_bytes(b"opus")
     return path
@@ -518,7 +520,7 @@ async def test_download_removes_audio_when_duration_unknown(public_host, monkeyp
 
 
 async def test_download_removes_partial_files_on_error(public_host, monkeypatch, storage):
-    def failing_fetch(url, target, progress):
+    def failing_fetch(url, target, progress, stop):
         target.with_suffix(".webm.part").write_bytes(b"part")
         raise LinkError("Файл по ссылке больше 2 ГБ")
 
@@ -528,6 +530,62 @@ async def test_download_removes_partial_files_on_error(public_host, monkeypatch,
         await download.download(None, link_lecture(), no_report)
 
     assert not list((storage / "audio").iterdir())
+
+
+class EndlessYoutubeDL:
+    def __init__(self, options, started: threading.Event, finished: threading.Event):
+        self.options = options
+        self.started = started
+        self.finished = finished
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def download(self, urls):
+        partial = Path(self.options["outtmpl"].replace("%(ext)s", "webm.part"))
+        status = {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 4096}
+        try:
+            while True:
+                partial.write_bytes(b"part")
+                for hook in self.options["progress_hooks"]:
+                    hook(status)
+                self.started.set()
+                time.sleep(0.01)
+        finally:
+            self.finished.set()
+
+
+async def test_cancelled_download_stops_and_removes_files(public_host, monkeypatch, storage):
+    started = threading.Event()
+    finished = threading.Event()
+    monkeypatch.setattr(
+        download, "PublicYoutubeDL", lambda options: EndlessYoutubeDL(options, started, finished)
+    )
+    monkeypatch.setattr(download, "PROGRESS_INTERVAL_SEC", 0.01)
+
+    downloading = asyncio.create_task(download.download(None, link_lecture(), no_report))
+    assert await asyncio.to_thread(started.wait, 10)
+    downloading.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await downloading
+    assert finished.is_set()
+    assert not list((storage / "audio").iterdir())
+
+
+def test_fetch_audio_stops_when_asked(monkeypatch, tmp_path):
+    status = {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 4096}
+    monkeypatch.setattr(
+        download, "PublicYoutubeDL", lambda options: FakeYoutubeDL(options, True, [status])
+    )
+    stop = threading.Event()
+    stop.set()
+
+    with pytest.raises(download.DownloadStopped):
+        download.fetch_audio("https://vkvideo.ru/video-1_2", tmp_path / "lecture", {}, stop)
 
 
 def test_link_requests_have_timeouts_and_limited_retries():
@@ -564,12 +622,12 @@ def test_fetch_audio_requires_downloaded_file(monkeypatch, tmp_path, creates_fil
     target = tmp_path / "lecture"
 
     if creates_file:
-        assert download.fetch_audio("https://vkvideo.ru/video-1_2", target, {}) == (
-            tmp_path / "lecture.opus"
-        )
+        assert download.fetch_audio(
+            "https://vkvideo.ru/video-1_2", target, {}, threading.Event()
+        ) == (tmp_path / "lecture.opus")
     else:
         with pytest.raises(RuntimeError, match="не скачалось"):
-            download.fetch_audio("https://vkvideo.ru/video-1_2", target, {})
+            download.fetch_audio("https://vkvideo.ru/video-1_2", target, {}, threading.Event())
 
 
 @pytest.fixture
@@ -623,7 +681,9 @@ def test_fetch_audio_uses_proxy_for_youtube(monkeypatch, tmp_path, youtube_proxy
         return FakeYoutubeDL(options, True)
 
     monkeypatch.setattr(download, "PublicYoutubeDL", fake_ydl)
-    download.fetch_audio("https://youtu.be/dQw4w9WgXcQ", tmp_path / "lecture", {})
+    download.fetch_audio(
+        "https://youtu.be/dQw4w9WgXcQ", tmp_path / "lecture", {}, threading.Event()
+    )
 
     assert used[0]["proxy"] == youtube_proxy
     assert used[0]["format"].endswith("/bestaudio/best")
@@ -643,7 +703,9 @@ def test_fetch_audio_stops_on_too_large_file(monkeypatch, tmp_path, status):
     )
 
     with pytest.raises(LinkError, match="больше 2 ГБ"):
-        download.fetch_audio("https://vkvideo.ru/video-1_2", tmp_path / "lecture", {})
+        download.fetch_audio(
+            "https://vkvideo.ru/video-1_2", tmp_path / "lecture", {}, threading.Event()
+        )
 
 
 def test_fetch_audio_stops_on_slow_download(monkeypatch, tmp_path):
@@ -654,7 +716,9 @@ def test_fetch_audio_stops_on_slow_download(monkeypatch, tmp_path):
     )
 
     with pytest.raises(LinkError, match="больше часа"):
-        download.fetch_audio("https://vkvideo.ru/video-1_2", tmp_path / "lecture", {})
+        download.fetch_audio(
+            "https://vkvideo.ru/video-1_2", tmp_path / "lecture", {}, threading.Event()
+        )
 
 
 def write_wav(path: Path, seconds: int = 1) -> Path:
@@ -739,7 +803,9 @@ def test_real_download_stops_on_size_limit(media_hosts, monkeypatch, tmp_path):
     monkeypatch.setattr(download, "MAX_DOWNLOAD_BYTES", 4096)
 
     with pytest.raises(LinkError, match="больше 2 ГБ"):
-        download.fetch_audio(media_hosts + "/lecture.wav", tmp_path / "downloaded", {})
+        download.fetch_audio(
+            media_hosts + "/lecture.wav", tmp_path / "downloaded", {}, threading.Event()
+        )
 
 
 def test_public_connection_keeps_host_name(monkeypatch):

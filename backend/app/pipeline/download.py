@@ -3,6 +3,7 @@ import ipaddress
 import logging
 import re
 import socket
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,6 +132,10 @@ class PublicRequestsRH(RequestsRH):
                 "https": PublicHTTPSConnectionPool,
             }
         return session
+
+
+class DownloadStopped(Exception):
+    pass
 
 
 class PublicYoutubeDL(YoutubeDL):
@@ -360,10 +365,15 @@ async def inspect_link(url: str) -> LinkInfo:
     return LinkInfo(title=title, duration=float(duration), embed_url=embed_url)
 
 
-def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
+def fetch_audio(url: str, target: Path, progress: dict[str, float], stop: threading.Event) -> Path:
     deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SEC
 
+    def check_stop(status: dict[str, Any]) -> None:
+        if stop.is_set():
+            raise DownloadStopped
+
     def on_progress(status: dict[str, Any]) -> None:
+        check_stop(status)
         if status["status"] != "downloading":
             return
         total = status.get("total_bytes") or status.get("total_bytes_estimate")
@@ -379,6 +389,7 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
         **ydl_options(url),
         "outtmpl": f"{target}.%(ext)s",
         "progress_hooks": [on_progress],
+        "postprocessor_hooks": [check_stop],
         "postprocessors": [
             {"key": "FFmpegExtractAudio", "preferredcodec": "opus", "preferredquality": "48"}
         ],
@@ -410,10 +421,17 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     await asyncio.to_thread(audio_dir.mkdir, parents=True, exist_ok=True)
     target = audio_dir / str(lecture.id)
     progress = {"fraction": 0.0}
-    fetching = asyncio.create_task(asyncio.to_thread(fetch_audio, url, target, progress))
-    while not fetching.done():
-        await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
-        await report(progress["fraction"])
+    stop = threading.Event()
+    fetching = asyncio.create_task(asyncio.to_thread(fetch_audio, url, target, progress, stop))
+    try:
+        while not fetching.done():
+            await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
+            await report(progress["fraction"])
+    except asyncio.CancelledError:
+        stop.set()
+        await asyncio.wait({fetching})
+        await asyncio.to_thread(remove_partial, target)
+        raise
     try:
         audio_path = fetching.result()
     except Exception as error:
