@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test:telegram": "node tests/telegram.mjs",
-    "test:local": "node --test tests/local-export.test.mjs tests/local-delivery.test.mjs tests/local-llm.test.mjs tests/local-whisper.test.mjs tests/local-gpu.test.mjs tests/transcript-groups.test.mjs tests/summary-markdown.test.mjs tests/menu-placement.test.mjs tests/transcript-sentences.test.mjs tests/quiz-progress.test.mjs tests/processing-view.test.mjs tests/zoomer.test.mjs tests/copy-intent.test.mjs tests/id.test.mjs tests/search-highlight.test.mjs tests/chat-scroll.test.mjs",
+    "test:local": "node --test tests/local-export.test.mjs tests/local-delivery.test.mjs tests/local-llm.test.mjs tests/local-whisper.test.mjs tests/local-gpu.test.mjs tests/transcript-groups.test.mjs tests/summary-markdown.test.mjs tests/menu-placement.test.mjs tests/transcript-sentences.test.mjs tests/quiz-progress.test.mjs tests/processing-view.test.mjs tests/zoomer.test.mjs tests/copy-intent.test.mjs tests/id.test.mjs tests/search-highlight.test.mjs tests/chat-scroll.test.mjs tests/preload-reload.test.mjs",
     "check:comments": "node scripts/check-comments.mjs src",
     "gen:api": "openapi-typescript ../backend/openapi.json -o src/api/schema.d.ts"
   },

@@ -1,7 +1,9 @@
-import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { api } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
+import { lectureStatusQueryKey } from "../lecture/useLecture";
 
 export type Lecture = components["schemas"]["LectureOut"];
 export type LectureStatus = components["schemas"]["LectureStatus"];
@@ -16,14 +18,9 @@ export function isActive(status: LectureStatus) {
   return activeStatuses.includes(status);
 }
 
-function pollWhileActive(lectures: Lecture[] | undefined) {
-  return lectures?.some((lecture) => isActive(lecture.status)) ? pollInterval : false;
-}
-
 export function useLectures(courseId: string | null) {
   return useQuery({
     queryKey: courseId ? ["courses", courseId, "lectures"] : ["lectures"],
-    refetchInterval: (query) => pollWhileActive(query.state.data),
     queryFn: async () => {
       if (courseId) {
         const { data, error, response } = await api.GET("/api/v1/courses/{course_id}/lectures", {
@@ -55,13 +52,18 @@ function isUnavailable(error: Error | null) {
 }
 
 export function useProgress(lectures: Lecture[]) {
+  const queryClient = useQueryClient();
   const active = lectures.filter((lecture) => isActive(lecture.status));
   const results = useQueries({
     queries: active.map((lecture) =>
       queryOptions({
-        queryKey: ["lectures", lecture.id, "status"],
+        queryKey: lectureStatusQueryKey(lecture.id),
         retry: false,
-        refetchInterval: (query) => (isUnavailable(query.state.error) ? false : pollInterval),
+        refetchInterval: (query) => {
+          if (isUnavailable(query.state.error)) return false;
+          const polled = query.state.data;
+          return polled && !isActive(polled.status) ? false : pollInterval;
+        },
         queryFn: async () => {
           const { data, error, response } = await api.GET("/api/v1/lectures/{lecture_id}/status", {
             params: { path: { lecture_id: lecture.id } },
@@ -74,8 +76,24 @@ export function useProgress(lectures: Lecture[]) {
   });
 
   const progress = new Map<string, LectureProgress>();
+  const changed: string[] = [];
   results.forEach((result, index) => {
-    if (result.data) progress.set(active[index].id, result.data);
+    const lecture = active[index];
+    if (!result.data) return;
+    progress.set(lecture.id, result.data);
+    if (result.data.status !== lecture.status) changed.push(`${lecture.id}:${result.data.status}`);
   });
+
+  const changes = changed.join(",");
+  const requested = useRef("");
+  useEffect(() => {
+    if (changes === "" || changes === requested.current) return;
+    requested.current = changes;
+    void queryClient.invalidateQueries({ queryKey: ["lectures"], exact: true });
+    void queryClient.invalidateQueries({
+      predicate: (query) => query.queryKey[0] === "courses" && query.queryKey[2] === "lectures",
+    });
+  }, [changes, queryClient]);
+
   return progress;
 }
