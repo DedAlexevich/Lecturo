@@ -169,7 +169,7 @@ async def test_same_key_of_two_users_creates_two_payments(client, user, auth_hea
 
     assert first.status_code == second.status_code == 200
     assert first.json()["id"] != second.json()["id"]
-    sent_keys = {request.headers["Idempotence-Key"] for request in fake.requests}
+    sent_keys = {sent.headers["Idempotence-Key"] for sent in fake.requests}
     assert len(sent_keys) == 2
     assert "key-shared" not in sent_keys
 
