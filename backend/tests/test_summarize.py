@@ -15,6 +15,7 @@ from app.pipeline.summarize import (
     split_into_parts,
     split_oversized,
 )
+from app.providers.openai_compat import OpenAICompatibleTruncated
 
 
 def make_segments(bounds: list[tuple[float, float]]) -> list[TranscriptSegment]:
@@ -203,21 +204,25 @@ async def test_failed_reduce_keeps_previous_chapters(user, monkeypatch):
 
 
 class BrokenMapLLM(ScriptedLLM):
-    def __init__(self, broken_answers: int) -> None:
+    def __init__(self, broken_answers: int, truncated: bool = False) -> None:
         super().__init__()
         self.broken_answers = broken_answers
+        self.truncated = truncated
         self.map_calls = 0
 
     async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
         if "фрагмент расшифровки" in system and user.startswith("[900]"):
             self.map_calls += 1
             if self.map_calls <= self.broken_answers:
+                if self.truncated:
+                    raise OpenAICompatibleTruncated("ответ обрезан")
                 return "не JSON"
         return await super().complete(system, user, json_mode=json_mode)
 
 
-async def test_broken_map_answer_is_retried_once():
-    llm = BrokenMapLLM(1)
+@pytest.mark.parametrize("truncated", [False, True])
+async def test_broken_map_answer_is_retried_once(truncated: bool):
+    llm = BrokenMapLLM(1, truncated)
     part = minute_segments(30)[15:]
 
     digest = await summarize.request_digest(llm, part)
@@ -227,8 +232,11 @@ async def test_broken_map_answer_is_retried_once():
     assert (digest.start, digest.end) == (900, 1799)
 
 
-async def test_part_is_not_lost_after_two_broken_map_answers(user, monkeypatch, caplog):
-    llm = BrokenMapLLM(2)
+@pytest.mark.parametrize("truncated", [False, True])
+async def test_part_is_not_lost_after_two_broken_map_answers(
+    user, monkeypatch, caplog, truncated: bool
+):
+    llm = BrokenMapLLM(2, truncated)
     monkeypatch.setattr(summarize, "get_llm", lambda: llm)
     lecture = await create_transcribed_lecture(user, 60)
 

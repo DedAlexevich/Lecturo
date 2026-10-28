@@ -19,6 +19,7 @@ from app.models import Chapter, Lecture, Summary, TranscriptSegment
 from app.pipeline.runner import Report
 from app.pipeline.stages import load_segments, require_ai_transfer
 from app.providers import LLM, get_llm
+from app.providers.openai_compat import OpenAICompatibleTruncated
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 PART_SECONDS = 15 * 60.0
@@ -262,7 +263,7 @@ async def complete_json(llm: LLM, system: str, user: str, attempts: int) -> dict
     for _ in range(attempts):
         try:
             return parse_json(await llm.complete(system, user, json_mode=True))
-        except ValueError:
+        except (ValueError, OpenAICompatibleTruncated):
             continue
     return {}
 
