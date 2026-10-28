@@ -6,11 +6,10 @@ import pytest
 from sqlalchemy import delete, select
 
 from app.core.db import SessionLocal
-from app.models import AuthProvider, QuotaCarryover, UsageEntry, UsageSource, User
+from app.models import AuthIdentity, AuthProvider, QuotaCarryover, UsageEntry, UsageSource, User
 from app.services import quota
 from app.services.account import delete_account
 from app.services.auth import register_user
-from app.services.legal import read_document
 from app.services.telegram_auth import get_or_create_telegram_user
 from tests.test_telegram_auth import CONSENTS
 
@@ -19,7 +18,7 @@ USED_SEC = 3600
 
 @pytest.fixture
 def policy_in_force(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(quota, "today", lambda: read_document("privacy").effective_date)
+    monkeypatch.setattr(quota, "today", lambda: quota.CARRYOVER_FROM)
 
 
 @pytest.fixture
@@ -99,9 +98,7 @@ async def test_telegram_signup_after_deletion_keeps_weekly_usage(policy_in_force
 
 
 async def test_nothing_kept_before_policy_takes_effect(monkeypatch, created):
-    monkeypatch.setattr(
-        quota, "today", lambda: read_document("privacy").effective_date - timedelta(days=1)
-    )
+    monkeypatch.setattr(quota, "today", lambda: quota.CARRYOVER_FROM - timedelta(days=1))
     email = new_email()
     async with SessionLocal() as session:
         first = await register_user(session, email, "пароль-первый", "Первый")
@@ -144,3 +141,32 @@ async def test_expired_carryover_is_ignored_and_deleted(created):
                 select(QuotaCarryover).where(QuotaCarryover.identity_hash == expired)
             )
         ) is None
+
+
+async def test_every_sign_in_method_keeps_weekly_usage(policy_in_force, created):
+    email = new_email().lower()
+    telegram_id = uuid.uuid4().int % 10**9 + 10**9
+    async with SessionLocal() as session:
+        first = await register_user(session, email, "пароль-первый", "Первый")
+        session.add(
+            AuthIdentity(
+                user_id=first.id, provider=AuthProvider.telegram, provider_user_id=str(telegram_id)
+            )
+        )
+        await session.commit()
+    await spend_and_delete(first.id)
+
+    assert await stored_carryover(AuthProvider.email, email) is not None
+    async with SessionLocal() as session:
+        second = await get_or_create_telegram_user(
+            session, telegram_id, {"first_name": "Иван"}, **CONSENTS
+        )
+    created.append(second.id)
+    assert await weekly_used(second.id) == USED_SEC
+    async with SessionLocal() as session:
+        await session.execute(
+            delete(QuotaCarryover).where(
+                QuotaCarryover.identity_hash == quota.identity_hash(AuthProvider.email, email)
+            )
+        )
+        await session.commit()
