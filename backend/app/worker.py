@@ -24,6 +24,7 @@ from app.providers import get_embeddings, get_llm
 from app.providers.openai_compat import OpenAICompatibleEmbeddings, OpenAICompatibleUnavailable
 from app.providers.yandex import YandexEmbeddings
 from app.services.legal_notices import process_legal_revisions
+from app.services.quota import delete_expired_carryovers
 
 logger = logging.getLogger(__name__)
 
@@ -76,5 +77,6 @@ class WorkerSettings:
     cron_jobs = [
         cron(delete_expired_videos, minute=0),
         cron(delete_stale_uploads, minute=30),
+        cron(delete_expired_carryovers, minute=15),
         cron(process_legal_revisions, minute=set(range(0, 60, 10))),
     ]

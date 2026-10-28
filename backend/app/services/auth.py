@@ -9,6 +9,7 @@ from app.core.security import create_access_token
 from app.models import AuthIdentity, AuthProvider, User
 from app.schemas.user import TokenOut
 from app.services.consents import record_signup_consents
+from app.services.quota import carry_weekly_usage
 
 hasher = PasswordHasher()
 missing_user_hash = hasher.hash("missing-user")
@@ -39,12 +40,14 @@ async def register_user(
     record_signup_consents(user)
     session.add(user)
     try:
-        await session.commit()
+        await session.flush()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Пользователь с таким email уже есть"
         ) from None
+    await carry_weekly_usage(session, user, AuthProvider.email, email)
+    await session.commit()
     return user
 
 

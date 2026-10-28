@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 from app.core.redis import get_redis
 from app.models import AuthIdentity, AuthProvider, User
 from app.services.consents import record_signup_consents, require_provider_signup_consents
+from app.services.quota import carry_weekly_usage
 
 STATE_TTL_SECONDS = 10 * 60
 
@@ -140,6 +141,8 @@ async def get_or_create_provider_user(
         )
         session.add(new_user)
         try:
+            await session.flush()
+            await carry_weekly_usage(session, new_user, provider, provider_user_id)
             await session.commit()
             return new_user
         except IntegrityError:
