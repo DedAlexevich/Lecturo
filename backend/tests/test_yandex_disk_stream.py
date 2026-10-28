@@ -14,12 +14,16 @@ DISK_URL = "https://disk.yandex.ru/i/AbCdEf"
 MEDIA_URL = "https://downloader.disk.yandex.ru/disk/lecture.mp4"
 
 
-async def create_link_lecture(owner_id: uuid.UUID, source_url: str = DISK_URL) -> uuid.UUID:
+async def create_link_lecture(
+    owner_id: uuid.UUID,
+    source_url: str = DISK_URL,
+    lecture_status: LectureStatus = LectureStatus.ready,
+) -> uuid.UUID:
     async with SessionLocal() as session:
         lecture = Lecture(
             owner_id=owner_id,
             title="Пределы",
-            status=LectureStatus.ready,
+            status=lecture_status,
             source_type=SourceType.link,
             source_url=source_url,
         )
@@ -56,6 +60,25 @@ async def test_disk_lecture_gets_stream_url(client, user, auth_headers, disk):
     assert redirect.headers["location"] == MEDIA_URL
     assert disk == [DISK_URL]
 
+    assert (await client.get(stream_path(video_url))).headers["location"] == MEDIA_URL
+    assert disk == [DISK_URL]
+
+
+async def test_failed_disk_lecture_has_no_video_url(client, user, auth_headers):
+    lecture_id = await create_link_lecture(user.id, lecture_status=LectureStatus.failed)
+    response = await client.get(f"/api/v1/lectures/{lecture_id}", headers=auth_headers)
+    assert response.json()["video_url"] is None
+
+
+async def test_stream_rejects_foreign_media_host(client, user, monkeypatch):
+    async def resolve(url: str) -> tuple[str, str]:
+        return "lecture.mp4", "https://evil.test/lecture.mp4"
+
+    monkeypatch.setattr(lectures_api, "resolve_yandex_disk", resolve)
+    lecture_id = await create_link_lecture(user.id)
+    response = await client.get(stream_path(signed_stream_url(lecture_id)))
+    assert response.status_code == 502
+
 
 async def test_other_links_have_no_video_url(client, user, auth_headers):
     lecture_id = await create_link_lecture(user.id, "https://www.youtube.com/watch?v=abc")
@@ -79,6 +102,7 @@ async def test_video_signature_does_not_open_stream(client, user, disk):
         params={"expires": expires, "signature": signature},
     )
     assert response.status_code == 403
+    assert disk == []
 
 
 async def test_stream_of_non_disk_lecture_not_found(client, user, disk):
