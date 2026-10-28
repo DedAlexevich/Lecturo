@@ -38,6 +38,7 @@ from app.services.account import lecture_files, remove_files
 
 logger = logging.getLogger(__name__)
 
+REGENERATION_TIMEOUT_SEC = LECTURE_TIMEOUT_SEC
 VIDEO_TIMEOUT_SEC = 2 * 3600
 VIDEO_ATTEMPTS = 5
 VIDEO_RETRY_DELAY_SEC = 300
@@ -148,8 +149,9 @@ async def schedule_after_ready(session: AsyncSession, lecture: Lecture) -> None:
 async def process_regeneration(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
-        await reset_regeneration_steps(lecture_uuid)
-        return await run_regeneration(lecture_uuid)
+        async with asyncio.timeout(REGENERATION_TIMEOUT_SEC):
+            await reset_regeneration_steps(lecture_uuid)
+            return await run_regeneration(lecture_uuid)
     except asyncio.CancelledError:
         raise
     except BaseException:

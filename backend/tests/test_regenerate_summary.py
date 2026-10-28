@@ -361,3 +361,27 @@ async def test_embed_failure_is_reported_in_ready_event(
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.done
     assert steps[StepName.embed].status == StepStatus.failed
+
+
+async def test_timed_out_regeneration_restores_ready_state(
+    client, user, auth_headers, queue, monkeypatch
+):
+    monkeypatch.setattr(summarize, "get_llm", ScriptedLLM)
+    lecture = await create_lecture(user)
+    await client.post(url(lecture), headers=auth_headers)
+
+    async def endless(session, lecture, report):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(tasks, "REGENERATION_TIMEOUT_SEC", 0.5)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.embed, endless)
+
+    with pytest.raises(TimeoutError):
+        await tasks.process_regeneration({}, str(lecture.id))
+
+    assert await lecture_status(lecture.id) == LectureStatus.ready
+    steps = await steps_of(lecture.id)
+    assert steps[StepName.embed].status == StepStatus.failed
+    assert await notifications(lecture.id) == [
+        (NotificationKind.regenerate, NotificationOutcome.failed)
+    ]
