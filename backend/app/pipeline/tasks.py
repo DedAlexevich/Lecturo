@@ -315,18 +315,26 @@ async def refund(lecture_id: uuid.UUID) -> None:
         await session.commit()
 
 
+def queue_settings() -> RedisSettings:
+    settings = RedisSettings.from_dsn(get_settings().redis_url)
+    settings.conn_retries = 0
+    return settings
+
+
+async def enqueue(name: str, job_id: str, *args: str) -> None:
+    redis = await create_pool(queue_settings())
+    try:
+        await redis.enqueue_job(name, *args, _job_id=job_id)
+    finally:
+        await redis.aclose()
+
+
 def lecture_job_id(lecture_id: uuid.UUID) -> str:
     return f"lecture:{lecture_id}"
 
 
 async def enqueue_lecture(lecture_id: uuid.UUID) -> None:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-    try:
-        await redis.enqueue_job(
-            "process_lecture", str(lecture_id), _job_id=lecture_job_id(lecture_id)
-        )
-    finally:
-        await redis.aclose()
+    await enqueue("process_lecture", lecture_job_id(lecture_id), str(lecture_id))
 
 
 def regeneration_job_id(lecture_id: uuid.UUID) -> str:
@@ -334,13 +342,7 @@ def regeneration_job_id(lecture_id: uuid.UUID) -> str:
 
 
 async def enqueue_regeneration(lecture_id: uuid.UUID) -> None:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-    try:
-        await redis.enqueue_job(
-            "process_regeneration", str(lecture_id), _job_id=regeneration_job_id(lecture_id)
-        )
-    finally:
-        await redis.aclose()
+    await enqueue("process_regeneration", regeneration_job_id(lecture_id), str(lecture_id))
 
 
 def quiz_job_id(lecture_id: uuid.UUID) -> str:
@@ -348,15 +350,11 @@ def quiz_job_id(lecture_id: uuid.UUID) -> str:
 
 
 async def enqueue_quiz(lecture_id: uuid.UUID) -> None:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-    try:
-        await redis.enqueue_job("process_quiz", str(lecture_id), _job_id=quiz_job_id(lecture_id))
-    finally:
-        await redis.aclose()
+    await enqueue("process_quiz", quiz_job_id(lecture_id), str(lecture_id))
 
 
 async def quiz_job_active(lecture_id: uuid.UUID) -> bool:
-    redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    redis = await create_pool(queue_settings())
     try:
         return await Job(quiz_job_id(lecture_id), redis).status() in ACTIVE_JOB_STATUSES
     finally:
@@ -376,9 +374,7 @@ async def cancel_regeneration_job(lecture_id: uuid.UUID) -> bool:
 
 
 async def abort_job(job_id: str) -> bool:
-    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
-    redis_settings.conn_retries = 0
-    redis = await create_pool(redis_settings)
+    redis = await create_pool(queue_settings())
     try:
         job = Job(job_id, redis)
         if await job.status() not in ACTIVE_JOB_STATUSES:
