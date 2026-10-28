@@ -50,7 +50,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/pyproject.toml
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/apt-archives
           key: apt-${{ runner.os }}-ffmpeg-pango-v1
@@ -149,7 +149,7 @@ jobs:
       - run: npm run build
       - id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
