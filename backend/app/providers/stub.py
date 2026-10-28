@@ -32,6 +32,9 @@ class StubSpeechToText:
             for i, phrase in enumerate(STUB_PHRASES)
         ]
 
+    async def discard(self, object_keys: list[str]) -> None:
+        return None
+
 
 STUB_QUIZ_SIZE = 8
 STUB_OPTIONS = ["Первый вариант", "Второй вариант", "Третий вариант", "Четвёртый вариант"]

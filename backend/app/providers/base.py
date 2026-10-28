@@ -21,6 +21,8 @@ class OperationStore(Protocol):
 
     async def drop(self, name: str) -> None: ...
 
+    async def alive(self) -> bool: ...
+
 
 class SpeechToText(Protocol):
     async def transcribe(
@@ -32,6 +34,8 @@ class SpeechToText(Protocol):
         on_progress: RecognitionProgress | None = None,
         operations: OperationStore | None = None,
     ) -> list[Segment]: ...
+
+    async def discard(self, object_keys: list[str]) -> None: ...
 
 
 class LLM(Protocol):

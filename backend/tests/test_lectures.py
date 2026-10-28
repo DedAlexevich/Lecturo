@@ -22,6 +22,7 @@ from app.models import (
     UsageEntry,
     User,
 )
+from app.pipeline import stages
 from app.pipeline.download import LinkError, LinkInfo
 from app.services import quota
 
@@ -571,6 +572,41 @@ async def test_delete_removes_files_and_records(
                 select(func.count()).select_from(model).where(model.lecture_id == lecture.id)
             )
             assert count == 0
+
+
+async def test_delete_removes_recognition_objects_from_bucket(
+    client, user, auth_headers, cancelled, monkeypatch
+):
+    lecture = await create_own_lecture(user, status=LectureStatus.processing)
+    async with SessionLocal() as session:
+        session.add(
+            ProcessingStep(
+                lecture_id=lecture.id,
+                step=StepName.transcribe,
+                status=StepStatus.running,
+                attempts=1,
+                progress=0.3,
+                external={
+                    "operations": {
+                        "full": {"object_key": "stt/a.opus", "operation_id": "op1"},
+                        "part-1:0.000-1.000": {"object_key": "stt/b.opus"},
+                    }
+                },
+            )
+        )
+        await session.commit()
+    discarded = []
+
+    class Recorder:
+        async def discard(self, object_keys):
+            discarded.append(object_keys)
+
+    monkeypatch.setattr(stages, "get_speech_to_text", Recorder)
+
+    response = await client.delete(f"/api/v1/lectures/{lecture.id}", headers=auth_headers)
+
+    assert response.status_code == 204
+    assert discarded == [["stt/a.opus", "stt/b.opus"]]
 
 
 async def test_delete_before_processing_refunds_quota(client, user, auth_headers, cancelled):

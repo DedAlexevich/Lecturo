@@ -399,4 +399,4 @@ async def test_each_part_keeps_its_own_operation(monkeypatch, tmp_path):
         name: state["operation_id"] for name, state in operations.saved if "operation_id" in state
     }
     assert started == {"part-0:0.000-100.000": "op0", "part-1:100.000-200.000": "op1"}
-    assert operations.states == {}
+    assert set(operations.states) == set(started)

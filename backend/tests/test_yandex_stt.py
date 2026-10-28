@@ -265,6 +265,7 @@ class MemoryOperations:
     def __init__(self) -> None:
         self.states: dict[str, dict[str, str]] = {}
         self.saved: list[tuple[str, dict[str, str]]] = []
+        self.exists = True
 
     async def load(self, name: str) -> dict[str, str] | None:
         return self.states.get(name)
@@ -275,6 +276,9 @@ class MemoryOperations:
 
     async def drop(self, name: str) -> None:
         self.states.pop(name, None)
+
+    async def alive(self) -> bool:
+        return self.exists
 
 
 class SpeechKit:
@@ -338,7 +342,7 @@ async def test_restart_polls_saved_operation_instead_of_starting_new(tmp_path: P
     assert speechkit.methods() == ["poll", "DELETE"]
     assert speechkit.requests[0].url.path == "/operations/op1"
     assert speechkit.requests[1].url.path == f"/lecturo-audio/{state['object_key']}"
-    assert operations.states == {}
+    assert operations.states == {"full": state}
 
 
 async def test_missing_saved_operation_is_started_again(tmp_path: Path):
@@ -358,7 +362,41 @@ async def test_missing_saved_operation_is_started_again(tmp_path: Path):
     assert len(segments) == 3
     assert speechkit.methods() == ["poll", "PUT", "start", "poll", "DELETE"]
     assert speechkit.requests[1].url.path == "/lecturo-audio/stt/old.opus"
-    assert operations.states == {}
+    assert operations.states == {"full": {"object_key": "stt/old.opus", "operation_id": "op1"}}
+
+
+async def test_cancelled_recognition_of_deleted_lecture_removes_object(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    speechkit = SpeechKit()
+    operations = MemoryOperations()
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0.01, transport=httpx.MockTransport(speechkit.handler)
+    )
+
+    running = asyncio.create_task(provider.transcribe(audio, operations=operations))
+    await asyncio.wait_for(speechkit.polled.wait(), 5)
+    operations.exists = False
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    assert speechkit.methods()[-1] == "DELETE"
+
+
+async def test_discard_deletes_objects(tmp_path: Path):
+    speechkit = SpeechKit()
+    provider = YandexSpeechToText(
+        yandex_settings(), transport=httpx.MockTransport(speechkit.handler)
+    )
+
+    await provider.discard(["stt/a.opus", "stt/b.opus"])
+
+    assert sorted(r.url.path for r in speechkit.requests) == [
+        "/lecturo-audio/stt/a.opus",
+        "/lecturo-audio/stt/b.opus",
+    ]
+    assert speechkit.methods() == ["DELETE", "DELETE"]
 
 
 async def test_failed_operation_forgets_saved_state(tmp_path: Path):

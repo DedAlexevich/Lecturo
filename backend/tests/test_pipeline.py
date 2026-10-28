@@ -799,6 +799,9 @@ async def test_transcribe_probes_missing_duration_before_charging(user, sample_a
 
 
 class RecordingSpeechToText:
+    async def discard(self, object_keys):
+        pass
+
     def __init__(self, lecture_id, fail: bool = False) -> None:
         self.lecture_id = lecture_id
         self.fail = fail
@@ -851,6 +854,10 @@ async def noop_step(session, lecture, report):
 class InterruptedSpeechToText:
     def __init__(self) -> None:
         self.loaded: list[dict | None] = []
+        self.discarded: list[list[str]] = []
+
+    async def discard(self, object_keys):
+        self.discarded.append(object_keys)
 
     async def transcribe(
         self, audio_path, language="ru", *, duration=None, on_progress=None, operations=None
@@ -860,7 +867,6 @@ class InterruptedSpeechToText:
         if state is None:
             await operations.save("full", {"object_key": "stt/a.opus", "operation_id": "op1"})
             raise asyncio.CancelledError
-        await operations.drop("full")
         return []
 
 
@@ -884,6 +890,7 @@ async def test_saved_operation_survives_worker_restart(user, sample_audio, monke
     await run_step_alone(lecture.id)
 
     assert stt.loaded == [None, {"object_key": "stt/a.opus", "operation_id": "op1"}]
+    assert stt.discarded == [["stt/a.opus"]]
     loaded = await load(lecture.id)
     transcribe_step = steps_by_name(loaded)[StepName.transcribe]
     assert transcribe_step.status == StepStatus.done

@@ -213,6 +213,9 @@ class YandexSpeechToText:
         except Exception:
             await self._forget(client, key, operations, name)
             raise
+        except BaseException:
+            await self._release(client, key, operations)
+            raise
         state = {"object_key": key, "operation_id": operation_id}
         if operations:
             await operations.save(name, state)
@@ -236,11 +239,16 @@ class YandexSpeechToText:
             await self._forget(client, key, operations, name)
             raise
         except BaseException:
-            if operations is None:
-                await asyncio.shield(self._delete(client, key))
+            await self._release(client, key, operations)
             raise
-        await self._forget(client, key, operations, name)
+        await asyncio.shield(self._delete(client, key))
         return response
+
+    async def _release(
+        self, client: httpx.AsyncClient, key: str, operations: OperationStore | None
+    ) -> None:
+        if operations is None or not await asyncio.shield(operations.alive()):
+            await asyncio.shield(self._delete(client, key))
 
     async def _forget(
         self,
@@ -350,6 +358,10 @@ class YandexSpeechToText:
             ),
         )
         self._raise_for_status(response, "загрузка аудио в Object Storage")
+
+    async def discard(self, object_keys: list[str]) -> None:
+        async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
+            await asyncio.gather(*(self._delete(client, key) for key in object_keys))
 
     async def _delete(self, client: httpx.AsyncClient, key: str) -> None:
         payload_hash = hashlib.sha256(b"").hexdigest()

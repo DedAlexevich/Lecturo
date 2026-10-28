@@ -1,9 +1,11 @@
 import asyncio
+import uuid
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import SessionLocal
 from app.models import Lecture, ProcessingStep, StepName, TranscriptSegment, User
 from app.pipeline.media import probe_duration
 from app.pipeline.runner import Report, get_step
@@ -52,6 +54,12 @@ class StepOperations:
             operations.pop(name, None)
             await self._write(operations)
 
+    async def alive(self) -> bool:
+        async with SessionLocal() as session:
+            return bool(
+                await session.scalar(select(exists().where(ProcessingStep.id == self.step.id)))
+            )
+
     async def _write(self, operations: dict[str, dict[str, str]]) -> None:
         self.step.external = {"operations": operations} if operations else None
         await self.session.commit()
@@ -73,7 +81,8 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
         async with lock:
             await report(fraction, stage)
 
-    segments = await get_speech_to_text().transcribe(
+    stt = get_speech_to_text()
+    segments = await stt.transcribe(
         audio_path,
         lecture.language,
         duration=lecture.duration_sec,
@@ -87,7 +96,27 @@ async def transcribe(session: AsyncSession, lecture: Lecture, report: Report) ->
         TranscriptSegment(lecture_id=lecture.id, idx=idx, start=s.start, end=s.end, text=s.text)
         for idx, s in enumerate(segments)
     )
+    await stt.discard(object_keys(step.external))
     step.external = None
+
+
+def object_keys(external: dict | None) -> list[str]:
+    operations = (external or {}).get("operations", {})
+    return [state["object_key"] for state in operations.values() if state.get("object_key")]
+
+
+async def lock_operation_objects(session: AsyncSession, lecture_id: uuid.UUID) -> list[str]:
+    rows = await session.scalars(
+        select(ProcessingStep.external)
+        .where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.step == StepName.transcribe)
+        .with_for_update()
+    )
+    return [key for external in rows for key in object_keys(external)]
+
+
+async def discard_operation_objects(object_keys: list[str]) -> None:
+    if object_keys:
+        await get_speech_to_text().discard(object_keys)
 
 
 async def load_segments(session: AsyncSession, lecture: Lecture) -> list[TranscriptSegment]:
