@@ -183,7 +183,8 @@ async def run(
     stdin = None
     try:
         if stdout_path is not None:
-            stdout = os.open(stdout_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            stdout = os.open(stdout_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o660)
+            os.fchmod(stdout, 0o660)
         if stdin_path is not None:
             stdin = os.open(stdin_path, os.O_RDONLY)
         process = await asyncio.create_subprocess_exec(
@@ -349,7 +350,8 @@ async def save_upload(stream: AsyncIterator[bytes]) -> tuple[Path, DumpInfo]:
     written = 0
     first = b""
     try:
-        descriptor = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        descriptor = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o660)
+        os.fchmod(descriptor, 0o660)
         with os.fdopen(descriptor, "wb") as handle:
             async for chunk in stream:
                 if len(first) < len(DUMP_MAGIC):
