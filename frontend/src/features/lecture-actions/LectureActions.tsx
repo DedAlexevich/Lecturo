@@ -1,5 +1,4 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
@@ -21,10 +20,10 @@ function regenerateMessage(error: Error) {
 
 type LectureActionsProps = {
   lecture: { id: string; title: string; status: string };
+  onDeleted?: () => void;
 };
 
-export function LectureActions({ lecture }: LectureActionsProps) {
-  const navigate = useNavigate();
+export function LectureActions({ lecture, onDeleted }: LectureActionsProps) {
   const trigger = useRef<HTMLButtonElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -35,7 +34,10 @@ export function LectureActions({ lecture }: LectureActionsProps) {
   const [title, setTitle] = useState(lecture.title);
   const [touched, setTouched] = useState(false);
   const rename = useRenameLecture(lecture.id);
-  const remove = useDeleteLecture(lecture.id, () => navigate("/", { replace: true }));
+  const remove = useDeleteLecture(lecture.id, () => {
+    setAction(null);
+    onDeleted?.();
+  });
   const regenerate = useRegenerateSummary(lecture.id);
   const pending = rename.isPending || remove.isPending || regenerate.isPending;
   const titleError = touched && title.trim() === "" ? "Введите название лекции" : undefined;

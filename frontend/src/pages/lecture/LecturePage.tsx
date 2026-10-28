@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
@@ -191,6 +191,7 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
 export function LecturePage() {
   const { id = "" } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { key: locationKey, state: locationState } = useLocation();
   const startAt = parseStartTime(searchParams.get("t"));
   const section = parseSection(searchParams.get("section"));
@@ -334,7 +335,7 @@ export function LecturePage() {
             <QuizButton lecture={data} />
             {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
             <ZoomerToggle mode={zoomer} />
-            <LectureActions lecture={data} />
+            <LectureActions lecture={data} onDeleted={() => navigate("/", { replace: true })} />
           </div>
         </div>
         <LectureMeta lecture={data} />
