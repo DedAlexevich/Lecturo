@@ -18,6 +18,7 @@ class PaymentStatus(enum.StrEnum):
     pending = "pending"
     succeeded = "succeeded"
     canceled = "canceled"
+    refunded = "refunded"
 
 
 class UsageSource(enum.StrEnum):

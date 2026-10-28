@@ -10,12 +10,14 @@ const statusLabels: Record<Payment["status"], string> = {
   pending: "Не оплачен",
   succeeded: "Оплачен",
   canceled: "Отменён",
+  refunded: "Возвращён",
 };
 
 const statusClasses: Record<Payment["status"], string> = {
   pending: styles.statusPending,
   succeeded: styles.statusSucceeded,
   canceled: styles.statusCanceled,
+  refunded: styles.statusRefunded,
 };
 
 export function PaymentsSection() {

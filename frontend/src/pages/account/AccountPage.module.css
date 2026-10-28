@@ -249,6 +249,10 @@
   color: var(--color-text-muted);
 }
 
+.statusRefunded {
+  color: var(--color-danger);
+}
+
 @media (max-width: 860px) {
   .panel {
     padding: var(--space-4);

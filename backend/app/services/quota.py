@@ -11,7 +11,9 @@ from app.models import (
     HourPackage,
     Lecture,
     LectureStatus,
+    Payment,
     PaymentKind,
+    PaymentStatus,
     ProcessingStep,
     StepName,
     StepStatus,
@@ -202,8 +204,15 @@ async def refund_lecture(session: AsyncSession, lecture_id: uuid.UUID) -> int:
             .with_for_update()
         )
     }
+    refunded_packages = set(
+        await session.scalars(
+            select(HourPackage.id)
+            .join(Payment, Payment.id == HourPackage.payment_id)
+            .where(HourPackage.id.in_(package_ids), Payment.status == PaymentStatus.refunded)
+        )
+    )
     for entry in entries:
-        if entry.package_id is not None:
+        if entry.package_id is not None and entry.package_id not in refunded_packages:
             packages[entry.package_id].seconds_left += entry.seconds
         await session.delete(entry)
     await session.flush()
