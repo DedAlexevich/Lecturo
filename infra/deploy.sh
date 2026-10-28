@@ -66,11 +66,15 @@ main() {
   echo "deploying $(git rev-parse --short HEAD), previous $(git rev-parse --short "$previous") at revision ${previous_revision:-none}, new head $new_head"
 
   if [ -n "$previous_revision" ] && [ "$new_head" != "$previous_revision" ]; then
-    if ! dump=$(infra/backup/backup.sh --no-wait | tee /dev/stderr | sed -n 's/^saved \(.*\) (.*)$/\1/p') || [ -z "$dump" ]; then
+    local backup_log
+    if ! backup_log=$(infra/backup/backup.sh --no-wait 2>&1); then
+      echo "$backup_log" >&2
       echo "backup failed, code returned to $previous" >&2
       restore_code "$previous"
       exit 1
     fi
+    echo "$backup_log"
+    dump=$(sed -n 's/^saved \(.*\) (.*)$/\1/p' <<<"$backup_log")
     echo "database saved to $dump before migration"
   fi
 
