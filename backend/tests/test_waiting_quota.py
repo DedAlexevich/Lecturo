@@ -18,7 +18,7 @@ from app.models import (
     UsageEntry,
     User,
 )
-from app.pipeline import tasks
+from app.pipeline import stages, tasks
 from app.services import quota
 
 HOUR = 3600
@@ -379,9 +379,13 @@ async def test_plan_rejects_repeated_lecture(user, auth_headers, client, weekly_
     assert enqueued == []
 
 
-async def test_lecture_without_duration_is_charged_after_transcribe(
-    user, auth_headers, client, weekly_limit, enqueued, handlers, published
+async def test_lecture_without_duration_is_charged_before_transcribe(
+    user, auth_headers, client, weekly_limit, enqueued, handlers, published, monkeypatch
 ):
+    async def probe(path):
+        return 59.5
+
+    monkeypatch.setattr(stages, "probe_duration", probe)
     lecture = await new_lecture(user, None, LectureStatus.waiting_quota)
 
     response = await client.post(

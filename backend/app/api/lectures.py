@@ -27,6 +27,7 @@ from app.pipeline.download import LinkError, inspect_link, link_key
 from app.pipeline.estimate import expected_seconds, remaining_seconds
 from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
+from app.pipeline.stages import discard_operation_objects, lock_operation_objects
 from app.pipeline.tasks import (
     PLANS,
     REGENERATION_STEPS,
@@ -349,6 +350,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     if not started and lecture.status in (LectureStatus.queued, LectureStatus.waiting_quota):
         await quota.refund_lecture(session, lecture_id)
     files = lecture_files(lecture_id, [lecture.video_path, lecture.audio_path])
+    stt_objects = await lock_operation_objects(session, [lecture_id])
     await session.execute(delete(Lecture).where(Lecture.id == lecture_id))
     await session.commit()
 
@@ -359,6 +361,7 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
     except (OSError, RedisError):
         pass
     await asyncio.to_thread(remove_files, files)
+    await discard_operation_objects(stt_objects)
 
 
 @router.get("/{lecture_id}/status")
