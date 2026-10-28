@@ -175,6 +175,8 @@ jobs:
   compose:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: lecturo
     steps:
       - uses: actions/checkout@v5
       - run: cp .env.example .env
@@ -201,6 +203,7 @@ jobs:
         with:
           context: frontend
           load: true
+          build-args: VITE_TELEGRAM_BOT_USERNAME=
           tags: lecturo-frontend
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
