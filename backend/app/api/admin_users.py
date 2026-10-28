@@ -40,6 +40,11 @@ async def get_user_card(user_id: uuid.UUID, actor: AdminUser, session: SessionDe
     return await admin_users.view_user(session, actor, user_id)
 
 
+@router.post("/users/{user_id}/admin", responses={**USER_NOT_FOUND, **CONFLICT})
+async def make_admin(user_id: uuid.UUID, actor: AdminUser, session: SessionDep) -> UserCardOut:
+    return await admin_users.make_admin(session, actor, user_id)
+
+
 @router.post("/users/{user_id}/hours", responses=USER_NOT_FOUND)
 async def grant_hours(
     user_id: uuid.UUID, body: GrantHoursIn, actor: AdminUser, session: SessionDep

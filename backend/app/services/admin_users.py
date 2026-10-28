@@ -36,9 +36,9 @@ from app.schemas.admin_users import (
     UserPaymentOut,
 )
 from app.schemas.billing import QuotaOut
-from app.services.admin import USER_NOT_FOUND, record_action, user_label
+from app.services.admin import USER_NOT_FOUND, grant_admin, record_action, user_label
 from app.services.auth_tokens import bump_token_version
-from app.services.quota import CHARGED_SOURCES, get_quota
+from app.services.quota import CHARGED_SOURCES, get_quota, subscription_until
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 SEARCH_LIMIT = 20
@@ -50,37 +50,59 @@ CANNOT_BLOCK_SELF = "Нельзя заблокировать себя"
 CANNOT_BLOCK_ADMIN = "Сначала снимите права администратора"
 ALREADY_BLOCKED = "Аккаунт уже заблокирован"
 NOT_BLOCKED = "Аккаунт не заблокирован"
+BLOCKED_CANNOT_BE_ADMIN = "Сначала разблокируйте аккаунт"
 
 
-def brief(user: User) -> UserBriefOut:
-    return UserBriefOut(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        created_at=user.created_at,
-        is_admin=user.is_admin,
-        blocked=user.blocked_at is not None,
-    )
+def telegram_username(user: User) -> str | None:
+    for identity in user.identities:
+        if identity.provider == AuthProvider.telegram and identity.data:
+            return identity.data.get("username")
+    return None
 
 
-async def search_users(session: AsyncSession, actor: User, query: str) -> list[UserBriefOut]:
+async def search_users(
+    session: AsyncSession, actor: User, query: str, now: datetime | None = None
+) -> list[UserBriefOut]:
+    now = now or datetime.now(UTC)
     value = query.strip()
     username = value.removeprefix("@")
-    telegram = select(AuthIdentity.user_id).where(
-        AuthIdentity.provider == AuthProvider.telegram,
-        or_(
-            AuthIdentity.provider_user_id == value,
-            func.lower(AuthIdentity.data["username"].astext) == username.lower(),
-        ),
-    )
+    conditions = [
+        User.email.icontains(value, autoescape=True),
+        User.display_name.icontains(value, autoescape=True),
+    ]
+    telegram_match = [
+        func.lower(AuthIdentity.data["username"].astext).contains(username.lower(), autoescape=True)
+    ]
+    if value.isdigit():
+        telegram_match.append(AuthIdentity.provider_user_id == value)
+    if username:
+        conditions.append(
+            User.id.in_(
+                select(AuthIdentity.user_id).where(
+                    AuthIdentity.provider == AuthProvider.telegram, or_(*telegram_match)
+                )
+            )
+        )
     users = (
         await session.scalars(
             select(User)
-            .where(or_(User.email.icontains(value, autoescape=True), User.id.in_(telegram)))
+            .where(or_(*conditions))
+            .options(selectinload(User.identities))
             .order_by(User.created_at.desc(), User.id)
             .limit(SEARCH_LIMIT)
         )
     ).all()
+    ids = [user.id for user in users]
+    subscriptions = {user.id: await subscription_until(session, user.id, now) for user in users}
+    packages = dict(
+        (
+            await session.execute(
+                select(HourPackage.user_id, func.sum(HourPackage.seconds_left))
+                .where(HourPackage.user_id.in_(ids))
+                .group_by(HourPackage.user_id)
+            )
+        ).all()
+    )
     record_action(
         session,
         actor,
@@ -91,7 +113,20 @@ async def search_users(session: AsyncSession, actor: User, query: str) -> list[U
         {"found": len(users)},
     )
     await session.commit()
-    return [brief(user) for user in users]
+    return [
+        UserBriefOut(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            created_at=user.created_at,
+            is_admin=user.is_admin,
+            blocked=user.blocked_at is not None,
+            telegram_username=telegram_username(user),
+            subscription_until=subscriptions.get(user.id),
+            package_left_sec=int(packages.get(user.id) or 0),
+        )
+        for user in users
+    ]
 
 
 async def get_user(session: AsyncSession, user_id: uuid.UUID, lock: bool = False) -> User:
@@ -173,6 +208,15 @@ async def finish_action(
 ) -> UserCardOut:
     record_action(session, actor, action, "user", str(user.id), user_label(user), details)
     await session.commit()
+    return await build_card(session, user)
+
+
+async def make_admin(session: AsyncSession, actor: User, user_id: uuid.UUID) -> UserCardOut:
+    user = await get_user(session, user_id)
+    if user.blocked_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, BLOCKED_CANNOT_BE_ADMIN)
+    await grant_admin(session, actor, user, "panel")
+    await session.refresh(user, ["identities"])
     return await build_card(session, user)
 
 

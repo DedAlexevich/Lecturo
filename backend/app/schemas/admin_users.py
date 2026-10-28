@@ -15,6 +15,9 @@ class UserBriefOut(Schema):
     created_at: datetime
     is_admin: bool
     blocked: bool
+    telegram_username: str | None
+    subscription_until: datetime | None
+    package_left_sec: int
 
 
 class UserIdentityOut(Schema):
