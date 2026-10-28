@@ -158,7 +158,7 @@ async def test_failed_generation_keeps_previous_content(
     assert await lecture_status(lecture.id) == LectureStatus.ready
     steps = await steps_of(lecture.id)
     assert steps[StepName.summarize].status == StepStatus.failed
-    assert "LLM недоступна" in steps[StepName.summarize].error
+    assert steps[StepName.summarize].error == "Сервис конспектов недоступен, попробуйте позже"
     assert steps[StepName.embed].status == StepStatus.done
     assert await notifications(lecture.id) == [
         (NotificationKind.regenerate, NotificationOutcome.failed)

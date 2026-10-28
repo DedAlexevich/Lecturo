@@ -21,7 +21,7 @@ from app.core.config import get_settings
 from app.models import Lecture
 from app.pipeline import media
 from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC, make_mono
-from app.pipeline.runner import Report
+from app.pipeline.runner import Report, UserFacingError
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ BASE_OPTIONS: dict[str, Any] = {
 }
 
 
-class LinkError(Exception):
+class LinkError(UserFacingError):
     pass
 
 

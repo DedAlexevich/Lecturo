@@ -24,7 +24,7 @@ from app.models import (
 )
 from app.pipeline import download, embed, media, quiz, stages, summarize
 from app.pipeline.events import add_notification, publish_status
-from app.pipeline.runner import StepFailed, StepHandler, get_step, run_step
+from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 
@@ -42,6 +42,7 @@ HANDLERS: dict[StepName, StepHandler] = {
 }
 
 REGENERATION_STEPS = [StepName.summarize, StepName.embed]
+REGENERATION_FAILED = "Не удалось пересоздать главы и конспект, попробуйте позже"
 
 ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
@@ -71,8 +72,8 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
     except asyncio.CancelledError:
         await return_to_queue([lecture_uuid])
         raise
-    except BaseException as error:
-        await mark_failed(lecture_uuid, str(error) or type(error).__name__)
+    except BaseException:
+        await mark_failed(lecture_uuid, PROCESSING_FAILED)
         raise
     finally:
         await purge_if_deleted(lecture_uuid)
@@ -82,8 +83,8 @@ async def process_regeneration(ctx: dict, lecture_id: str) -> str:
     lecture_uuid = uuid.UUID(lecture_id)
     try:
         return await run_regeneration(lecture_uuid)
-    except BaseException as error:
-        await restore_ready(lecture_uuid, str(error) or type(error).__name__)
+    except BaseException:
+        await restore_ready(lecture_uuid, REGENERATION_FAILED)
         raise
 
 
