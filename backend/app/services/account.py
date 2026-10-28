@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.models import AuthIdentity, AuthProvider, Lecture, Payment, User
+from app.pipeline.stages import discard_operation_objects, lock_operation_objects
 from app.schemas.user import AccountDeleteIn
 from app.services.auth import hash_password, verify_password
 from app.services.auth_tokens import bump_token_version, revoke_unused_tokens
@@ -99,10 +100,14 @@ async def delete_account(session: AsyncSession, user: User) -> None:
         )
     )
     files: set[Path] = set()
-    for lecture_id, video_path, audio_path in rows:
+    lecture_ids = []
+    for lecture_id, video_path, audio_path in rows.all():
         files |= lecture_files(lecture_id, [video_path, audio_path])
+        lecture_ids.append(lecture_id)
+    stt_objects = await lock_operation_objects(session, lecture_ids)
     user_id = user.id
     await session.execute(update(Payment).where(Payment.user_id == user_id).values(raw={}))
     await session.execute(delete(User).where(User.id == user_id))
     await session.commit()
     await asyncio.to_thread(remove_files, files, user_id)
+    await discard_operation_objects(stt_objects)

@@ -14,7 +14,7 @@ from app.providers import Segment, chunks
 from app.providers.chunks import Part, merge_segments, parse_silences, plan_parts, split_audio
 from app.providers.retry import RetryPolicy
 from app.providers.yandex import RECOGNIZE_URL, YandexSpeechKitError, YandexSpeechToText
-from tests.test_yandex_stt import yandex_settings
+from tests.test_yandex_stt import MemoryOperations, yandex_settings
 
 needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="нужен ffmpeg")
 
@@ -381,3 +381,22 @@ async def test_split_failure_falls_back_to_single_request(monkeypatch, tmp_path)
     segments = await provider.transcribe(audio, "ru", duration=500.0)
 
     assert [s.text for s in segments] == ["Часть 0"]
+
+
+async def test_each_part_keeps_its_own_operation(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.providers.yandex.split_audio", fake_split(2))
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    recognizer = Recognizer()
+    operations = MemoryOperations()
+    provider = YandexSpeechToText(
+        long_settings(tmp_path), poll_interval=0, transport=httpx.MockTransport(recognizer.handler)
+    )
+
+    await provider.transcribe(audio, "ru", duration=200.0, operations=operations)
+
+    started = {
+        name: state["operation_id"] for name, state in operations.saved if "operation_id" in state
+    }
+    assert started == {"part-0:0.000-100.000": "op0", "part-1:100.000-200.000": "op1"}
+    assert set(operations.states) == set(started)
