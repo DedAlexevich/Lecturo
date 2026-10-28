@@ -176,5 +176,37 @@ jobs:
           infra/backup/check.sh
           echo yes | infra/backup/restore.sh "$(ls backups/lecturo-*.dump)"
           curl -fsS http://localhost/api/v1/health
+      - name: Encrypted backup, upload and restore
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends age
+          python3 -m venv "$RUNNER_TEMP/s3"
+          "$RUNNER_TEMP/s3/bin/pip" install -q "moto[server]==5.0.28"
+          "$RUNNER_TEMP/s3/bin/moto_server" -p 9000 > "$RUNNER_TEMP/s3.log" 2>&1 &
+          timeout 60 sh -c 'until curl -fsS -o /dev/null http://localhost:9000/; do sleep 1; done'
+          export BACKUP_S3_ACCESS_KEY_ID=backup-ci BACKUP_S3_SECRET_ACCESS_KEY="$(openssl rand -hex 16)"
+          export BACKUP_S3_ENDPOINT=http://localhost:9000 BACKUP_S3_REGION=us-east-1 BACKUP_S3_BUCKET=backups
+          printf 'user = "%s:%s"\n' "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" |
+            curl -fsS -o /dev/null -K - --aws-sigv4 "aws:amz:us-east-1:s3" -X PUT http://localhost:9000/backups
+          age-keygen -o "$RUNNER_TEMP/backup.key"
+          export BACKUP_AGE_RECIPIENT="$(age-keygen -y "$RUNNER_TEMP/backup.key")"
+          rm -f backups/lecturo-*
+          infra/backup/backup.sh
+          archive=$(ls backups/lecturo-*.tar.age)
+          test -z "$(ls backups/lecturo-*.dump 2>/dev/null)"
+          printf 'user = "%s:%s"\n' "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" |
+            curl -fsS -K - --aws-sigv4 "aws:amz:us-east-1:s3" -o "$RUNNER_TEMP/uploaded.tar.age" "http://localhost:9000/backups/daily/$(basename "$archive")"
+          cmp "$archive" "$RUNNER_TEMP/uploaded.tar.age"
+          age -d -i "$RUNNER_TEMP/backup.key" "$archive" | tar -tf - | grep -qx lecturo.dump
+          rm -f backups/pre-restore-*
+          for day in 01 02 03; do
+            age -d -i "$RUNNER_TEMP/backup.key" "$archive" | tar -xOf - lecturo.dump > "backups/pre-restore-202601$day-000000.dump"
+          done
+          echo yes | BACKUP_AGE_IDENTITY="$RUNNER_TEMP/backup.key" infra/backup/restore.sh "$archive"
+          test "$(ls backups/pre-restore-* | wc -l)" -eq 3
+          ls backups/pre-restore-*.tar.age
+          test ! -e backups/pre-restore-20260101-000000.dump
+          echo yes | BACKUP_AGE_IDENTITY="$RUNNER_TEMP/backup.key" infra/backup/restore.sh backups/pre-restore-20260102-000000.dump
+          test "$(ls backups/pre-restore-* | wc -l)" -eq 3
+          curl -fsS http://localhost/api/v1/health
       - if: failure()
         run: docker compose logs
