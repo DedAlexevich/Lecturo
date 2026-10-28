@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 
 from app.config import load_settings
 from app.handlers import build_router
+from app.heartbeat import heartbeat_loop
 from app.logs import configure_logging
 from app.notifications import lecture_notices_loop, legal_notices_loop, quota_loop
 
@@ -22,6 +23,7 @@ async def connect(database_url: str) -> asyncpg.Pool | None:
 
 async def run() -> None:
     settings = load_settings()
+    heartbeat = asyncio.create_task(heartbeat_loop())
     if not settings.token:
         logger.warning("TELEGRAM_BOT_TOKEN не задан, бот не запущен")
         await asyncio.Event().wait()
@@ -30,9 +32,9 @@ async def run() -> None:
     dispatcher = Dispatcher()
     dispatcher.include_router(build_router(settings.public_url, pool))
     redis = Redis.from_url(settings.bot_redis_url)
-    tasks = []
+    tasks = [heartbeat]
     if pool is not None:
-        tasks = [
+        tasks += [
             asyncio.create_task(lecture_notices_loop(pool, bot, settings.public_url)),
             asyncio.create_task(
                 quota_loop(
