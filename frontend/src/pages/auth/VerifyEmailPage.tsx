@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { useToken } from "../../app/session";
 import { Button } from "../../ui/Button";
 import { Spinner } from "../../ui/Spinner";
 import { useToast } from "../../ui/Toast";
 import { AuthLayout } from "./AuthLayout";
+import { useUrlToken } from "./useUrlToken";
 import { messageOf } from "./errors";
 import { useConfirmEmail, useRequestEmailVerification } from "./useAuthRequests";
 
@@ -86,7 +87,6 @@ function AwaitConfirmation() {
 }
 
 export function VerifyEmailPage() {
-  const [params] = useSearchParams();
-  const token = params.get("token");
+  const token = useUrlToken();
   return token ? <ConfirmEmail token={token} /> : <AwaitConfirmation />;
 }
