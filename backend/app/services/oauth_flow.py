@@ -3,6 +3,7 @@ import hashlib
 import json
 import secrets
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -128,6 +129,7 @@ async def get_or_create_provider_user(
     new_user: User,
     accept_terms: bool = False,
     accept_personal_data: bool = False,
+    update_user: Callable[[User], None] | None = None,
 ) -> User:
     identity = await find_provider_identity(session, provider, provider_user_id)
     if identity is None:
@@ -146,5 +148,7 @@ async def get_or_create_provider_user(
             if identity is None:
                 raise
     identity.data = profile
+    if update_user is not None:
+        update_user(identity.user)
     await session.commit()
     return identity.user

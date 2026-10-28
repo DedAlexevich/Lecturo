@@ -73,7 +73,7 @@ async def get_or_create_telegram_user(
     display_name = " ".join(
         part for part in (profile.get("first_name"), profile.get("last_name")) if part
     )
-    user = await oauth_flow.get_or_create_provider_user(
+    return await oauth_flow.get_or_create_provider_user(
         session,
         AuthProvider.telegram,
         str(telegram_id),
@@ -81,8 +81,5 @@ async def get_or_create_telegram_user(
         User(display_name=display_name[:120], telegram_chat_id=telegram_id),
         accept_terms,
         accept_personal_data,
+        update_user=lambda user: setattr(user, "telegram_chat_id", telegram_id),
     )
-    if user.telegram_chat_id != telegram_id:
-        user.telegram_chat_id = telegram_id
-        await session.commit()
-    return user
