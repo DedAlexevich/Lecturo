@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, type DetailedError } from "tus-js-client";
-import { extractAudio } from "../../local/audio";
 import { tokenStorage } from "../../api/client";
 import { detailOf } from "./errors";
 
@@ -94,6 +93,7 @@ export function useTusUpload(userId: string | undefined) {
         extraction.current = controller;
         setState({ phase: "extracting", file, sent: 0, total: 100, error: null, lectureId: null });
         try {
+          const { extractAudio } = await import("../../local/audio");
           const result = await extractAudio(file, {
             opus: true,
             signal: controller.signal,

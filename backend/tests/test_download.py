@@ -1,13 +1,15 @@
 import functools
+import threading
 import uuid
 import wave
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import httpx
 import pytest
 
 from app.models import Lecture, SourceType
-from app.pipeline import download
+from app.pipeline import download, media
 from app.pipeline.download import (
     LinkError,
     build_embed_url,
@@ -199,14 +201,18 @@ async def test_inspect_link_probes_duration_of_direct_file(public_host, monkeypa
         probed.append(url)
         return 1800.5
 
+    async def follow(url):
+        return "https://cdn.lecturo.test/lecture.mp4"
+
     monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "follow_redirects", follow)
 
     link = await inspect_link("https://files.lecturo.test/lecture.mp4")
 
     assert link.duration == 1800.5
     assert link.embed_url is None
-    assert probed == ["https://files.lecturo.test/lecture.mp4"]
-    assert public_host == ["https://files.lecturo.test/lecture.mp4"] * 2
+    assert probed == ["https://cdn.lecturo.test/lecture.mp4"]
+    assert public_host == ["https://files.lecturo.test/lecture.mp4"]
 
 
 async def test_inspect_link_rejects_unknown_duration(public_host, monkeypatch):
@@ -215,7 +221,11 @@ async def test_inspect_link_rejects_unknown_duration(public_host, monkeypatch):
     async def probe(url):
         return None
 
+    async def follow(url):
+        return url
+
     monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "follow_redirects", follow)
 
     with pytest.raises(LinkError, match="длительность"):
         await inspect_link("https://files.lecturo.test/lecture.mp4")
@@ -370,7 +380,11 @@ async def test_inspect_link_for_yandex_disk(public_host, monkeypatch):
         assert url == "https://downloader.disk.yandex.ru/x"
         return 5400.0
 
+    async def follow(url):
+        return url
+
     monkeypatch.setattr(download, "probe_duration", probe)
+    monkeypatch.setattr(download, "follow_redirects", follow)
 
     link = await inspect_link(DISK_URL)
 
@@ -379,7 +393,22 @@ async def test_inspect_link_for_yandex_disk(public_host, monkeypatch):
     assert link.embed_url is None
 
 
-async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
+@pytest.fixture
+def probed_duration(monkeypatch):
+    durations = [1800.0]
+
+    async def probe(path):
+        return durations[0]
+
+    async def mono(path, duration, report):
+        pass
+
+    monkeypatch.setattr(media, "probe_duration", probe)
+    monkeypatch.setattr(download, "make_mono", mono)
+    return durations
+
+
+async def test_download_saves_audio_path(public_host, probed_duration, monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     download.get_settings.cache_clear()
     calls = []
@@ -415,8 +444,90 @@ async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
     assert calls == ["https://vkvideo.ru/video-1_2"]
     assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
+    assert lecture.duration_sec == 1800.0
     assert mono == [tmp_path / "audio" / f"{lecture.id}.opus"]
     assert reported[-1] == 1.0
+
+
+def link_lecture(duration: float | None = None) -> Lecture:
+    return Lecture(
+        id=uuid.uuid4(),
+        title="Матанализ",
+        source_type=SourceType.link,
+        source_url="https://vkvideo.ru/video-1_2",
+        duration_sec=duration,
+    )
+
+
+async def no_report(progress):
+    pass
+
+
+@pytest.fixture
+def storage(monkeypatch, tmp_path):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    download.get_settings.cache_clear()
+    yield tmp_path
+    download.get_settings.cache_clear()
+
+
+def fetch_file(url, target, progress):
+    path = target.with_suffix(".opus")
+    path.write_bytes(b"opus")
+    return path
+
+
+async def test_download_takes_duration_from_downloaded_audio(
+    public_host, probed_duration, monkeypatch, storage
+):
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    probed_duration[0] = 5400.0
+    lecture = link_lecture(duration=600.0)
+
+    await download.download(None, lecture, no_report)
+
+    assert lecture.duration_sec == 5400.0
+
+
+async def test_download_rejects_audio_longer_than_four_hours(
+    public_host, probed_duration, monkeypatch, storage
+):
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    probed_duration[0] = 4 * 3600 + 1
+    lecture = link_lecture(duration=600.0)
+
+    with pytest.raises(LinkError, match="4 часов"):
+        await download.download(None, lecture, no_report)
+
+    assert lecture.audio_path is None
+    assert lecture.duration_sec == 600.0
+    assert not list((storage / "audio").iterdir())
+
+
+async def test_download_removes_audio_when_duration_unknown(public_host, monkeypatch, storage):
+    async def broken_probe(path):
+        raise media.MediaError("Не удалось определить длительность записи")
+
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    monkeypatch.setattr(media, "probe_duration", broken_probe)
+
+    with pytest.raises(media.MediaError):
+        await download.download(None, link_lecture(), no_report)
+
+    assert not list((storage / "audio").iterdir())
+
+
+async def test_download_removes_partial_files_on_error(public_host, monkeypatch, storage):
+    def failing_fetch(url, target, progress):
+        target.with_suffix(".webm.part").write_bytes(b"part")
+        raise LinkError("Файл по ссылке больше 2 ГБ")
+
+    monkeypatch.setattr(download, "fetch_audio", failing_fetch)
+
+    with pytest.raises(LinkError, match="2 ГБ"):
+        await download.download(None, link_lecture(), no_report)
+
+    assert not list((storage / "audio").iterdir())
 
 
 def test_link_requests_have_timeouts_and_limited_retries():
@@ -426,9 +537,10 @@ def test_link_requests_have_timeouts_and_limited_retries():
 
 
 class FakeYoutubeDL:
-    def __init__(self, options, creates_file):
+    def __init__(self, options, creates_file, statuses=()):
         self.options = options
         self.creates_file = creates_file
+        self.statuses = statuses
 
     def __enter__(self):
         return self
@@ -437,13 +549,18 @@ class FakeYoutubeDL:
         return False
 
     def download(self, urls):
+        for status in self.statuses:
+            for hook in self.options["progress_hooks"]:
+                hook(status)
         if self.creates_file:
             Path(self.options["outtmpl"].replace("%(ext)s", "opus")).write_bytes(b"opus")
 
 
 @pytest.mark.parametrize("creates_file", [True, False])
 def test_fetch_audio_requires_downloaded_file(monkeypatch, tmp_path, creates_file):
-    monkeypatch.setattr(download, "YoutubeDL", lambda options: FakeYoutubeDL(options, creates_file))
+    monkeypatch.setattr(
+        download, "PublicYoutubeDL", lambda options: FakeYoutubeDL(options, creates_file)
+    )
     target = tmp_path / "lecture"
 
     if creates_file:
@@ -505,8 +622,211 @@ def test_fetch_audio_uses_proxy_for_youtube(monkeypatch, tmp_path, youtube_proxy
         used.append(options)
         return FakeYoutubeDL(options, True)
 
-    monkeypatch.setattr(download, "YoutubeDL", fake_ydl)
+    monkeypatch.setattr(download, "PublicYoutubeDL", fake_ydl)
     download.fetch_audio("https://youtu.be/dQw4w9WgXcQ", tmp_path / "lecture", {})
 
     assert used[0]["proxy"] == youtube_proxy
-    assert used[0]["format"] == "bestaudio/best"
+    assert used[0]["format"].endswith("/bestaudio/best")
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 3 * 1024**3},
+        {"status": "downloading", "downloaded_bytes": 2 * 1024**3 + 1},
+    ],
+    ids=["known-size", "unknown-size"],
+)
+def test_fetch_audio_stops_on_too_large_file(monkeypatch, tmp_path, status):
+    monkeypatch.setattr(
+        download, "PublicYoutubeDL", lambda options: FakeYoutubeDL(options, True, [status])
+    )
+
+    with pytest.raises(LinkError, match="больше 2 ГБ"):
+        download.fetch_audio("https://vkvideo.ru/video-1_2", tmp_path / "lecture", {})
+
+
+def test_fetch_audio_stops_on_slow_download(monkeypatch, tmp_path):
+    status = {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 4096}
+    monkeypatch.setattr(download, "DOWNLOAD_TIMEOUT_SEC", -1.0)
+    monkeypatch.setattr(
+        download, "PublicYoutubeDL", lambda options: FakeYoutubeDL(options, True, [status])
+    )
+
+    with pytest.raises(LinkError, match="больше часа"):
+        download.fetch_audio("https://vkvideo.ru/video-1_2", tmp_path / "lecture", {})
+
+
+def write_wav(path: Path, seconds: int = 1) -> Path:
+    with wave.open(str(path), "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b"\0\0" * 8000 * seconds)
+    return path
+
+
+def serve(host: str, routes: dict[str, tuple[int, dict[str, str], bytes]]) -> ThreadingHTTPServer:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            status, headers, body = routes.get(self.path, (404, {}, b""))
+            self.send_response(status)
+            for name, value in {**headers, "Content-Length": str(len(body))}.items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_HEAD = do_GET
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer((host, 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+@pytest.fixture
+def media_hosts(monkeypatch, tmp_path):
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    wav = write_wav(tmp_path / "lecture.wav", seconds=2).read_bytes()
+    internal = serve("127.0.0.1", {"/lecture.wav": (200, {"Content-Type": "audio/wav"}, wav)})
+    internal_url = f"http://127.0.0.1:{internal.server_port}/lecture.wav"
+    public = serve(
+        "127.0.0.2",
+        {
+            "/lecture.wav": (200, {"Content-Type": "audio/wav"}, wav),
+            "/to-loopback": (302, {"Location": internal_url}, b""),
+            "/to-private": (302, {"Location": "http://10.0.0.5/lecture.wav"}, b""),
+        },
+    )
+    monkeypatch.setattr(download, "is_public_ip", lambda address: address == "127.0.0.2")
+    yield f"http://127.0.0.2:{public.server_port}"
+    for server in (internal, public):
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.parametrize("path", ["/to-loopback", "/to-private"])
+async def test_inspect_link_rejects_redirect_to_internal_network(media_hosts, path):
+    with pytest.raises(LinkError, match="внутреннюю сеть"):
+        await inspect_link(media_hosts + path)
+
+
+@pytest.mark.parametrize("path", ["/to-loopback", "/to-private"])
+async def test_download_rejects_redirect_to_internal_network(media_hosts, storage, path):
+    lecture = link_lecture()
+    lecture.source_url = media_hosts + path
+
+    with pytest.raises(LinkError, match="внутреннюю сеть"):
+        await download.download(None, lecture, no_report)
+
+    assert not list((storage / "audio").iterdir())
+
+
+async def test_download_fetches_public_file(media_hosts, storage):
+    lecture = link_lecture()
+    lecture.source_url = media_hosts + "/lecture.wav"
+
+    await download.download(None, lecture, no_report)
+
+    assert lecture.audio_path == str(storage / "audio" / f"{lecture.id}.opus")
+    assert lecture.duration_sec == pytest.approx(2.0, abs=0.1)
+
+
+def test_real_download_stops_on_size_limit(media_hosts, monkeypatch, tmp_path):
+    monkeypatch.setattr(download, "MAX_DOWNLOAD_BYTES", 4096)
+
+    with pytest.raises(LinkError, match="больше 2 ГБ"):
+        download.fetch_audio(media_hosts + "/lecture.wav", tmp_path / "downloaded", {})
+
+
+def test_public_connection_keeps_host_name(monkeypatch):
+    hosts = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hosts.append(self.headers["Host"])
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.2", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_port
+    resolved = []
+    real_getaddrinfo = download.socket.getaddrinfo
+
+    def getaddrinfo(host, *args, **kwargs):
+        resolved.append(host)
+        if host == "files.lecturo.test":
+            host = "127.0.0.2"
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(download.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(download, "is_public_ip", lambda address: address == "127.0.0.2")
+    try:
+        pool = download.PublicHTTPConnectionPool("files.lecturo.test", port)
+        response = pool.request("GET", "/")
+        connection = download.PublicHTTPSConnection("files.lecturo.test", port)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert response.status == 200
+    assert hosts == [f"files.lecturo.test:{port}"]
+    assert resolved[0] == "files.lecturo.test"
+    assert connection.host == "files.lecturo.test"
+
+
+def test_public_connection_rejects_unresolved_host(monkeypatch):
+    def getaddrinfo(*args, **kwargs):
+        raise download.socket.gaierror("нет такого хоста")
+
+    monkeypatch.setattr(download.socket, "getaddrinfo", getaddrinfo)
+
+    with pytest.raises(download.urllib3.exceptions.NameResolutionError):
+        download.PublicHTTPConnection("files.lecturo.test", 80)._new_conn()
+
+
+def redirect_transport(routes: dict[str, httpx.Response]) -> httpx.MockTransport:
+    return httpx.MockTransport(lambda request: routes[str(request.url)])
+
+
+async def test_follow_redirects_returns_final_public_url():
+    transport = redirect_transport(
+        {
+            "http://93.184.216.34/a": httpx.Response(302, headers={"Location": "/b"}),
+            "http://93.184.216.34/b": httpx.Response(200),
+        }
+    )
+
+    assert await download.follow_redirects("http://93.184.216.34/a", transport) == (
+        "http://93.184.216.34/b"
+    )
+
+
+async def test_follow_redirects_rejects_internal_target():
+    transport = redirect_transport(
+        {
+            "http://93.184.216.34/a": httpx.Response(
+                302, headers={"Location": "http://10.0.0.5/lecture.mp4"}
+            ),
+        }
+    )
+
+    with pytest.raises(LinkError, match="внутреннюю сеть"):
+        await download.follow_redirects("http://93.184.216.34/a", transport)
+
+
+async def test_follow_redirects_limits_chain():
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(302, headers={"Location": "/again"})
+    )
+
+    with pytest.raises(LinkError, match="перенаправлений"):
+        await download.follow_redirects("http://93.184.216.34/a", transport)

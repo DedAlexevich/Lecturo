@@ -27,12 +27,22 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,mjs,css,html,svg,png,ico,woff2,wasm}"],
-        maximumFileSizeToCacheInBytes: 40 * 1024 * 1024,
+        globPatterns: ["**/*.{js,mjs,css,html,svg,png,ico,woff2}"],
+        globIgnores: ["**/node_modules/**", "assets/worker-*.js", "assets/ffmpeg-core-*.js"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/files\//, /^\/media\//, /^\/assets\//, /^\/\.well-known\//],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && /^\/assets\/(?:.+\.wasm|worker-.+\.js|ffmpeg-core-.+\.js)$/.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "local-processing",
+              expiration: { maxEntries: 16 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             urlPattern: ({ url }) =>
               url.origin === "https://cdn.jsdelivr.net" && url.pathname.startsWith("/npm/onnxruntime-web@"),
