@@ -29,6 +29,7 @@ from app.pipeline.events import publish_status
 from app.pipeline.runner import get_step
 from app.pipeline.tasks import (
     PLANS,
+    QUEUE_UNAVAILABLE,
     REGENERATION_STEPS,
     cancel_lecture_job,
     cancel_quiz_job,
@@ -56,7 +57,6 @@ from app.services.rate_limit import enforce_rate_limit, is_rate_limited, reset_r
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
-QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
 VIDEO_FORBIDDEN = "Нет доступа к видео"
 AUDIO_FORBIDDEN = "Нет доступа к аудио"
 

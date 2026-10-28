@@ -43,6 +43,7 @@ HANDLERS: dict[StepName, StepHandler] = {
 
 REGENERATION_STEPS = [StepName.summarize, StepName.embed]
 REGENERATION_FAILED = "Не удалось пересоздать главы и конспект, попробуйте позже"
+QUEUE_UNAVAILABLE = "Очередь недоступна, попробуйте позже"
 
 ACTIVE_JOB_STATUSES = (JobStatus.deferred, JobStatus.queued, JobStatus.in_progress)
 
