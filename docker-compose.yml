@@ -66,7 +66,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_DIR: /var/log/lecturo
       LOG_SERVICE: api
-      FORWARDED_ALLOW_IPS: ${CADDY_IP:-10.210.0.10}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
@@ -158,9 +158,6 @@ services:
       LOG_MAX_MB: ${LOG_MAX_MB:-10}
       LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
       LOG_FILE_MODE: "640"
-    networks:
-      default:
-        ipv4_address: ${CADDY_IP:-10.210.0.10}
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -180,10 +177,3 @@ services:
         condition: service_started
     logging: *default-logging
     restart: unless-stopped
-
-networks:
-  default:
-    ipam:
-      config:
-        - subnet: ${DOCKER_SUBNET:-10.210.0.0/24}
-          ip_range: ${DOCKER_IP_RANGE:-10.210.0.128/25}
