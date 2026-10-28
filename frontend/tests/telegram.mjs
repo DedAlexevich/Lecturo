@@ -276,7 +276,7 @@ try {
     await page.route((url) => url.pathname.startsWith(`/api/v1/lectures/${lectureId}/exports/`), (route) => {
       linkRequests.push({ path: new URL(route.request().url()).pathname, method: route.request().method(), auth: route.request().headers().authorization });
       return linkStatus === 200
-        ? route.fulfill({ json: { url: `${exportPath}?token=signed-export`, expires_at: "2026-10-27T00:02:00Z" } })
+        ? route.fulfill({ json: { url: `${exportPath}?token=signed-export`, expires_at: new Date(Date.now() + 120_000).toISOString() } })
         : route.fulfill({ status: linkStatus, json: { detail: "Расшифровки ещё нет" } });
     });
     const fileStatuses = [];
@@ -306,7 +306,7 @@ try {
     } else {
       const [download] = await Promise.all([page.waitForEvent("download"), pdf.click()]);
       assert.equal(download.suggestedFilename(), "lecture.pdf");
-      assert.deepEqual(downloads, [`${base}${exportPath}?token=signed-export`, `${base}${exportPath}?token=signed-export`]);
+      assert.deepEqual(downloads, [`${base}${exportPath}?token=signed-export`]);
       assert.equal(page.url(), base + `/lectures/${lectureId}`);
     }
     assert.equal(linkRequests[0].path, `/api/v1/lectures/${lectureId}/exports/pdf/link`);
@@ -316,7 +316,7 @@ try {
     await page.getByRole("button", { name: "SRT", exact: true }).click();
     await page.getByText("Файл ещё не готов, попробуйте позже.").waitFor();
     assert.equal(linkRequests.length, 2);
-    assert.equal(downloads.length, platform ? 0 : 2);
+    assert.equal(downloads.length, platform ? 0 : 1);
     if (!platform) {
       linkStatus = 200;
       fileStatuses.push(500);
@@ -324,19 +324,20 @@ try {
       const failure = page.getByRole("alert").filter({ hasText: "Не удалось скачать PDF" });
       await failure.waitFor();
       assert.equal(page.url(), base + `/lectures/${lectureId}`);
-      assert.equal(downloads.length, 3);
+      assert.equal(downloads.length, 2);
+      assert.equal(linkRequests.length, 2);
       const [download] = await Promise.all([page.waitForEvent("download"), failure.getByRole("button", { name: "Попробовать снова" }).click()]);
       assert.equal(download.suggestedFilename(), "lecture.pdf");
       await failure.waitFor({ state: "detached" });
-      assert.equal(linkRequests.length, 4);
+      assert.equal(linkRequests.length, 2);
       fileStatuses.push(401);
       const [refreshed] = await Promise.all([page.waitForEvent("download"), pdf.click()]);
       assert.equal(refreshed.suggestedFilename(), "lecture.pdf");
-      assert.equal(linkRequests.length, 6);
+      assert.equal(linkRequests.length, 3);
       fileStatuses.push(401, 401);
       await pdf.click();
       await failure.waitFor();
-      assert.equal(linkRequests.length, 8);
+      assert.equal(linkRequests.length, 4);
       assert.equal(page.url(), base + `/lectures/${lectureId}`);
       for (const width of [360, 1280]) {
         await page.setViewportSize({ width, height: 800 });
