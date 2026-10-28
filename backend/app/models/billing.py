@@ -83,3 +83,11 @@ class UsageEntry(UUIDPk, CreatedAt, Base):
     source: Mapped[UsageSource] = mapped_column(Enum(UsageSource, name="usage_source"))
     package_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hour_packages.id"), index=True)
     seconds: Mapped[int] = mapped_column(Integer)
+
+
+class QuotaCarryover(Base):
+    __tablename__ = "quota_carryovers"
+
+    identity_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    used_sec: Mapped[int] = mapped_column(Integer)
+    week_ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
