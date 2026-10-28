@@ -17,14 +17,15 @@ from app.models import (
 )
 from app.pipeline import exam, quiz, summarize, tasks
 from app.pipeline.runner import STEP_ERRORS
+from app.pipeline.summarize import load_prompt
 from app.providers.openai_compat import OpenAICompatibleError, OpenAICompatibleUnavailable
-from tests import test_quiz
+from tests import test_exam_sheet, test_quiz
 from tests.conftest import notifications
 from tests.test_exam_sheet import create_course
 from tests.test_summarize import ScriptedLLM
 
 DELAYS = [60, 300, 900]
-EXHAUSTED = {"job_try": len(DELAYS) + 1}
+LATE_TRY = {"job_try": 40}
 
 
 @pytest.fixture(autouse=True)
@@ -92,6 +93,12 @@ async def state(lecture_id) -> tuple[LectureStatus, dict[StepName, ProcessingSte
         return status, {row.step: row for row in rows}
 
 
+async def exhaust(run) -> None:
+    for _ in DELAYS:
+        with pytest.raises(Retry):
+            await run()
+
+
 @pytest.fixture
 def refunds(monkeypatch) -> list:
     calls = []
@@ -113,7 +120,7 @@ async def test_transient_llm_error_defers_lecture_and_second_try_succeeds(
     lecture = await transcribed_lecture(user)
 
     with pytest.raises(Retry) as deferred:
-        await tasks.process_lecture({"job_try": 1}, str(lecture.id))
+        await tasks.process_lecture(LATE_TRY, str(lecture.id))
 
     assert deferred.value.defer_score == DELAYS[0] * 1000
     status, steps = await state(lecture.id)
@@ -125,7 +132,7 @@ async def test_transient_llm_error_defers_lecture_and_second_try_succeeds(
     assert refunds == []
     map_calls = llm.map_calls
 
-    assert await tasks.process_lecture({"job_try": 2}, str(lecture.id)) == LectureStatus.ready
+    assert await tasks.process_lecture(LATE_TRY, str(lecture.id)) == LectureStatus.ready
 
     assert llm.map_calls == map_calls
     status, steps = await state(lecture.id)
@@ -139,14 +146,14 @@ async def test_transient_llm_error_defers_lecture_and_second_try_succeeds(
     ]
 
 
-async def test_deferral_delay_grows_with_job_try(user, monkeypatch):
+async def test_deferral_delay_grows_regardless_of_job_try(user, monkeypatch):
     monkeypatch.setattr(summarize, "get_llm", lambda: FlakyLLM(outages=10))
     lecture = await transcribed_lecture(user)
 
     scores = []
-    for job_try in range(1, len(DELAYS) + 1):
+    for _ in DELAYS:
         with pytest.raises(Retry) as deferred:
-            await tasks.process_lecture({"job_try": job_try}, str(lecture.id))
+            await tasks.process_lecture(LATE_TRY, str(lecture.id))
         scores.append(deferred.value.defer_score)
 
     assert scores == [delay * 1000 for delay in DELAYS]
@@ -156,7 +163,8 @@ async def test_exhausted_deferrals_fail_lecture_with_clear_error(user, monkeypat
     monkeypatch.setattr(summarize, "get_llm", lambda: FlakyLLM(outages=10))
     lecture = await transcribed_lecture(user)
 
-    assert await tasks.process_lecture(EXHAUSTED, str(lecture.id)) == LectureStatus.failed
+    await exhaust(lambda: tasks.process_lecture(LATE_TRY, str(lecture.id)))
+    assert await tasks.process_lecture(LATE_TRY, str(lecture.id)) == LectureStatus.failed
 
     status, steps = await state(lecture.id)
     assert status == LectureStatus.failed
@@ -171,7 +179,7 @@ async def test_permanent_llm_error_fails_lecture_at_once(user, monkeypatch):
     monkeypatch.setattr(summarize, "get_llm", lambda: FlakyLLM(outages=1, error=error))
     lecture = await transcribed_lecture(user)
 
-    assert await tasks.process_lecture({"job_try": 1}, str(lecture.id)) == LectureStatus.failed
+    assert await tasks.process_lecture(LATE_TRY, str(lecture.id)) == LectureStatus.failed
 
     status, steps = await state(lecture.id)
     assert status == LectureStatus.failed
@@ -190,13 +198,13 @@ async def test_regeneration_is_deferred_on_transient_error(user, monkeypatch):
         await session.commit()
 
     with pytest.raises(Retry):
-        await tasks.process_regeneration({"job_try": 1}, str(lecture.id))
+        await tasks.process_regeneration(LATE_TRY, str(lecture.id))
 
     status, steps = await state(lecture.id)
     assert status == LectureStatus.processing
     assert steps[StepName.summarize].status == StepStatus.pending
 
-    assert await tasks.process_regeneration({"job_try": 2}, str(lecture.id)) == StepStatus.done
+    assert await tasks.process_regeneration(LATE_TRY, str(lecture.id)) == StepStatus.done
     status, _ = await state(lecture.id)
     assert status == LectureStatus.ready
 
@@ -222,7 +230,7 @@ async def test_quiz_is_deferred_and_built_on_next_try(user, monkeypatch):
     lecture = await test_quiz.create_ready_lecture(user)
 
     with pytest.raises(Retry) as deferred:
-        await tasks.process_quiz({"job_try": 1}, str(lecture.id))
+        await tasks.process_quiz(LATE_TRY, str(lecture.id))
 
     assert deferred.value.defer_score == DELAYS[0] * 1000
     step = await test_quiz.quiz_step(lecture.id)
@@ -230,7 +238,7 @@ async def test_quiz_is_deferred_and_built_on_next_try(user, monkeypatch):
     assert step.error is None
     assert await notifications(lecture.id) == []
 
-    assert await tasks.process_quiz({"job_try": 2}, str(lecture.id)) == StepStatus.done
+    assert await tasks.process_quiz(LATE_TRY, str(lecture.id)) == StepStatus.done
     assert (await test_quiz.quiz_step(lecture.id)).status == StepStatus.done
     assert await notifications(lecture.id) == [(NotificationKind.quiz, NotificationOutcome.ready)]
 
@@ -239,7 +247,8 @@ async def test_quiz_fails_after_last_deferral(user, monkeypatch):
     monkeypatch.setattr(quiz, "get_llm", lambda: FlakyQuizLLM(outages=10))
     lecture = await test_quiz.create_ready_lecture(user)
 
-    assert await tasks.process_quiz(EXHAUSTED, str(lecture.id)) == StepStatus.failed
+    await exhaust(lambda: tasks.process_quiz(LATE_TRY, str(lecture.id)))
+    assert await tasks.process_quiz(LATE_TRY, str(lecture.id)) == StepStatus.failed
 
     step = await test_quiz.quiz_step(lecture.id)
     assert step.status == StepStatus.failed
@@ -252,7 +261,7 @@ async def test_quiz_permanent_error_fails_at_once(user, monkeypatch):
     monkeypatch.setattr(quiz, "get_llm", lambda: FlakyQuizLLM(outages=1, error=error))
     lecture = await test_quiz.create_ready_lecture(user)
 
-    assert await tasks.process_quiz({"job_try": 1}, str(lecture.id)) == StepStatus.failed
+    assert await tasks.process_quiz(LATE_TRY, str(lecture.id)) == StepStatus.failed
     assert (await test_quiz.quiz_step(lecture.id)).error == STEP_ERRORS[StepName.quiz]
 
 
@@ -267,11 +276,38 @@ async def test_exam_sheet_is_deferred_then_marked_failed(user, monkeypatch):
     monkeypatch.setattr(exam, "get_llm", UnavailableLLM)
     course_id = await create_course(user)
 
-    with pytest.raises(Retry):
-        await exam.build_exam_sheet({"job_try": 1}, str(course_id))
+    await exhaust(lambda: exam.build_exam_sheet(LATE_TRY, str(course_id)))
     assert not await exam.exam_sheet_failed(course_id)
 
     with pytest.raises(OpenAICompatibleUnavailable):
-        await exam.build_exam_sheet(EXHAUSTED, str(course_id))
+        await exam.build_exam_sheet(LATE_TRY, str(course_id))
     assert await exam.exam_sheet_failed(course_id)
     await exam.clear_exam_sheet_failure(course_id)
+
+
+class FlakyExamLLM(test_exam_sheet.ScriptedLLM):
+    def __init__(self) -> None:
+        super().__init__()
+        self.outages = 1
+
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
+        if system == load_prompt("exam_reduce") and self.outages:
+            self.outages -= 1
+            raise OpenAICompatibleUnavailable("/chat/completions: API ответил 429 после 4 попыток")
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+async def test_exam_sheet_reuses_lecture_digests_after_deferral(user, monkeypatch):
+    llm = FlakyExamLLM()
+    monkeypatch.setattr(exam, "get_llm", lambda: llm)
+    course_id = await create_course(user)
+
+    with pytest.raises(Retry):
+        await exam.build_exam_sheet(LATE_TRY, str(course_id))
+    assert len(llm.map_requests) == len(test_exam_sheet.LECTURES)
+
+    assert await exam.build_exam_sheet(LATE_TRY, str(course_id)) == "ready"
+    assert len(llm.map_requests) == len(test_exam_sheet.LECTURES)
+    assert len(llm.reduce_requests) == 1

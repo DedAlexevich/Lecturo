@@ -4,10 +4,12 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Protocol
 
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.redis import get_redis
 from app.models import (
     Lecture,
     LectureStatus,
@@ -48,12 +50,35 @@ class UserFacingError(Exception):
 TRANSIENT_ERRORS = (OpenAICompatibleUnavailable,)
 
 
-def deferral_delay(ctx: dict) -> int | None:
-    delays = get_settings().llm_retry_defer_seconds
-    job_try = ctx.get("job_try", 1)
-    if job_try > len(delays):
+DEFERRALS_TTL_SECONDS = 24 * 3600
+
+
+def deferrals_key(scope: str) -> str:
+    return f"llm-deferrals:{scope}"
+
+
+async def next_deferral(scope: str) -> int | None:
+    settings = get_settings()
+    redis = get_redis(settings.redis_url)
+    key = deferrals_key(scope)
+    delays = settings.llm_retry_defer_seconds
+    try:
+        used = await redis.incr(key)
+        await redis.expire(key, DEFERRALS_TTL_SECONDS)
+        if used > len(delays):
+            await redis.delete(key)
+            return None
+    except (OSError, RedisError):
+        logger.warning("Не удалось посчитать отложенные повторы %s", scope, exc_info=True)
         return None
-    return delays[job_try - 1]
+    return delays[used - 1]
+
+
+async def reset_deferrals(scope: str) -> None:
+    try:
+        await get_redis(get_settings().redis_url).delete(deferrals_key(scope))
+    except (OSError, RedisError):
+        logger.warning("Не удалось сбросить счётчик повторов %s", scope, exc_info=True)
 
 
 PROCESSING_FAILED = "Не удалось обработать лекцию, попробуйте ещё раз"
@@ -96,7 +121,7 @@ async def run_step(
     *,
     fails_lecture: bool = True,
     notify: NotificationKind | None = None,
-    defer_delay: int | None = None,
+    defer_scope: str | None = None,
 ) -> None:
     step = await get_step(session, lecture.id, name)
     if step.status == StepStatus.done:
@@ -133,12 +158,15 @@ async def run_step(
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
             raise
-        if defer_delay is not None and isinstance(error, TRANSIENT_ERRORS):
+        delay = None
+        if defer_scope is not None and isinstance(error, TRANSIENT_ERRORS):
+            delay = await next_deferral(defer_scope)
+        if delay is not None:
             logger.warning(
                 "Шаг %s лекции %s отложен на %s с из-за временной ошибки провайдера: %s",
                 name.value,
                 lecture.id,
-                defer_delay,
+                delay,
                 error,
             )
             step.status = StepStatus.pending
@@ -146,7 +174,9 @@ async def run_step(
             step.stage = None
             step.started_at = None
             await session.commit()
-            raise StepDeferred(name, defer_delay) from error
+            raise StepDeferred(name, delay) from error
+        if defer_scope is not None:
+            await reset_deferrals(defer_scope)
         logger.error("Шаг %s лекции %s завершился ошибкой", name.value, lecture.id, exc_info=error)
         step.status = StepStatus.failed
         step.error = step_error(name, error)
@@ -163,6 +193,8 @@ async def run_step(
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
         raise StepFailed(name) from error
 
+    if defer_scope is not None:
+        await reset_deferrals(defer_scope)
     step.status = StepStatus.done
     step.progress = 1.0
     step.stage = None

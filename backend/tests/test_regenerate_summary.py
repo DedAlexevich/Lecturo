@@ -277,7 +277,7 @@ async def test_unexpected_error_restores_ready_state(
         pass
 
     async def aborting_step(
-        session, lecture, name, handler, *, fails_lecture=True, defer_delay=None
+        session, lecture, name, handler, *, fails_lecture=True, defer_scope=None
     ):
         raise Aborted
 
