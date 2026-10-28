@@ -70,6 +70,7 @@ export function CoursePage() {
       <div className="course">
         <BackLink />
         <EmptyState
+          level={1}
           title="Курс не найден"
           description="Возможно, его удалили или ссылка неполная."
           action={<Link to="/">Все лекции</Link>}

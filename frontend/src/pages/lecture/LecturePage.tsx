@@ -166,6 +166,7 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
     return (
       <div className="lecture">
         <EmptyState
+          level={1}
           title="Лекция не найдена"
           description="Возможно, её удалили или ссылка открыта не из того аккаунта."
           action={<Link to="/">К списку лекций</Link>}
