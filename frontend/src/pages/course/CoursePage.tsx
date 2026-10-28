@@ -51,7 +51,7 @@ export function CoursePage() {
   const lectures = useLectures(id);
   const examSheet = useExamSheet(id);
   const rebuildSheet = useCreateExamSheet(id);
-  const { requireConsent, dialog: consentDialog } = useAiTransferConsent();
+  const { requireConsent, waiting: consentWaiting, dialog: consentDialog } = useAiTransferConsent();
   const rename = useUpdateCourse(id);
   const remove = useDeleteCourse(id);
   const addLectures = useAddLectures(id);
@@ -118,7 +118,7 @@ export function CoursePage() {
                   <button
                     type="button"
                     className="course__note-action"
-                    disabled={rebuildSheet.isPending}
+                    disabled={rebuildSheet.isPending || consentWaiting}
                     onClick={() =>
                       requireConsent(() =>
                         rebuildSheet.mutate(undefined, {
@@ -127,7 +127,7 @@ export function CoursePage() {
                       )
                     }
                   >
-                    {rebuildSheet.isPending ? "Запускаем" : "Обновить памятку"}
+                    {rebuildSheet.isPending || consentWaiting ? "Запускаем" : "Обновить памятку"}
                   </button>
                 </p>
               )

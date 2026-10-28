@@ -243,6 +243,66 @@ try {
     assert.deepEqual(errors, []);
     await context.close();
   }
+  {
+    const { context, page, requests, errors } = await setup("android", 403);
+    await page.goto(base + "/login");
+    const dialog = page.getByRole("dialog", { name: "Создание аккаунта" });
+    await dialog.waitFor();
+    await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    const login = page.getByRole("button", { name: "Войти через Telegram", exact: true });
+    await login.waitFor();
+    await login.click();
+    await dialog.waitFor();
+    assert.equal(requests.length, 2);
+    for (const label of await dialog.locator("label.checkbox").all()) await label.locator(".checkbox__box").click();
+    await dialog.getByRole("button", { name: "Продолжить", exact: true }).click();
+    await page.waitForURL(base + "/");
+    assert.equal(await page.evaluate(() => localStorage.getItem("lecturo.token")), "test-token");
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const { context, page, requests, errors } = await setup("ios");
+    const lectureId = "00000000-0000-4000-8000-000000000003";
+    await page.route((url) => url.pathname.startsWith(`/api/v1/lectures/${lectureId}`), (route) => new URL(route.request().url()).pathname !== `/api/v1/lectures/${lectureId}`
+      ? route.fulfill({ status: 404, json: { detail: "Не найдено" } })
+      : route.fulfill({ json: {
+      id: lectureId, title: "Лекция из уведомления", source_type: "upload", source_url: null, embed_url: null,
+      duration_sec: 120, status: "ready", processed_locally: false, video_expires_at: null,
+      created_at: "2026-10-27T00:00:00Z", video_url: null, audio_only: false, audio_url: null, steps: [],
+      segments: [{ start: 0, end: 2, text: "Первая фраза." }], chapters: [], summary: { content_md: "Конспект" },
+    } }));
+    await page.goto(base + `/lectures/${lectureId}#tgWebAppData=query_id%3D1&tgWebAppVersion=8.0`);
+    await page.getByRole("heading", { name: "Лекция из уведомления" }).waitFor();
+    assert.equal(new URL(page.url()).pathname, `/lectures/${lectureId}`);
+    assert.equal(new URL(page.url()).hash, "");
+    assert.equal(requests.length, 1);
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await context.route("https://telegram.org/js/telegram-widget.js*", (route) => route.abort());
+    const page = await context.newPage();
+    const sdkRequests = [];
+    await page.route("https://telegram.org/js/telegram-web-app.js*", (route) => {
+      sdkRequests.push(route.request().url());
+      return route.abort();
+    });
+    await page.goto(base + "/login");
+    await page.getByRole("heading", { name: "Вход", exact: true }).waitFor();
+    assert.deepEqual(sdkRequests, []);
+    const miniAppPage = await context.newPage();
+    await miniAppPage.route("https://telegram.org/js/telegram-web-app.js*", (route) => {
+      sdkRequests.push(route.request().url());
+      return route.abort();
+    });
+    await miniAppPage.goto(base + "/login#tgWebAppData=query_id%3D1&tgWebAppVersion=8.0");
+    await miniAppPage.getByRole("heading", { name: "Вход", exact: true }).waitFor();
+    assert.equal(sdkRequests.length, 1);
+    await context.close();
+  }
   for (const path of ["/login", "/register"]) {
     const miniApp = await setup("android", 401);
     await miniApp.page.goto(base + path);
@@ -407,7 +467,7 @@ try {
     assert.deepEqual(errors, []);
     await context.close();
   }
-  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors, export links, local export");
+  console.log("Telegram browser checks passed: Android/iOS SDK mocks, consents, theme, history, browser fallback, mobile layout, auth errors, consent cancel, notification deep link, deferred SDK, export links, local export");
 } finally {
   await browser.close();
 }
