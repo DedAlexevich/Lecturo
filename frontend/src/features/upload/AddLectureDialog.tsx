@@ -45,9 +45,14 @@ export function AddLectureDialog() {
   const selectedCourse = courses.data?.some((course) => course.id === courseId) ? courseId : "";
 
   const { reset: resetLink } = addLink;
+  const { active: uploading, reset: resetUpload } = upload;
 
   const close = useCallback(() => {
     resetLink();
+    if (!uploading) {
+      setPickedFile(null);
+      resetUpload();
+    }
     setSearchParams(
       (params) => {
         params.delete("add");
@@ -55,7 +60,7 @@ export function AddLectureDialog() {
       },
       { replace: true },
     );
-  }, [resetLink, setSearchParams]);
+  }, [resetLink, uploading, resetUpload, setSearchParams]);
 
   const refreshLists = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["lectures"] });
