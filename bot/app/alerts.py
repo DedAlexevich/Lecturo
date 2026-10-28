@@ -27,6 +27,8 @@ KINDS = {
 
 MAX_LINES = 5
 
+MESSAGE_LIMIT = 4000
+
 LOOP_SECONDS = 10
 
 DELIVERY_BATCH = 50
@@ -190,7 +192,7 @@ def summary_lines(signals) -> list[str]:
 def alert_message(kind: str, signals, recovery: bool) -> str:
     title = KINDS.get(kind, kind)
     head = f"Восстановлено: {title}" if recovery else f"Алерт: {title}"
-    return "\n".join([head, *summary_lines(signals)])
+    return "\n".join([head, *summary_lines(signals)])[:MESSAGE_LIMIT]
 
 
 def plan_dispatch(

@@ -83,6 +83,12 @@ def test_long_summary_is_cut():
     assert len(text.splitlines()) == alerts.MAX_LINES + 2
 
 
+def test_long_message_fits_telegram_limit():
+    signals = [signal("service_down", "unit", "event", "x" * 10_000)]
+
+    assert len(alert_message("service_down", signals, recovery=False)) == alerts.MESSAGE_LIMIT
+
+
 def test_kind_waits_for_interval_and_keeps_signals():
     signals = [signal("payment", "payment:1", "event")]
     last_sent = {"payment": NOW - timedelta(minutes=5)}
