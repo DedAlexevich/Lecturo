@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
+from sqlalchemy.sql.base import ExecutableOption
 
 from app.api.courses import get_own_course
 from app.api.shares import shared_with
@@ -21,6 +22,7 @@ from app.models import (
     SourceType,
     StepName,
     StepStatus,
+    User,
     course_lectures,
 )
 from app.pipeline.download import LinkError, inspect_link, link_key
@@ -59,6 +61,25 @@ router = APIRouter(prefix="/lectures", tags=["lectures"])
 
 VIDEO_FORBIDDEN = "Нет доступа к видео"
 AUDIO_FORBIDDEN = "Нет доступа к аудио"
+LECTURE_NOT_FOUND = "Лекция не найдена"
+
+
+async def own_lecture(
+    session: AsyncSession,
+    lecture_id: uuid.UUID,
+    user: User,
+    *options: ExecutableOption,
+    for_update: bool = False,
+) -> Lecture:
+    query = select(Lecture).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
+    if options:
+        query = query.options(*options)
+    if for_update:
+        query = query.with_for_update()
+    lecture = await session.scalar(query)
+    if lecture is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, LECTURE_NOT_FOUND)
+    return lecture
 
 
 async def add_to_course(session: AsyncSession, course_id: uuid.UUID, lecture_id: uuid.UUID) -> None:
@@ -86,18 +107,15 @@ async def list_lectures(user: CurrentUser, session: SessionDep) -> list[LectureO
 async def get_lecture(
     lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep
 ) -> LectureDetail:
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .options(
-            selectinload(Lecture.steps),
-            selectinload(Lecture.segments),
-            selectinload(Lecture.chapters),
-            selectinload(Lecture.summary),
-        )
+    lecture = await own_lecture(
+        session,
+        lecture_id,
+        user,
+        selectinload(Lecture.steps),
+        selectinload(Lecture.segments),
+        selectinload(Lecture.chapters),
+        selectinload(Lecture.summary),
     )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
     video_url = signed_video_url(lecture.id) if lecture.video_path else None
     audio_only = is_audio_only(lecture)
     audio_url = signed_audio_url(lecture.id) if audio_only and lecture.audio_path else None
@@ -323,11 +341,7 @@ async def add_link(
 async def update_lecture(
     lecture_id: uuid.UUID, body: LectureUpdate, user: CurrentUser, session: SessionDep
 ) -> LectureOut:
-    lecture = await session.scalar(
-        select(Lecture).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-    )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    lecture = await own_lecture(session, lecture_id, user)
     lecture.title = body.title
     await session.commit()
     await session.refresh(lecture)
@@ -336,13 +350,7 @@ async def update_lecture(
 
 @router.delete("/{lecture_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .with_for_update()
-    )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    lecture = await own_lecture(session, lecture_id, user, for_update=True)
     started = await session.scalar(
         select(exists().where(ProcessingStep.lecture_id == lecture_id, ProcessingStep.attempts > 0))
     )
@@ -365,22 +373,19 @@ async def delete_lecture(lecture_id: uuid.UUID, user: CurrentUser, session: Sess
 async def get_status(
     lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep
 ) -> LectureStatusOut:
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .options(
-            load_only(
-                Lecture.id,
-                Lecture.status,
-                Lecture.source_type,
-                Lecture.duration_sec,
-                Lecture.updated_at,
-            ),
-            selectinload(Lecture.steps),
-        )
+    lecture = await own_lecture(
+        session,
+        lecture_id,
+        user,
+        load_only(
+            Lecture.id,
+            Lecture.status,
+            Lecture.source_type,
+            Lecture.duration_sec,
+            Lecture.updated_at,
+        ),
+        selectinload(Lecture.steps),
     )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
     return await status_of(session, lecture)
 
 
@@ -397,11 +402,7 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         .returning(Lecture.id)
     )
     if queued is None:
-        owned = await session.scalar(
-            select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        )
-        if owned is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+        await own_lecture(session, lecture_id, user, load_only(Lecture.id))
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Перезапустить можно только упавшую обработку"
         )
@@ -435,13 +436,7 @@ async def retry(lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
 async def regenerate_summary(
     lecture_id: uuid.UUID, user: CurrentUser, session: SessionDep
 ) -> LectureStatusOut:
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .with_for_update()
-    )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    lecture = await own_lecture(session, lecture_id, user, for_update=True)
     if lecture.status != LectureStatus.ready:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -510,13 +505,7 @@ async def create_quiz(
     lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
 ) -> None:
     require_ai_transfer_consent(user)
-    lecture = await session.scalar(
-        select(Lecture)
-        .where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-        .with_for_update()
-    )
-    if lecture is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    lecture = await own_lecture(session, lecture_id, user, for_update=True)
     if lecture.status != LectureStatus.ready:
         raise HTTPException(status.HTTP_409_CONFLICT, "Квиз можно сделать, когда лекция обработана")
     step = await get_step(session, lecture.id, StepName.quiz)
@@ -541,11 +530,7 @@ async def create_quiz(
 async def get_quiz(
     lecture_id: uuid.UUID, user: RequireSubscription, session: SessionDep
 ) -> QuizOut:
-    owned = await session.scalar(
-        select(Lecture.id).where(Lecture.id == lecture_id, Lecture.owner_id == user.id)
-    )
-    if owned is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Лекция не найдена")
+    await own_lecture(session, lecture_id, user, load_only(Lecture.id))
     quiz = await session.scalar(select(Quiz).where(Quiz.lecture_id == lecture_id))
     if quiz is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Квиз ещё не готов")
