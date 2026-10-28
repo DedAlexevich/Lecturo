@@ -17,11 +17,13 @@ from app.models import (
     Payment,
     PaymentKind,
     PaymentStatus,
+    PromoRedemption,
     Subscription,
     User,
 )
 from app.pipeline.retention import extend_video_retention
 from app.schemas.billing import PaymentOut, ProductOut
+from app.services import promo
 from app.services.admin_alerts import report_payment
 from app.services.auth import normalize_email
 from app.services.quota import list_products
@@ -155,6 +157,7 @@ def payment_out(payment: Payment) -> PaymentOut:
         kind=payment.kind,
         product_code=payment.product_code,
         amount_kopecks=payment.amount_kopecks,
+        discount_kopecks=payment.discount_kopecks,
         status=payment.status,
         confirmation_url=confirmation_url(payment),
         created_at=payment.created_at,
@@ -185,30 +188,47 @@ async def create_payment(
     return_url: str,
     settings: Settings,
     receipt_email: str | None = None,
+    promo_code: str | None = None,
 ) -> Payment:
     user_id = user.id
     email = user.email or (normalize_email(receipt_email) if receipt_email else None)
     if not email:
         raise PaymentError("Для чека нужен email: укажите адрес, на который отправить чек")
+    code = promo.normalize_code(promo_code or "") or None
     payment = await find_by_key(session, user_id, idempotence_key)
     if payment is None:
+        price = product.price_rub * 100
+        reserved, discount = None, 0
+        if code:
+            reserved, discount = await promo.reserve_discount(
+                session, user_id, code, price, datetime.now(UTC)
+            )
         payment = Payment(
             user_id=user_id,
             kind=product.kind,
             product_code=product.code,
-            amount_kopecks=product.price_rub * 100,
+            amount_kopecks=price - discount,
+            discount_kopecks=discount,
             idempotence_key=idempotence_key,
             raw={},
         )
         session.add(payment)
         try:
+            if reserved is not None:
+                await session.flush()
+                session.add(
+                    PromoRedemption(promo_id=reserved.id, user_id=user_id, payment_id=payment.id)
+                )
             await session.commit()
         except IntegrityError:
             await session.rollback()
             payment = await find_by_key(session, user_id, idempotence_key)
             if payment is None:
                 raise IdempotenceKeyConflict("Платёж с этим ключом ещё создаётся") from None
-    if payment.product_code != product.code:
+    if (
+        payment.product_code != product.code
+        or (await promo.payment_promo_code(session, payment.id)) != code
+    ):
         raise IdempotenceKeyConflict("Ключ идемпотентности уже использован для другого платежа")
     if payment.yookassa_id:
         return payment

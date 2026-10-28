@@ -31,6 +31,8 @@ class AdminAction(enum.StrEnum):
     user_blocked = "user_blocked"
     user_unblocked = "user_unblocked"
     alert_settings_changed = "alert_settings_changed"
+    promo_created = "promo_created"
+    promo_disabled = "promo_disabled"
 
 
 class AdminAuditEntry(UUIDPk, CreatedAt, Base):

@@ -45,6 +45,7 @@ class Payment(UUIDPk, CreatedAt, Base):
     idempotence_key: Mapped[str] = mapped_column(String(64))
     yookassa_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    discount_kopecks: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     raw: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 

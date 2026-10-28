@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     link_inspect_timeout_seconds: float = 90.0
     complaints_rate_limit: int = 5
     complaints_rate_window_seconds: int = 3600
+    promo_rate_limit: int = 10
+    promo_rate_window_seconds: int = 3600
     public_copy_daily_limit: int = 20
     public_export_rate_limit: int = 30
     public_export_rate_window_seconds: int = 3600

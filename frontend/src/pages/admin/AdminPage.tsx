@@ -19,6 +19,9 @@ const UserCardSection = lazy(() =>
 const StatsSection = lazy(() =>
   import("./users/StatsSection").then((module) => ({ default: module.StatsSection })),
 );
+const PromoSection = lazy(() =>
+  import("./promo/PromoSection").then((module) => ({ default: module.PromoSection })),
+);
 const AdminBackupsPage = lazy(() =>
   import("./backups/AdminBackupsPage").then((module) => ({ default: module.AdminBackupsPage })),
 );
@@ -30,6 +33,7 @@ const AdminAlertsPage = lazy(() =>
 const sections = [
   { to: "/admin/users", label: "Пользователи" },
   { to: "/admin/stats", label: "Статистика" },
+  { to: "/admin/promo", label: "Промокоды" },
   { to: "/admin/audit", label: "Журнал действий" },
   { to: "/admin/admins", label: "Администраторы" },
   { to: "/admin/logs", label: "Логи и ошибки" },
@@ -64,6 +68,7 @@ export function AdminPage() {
             <Route path="users" element={<UsersSection meId={me.id} />} />
             <Route path="users/:userId" element={<UserCardSection meId={me.id} />} />
             <Route path="stats" element={<StatsSection />} />
+            <Route path="promo" element={<PromoSection />} />
             <Route path="audit" element={<AuditSection />} />
             <Route path="admins" element={<AdminsSection meId={me.id} />} />
             <Route path="logs" element={<AdminLogsPage />} />

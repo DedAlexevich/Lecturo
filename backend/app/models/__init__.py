@@ -26,6 +26,7 @@ from app.models.lecture import (
 )
 from app.models.legal import LegalNotice, LegalRevision, NoticeChannel
 from app.models.notification import NotificationEvent, NotificationKind, NotificationOutcome
+from app.models.promo import PromoCode, PromoKind, PromoRedemption
 from app.models.search import ChunkKind, SearchChunk
 from app.models.share import Complaint, ShareLink
 from app.models.user import AuthIdentity, AuthProvider, AuthToken, AuthTokenKind, User
@@ -65,6 +66,9 @@ __all__ = [
     "PaymentStatus",
     "ProcessingStep",
     "Quiz",
+    "PromoCode",
+    "PromoKind",
+    "PromoRedemption",
     "SearchChunk",
     "ShareLink",
     "SourceType",
