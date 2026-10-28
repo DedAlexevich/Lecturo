@@ -25,19 +25,21 @@ function SearchForm({ initial, onSearch }: { initial: string; onSearch: (value: 
       <label className={styles.searchLabel} htmlFor={inputId}>
         Почта, имя, Telegram id или @username
       </label>
-      <Input
-        id={inputId}
-        type="search"
-        value={draft}
-        autoComplete="off"
-        spellCheck={false}
-        maxLength={320}
-        aria-describedby={hintId}
-        onChange={(event) => setDraft(event.target.value)}
-      />
-      <Button type="submit" disabled={draft.trim().length < 2}>
-        Найти
-      </Button>
+      <div className={styles.searchRow}>
+        <Input
+          id={inputId}
+          type="search"
+          value={draft}
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={320}
+          aria-describedby={hintId}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        <Button type="submit" disabled={draft.trim().length < 2}>
+          Найти
+        </Button>
+      </div>
       <p id={hintId} className={styles.searchHint}>
         Подойдёт часть почты, имени или username, регистр не важен. Telegram id нужен целиком. Каждый поиск и
         просмотр карточки попадает в журнал.

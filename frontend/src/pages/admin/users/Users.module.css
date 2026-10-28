@@ -1,19 +1,29 @@
 .search {
   display: grid;
-  grid-template-columns: minmax(0, 28rem) max-content;
-  justify-content: start;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2);
+}
+
+.searchRow {
+  display: flex;
+  gap: var(--space-3);
+  max-width: 36rem;
+}
+
+.searchRow > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.searchRow > :last-child {
+  flex: none;
 }
 
 .searchLabel {
-  grid-column: 1 / -1;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
 
 .searchHint {
-  grid-column: 1 / -1;
   max-width: 40rem;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -443,10 +453,6 @@
 }
 
 @media (max-width: 640px) {
-  .search {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .resultRow {
     grid-template-columns: minmax(0, 1fr);
   }
