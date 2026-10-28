@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Player = {
   seek: (seconds: number) => void;
@@ -14,6 +14,24 @@ export type PlayerProps = {
 
 export function videoIdentity(src: string) {
   return src.split("?")[0];
+}
+
+export function isSourceStream(src: string) {
+  return videoIdentity(src).endsWith("/stream");
+}
+
+export function useNoReferrer(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const meta = document.createElement("meta");
+    meta.name = "referrer";
+    meta.content = "no-referrer";
+    document.head.append(meta);
+    return () => {
+      meta.content = "strict-origin-when-cross-origin";
+      meta.remove();
+    };
+  }, [active]);
 }
 
 export function usePlayer() {
