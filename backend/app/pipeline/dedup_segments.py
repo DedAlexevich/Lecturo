@@ -28,6 +28,7 @@ class DedupResult:
     segments: int
     regenerated: list[uuid.UUID]
     not_queued: list[uuid.UUID]
+    skipped: list[uuid.UUID]
 
 
 async def delete_duplicates(session: AsyncSession) -> list[uuid.UUID]:
@@ -129,10 +130,11 @@ async def dedup_segments() -> DedupResult:
         deleted = await delete_duplicates(session)
         lecture_ids = sorted(set(deleted))
         if not lecture_ids:
-            return DedupResult(lectures=0, segments=0, regenerated=[], not_queued=[])
+            return DedupResult(lectures=0, segments=0, regenerated=[], not_queued=[], skipped=[])
         await renumber(session, lecture_ids)
         lectures = await mark_for_regeneration(session, lecture_ids)
         await session.commit()
+    marked = {lecture.id for lecture in lectures}
     regenerated = []
     not_queued = []
     for lecture in lectures:
@@ -149,6 +151,7 @@ async def dedup_segments() -> DedupResult:
         segments=len(deleted),
         regenerated=regenerated,
         not_queued=not_queued,
+        skipped=[lecture_id for lecture_id in lecture_ids if lecture_id not in marked],
     )
 
 
@@ -157,6 +160,10 @@ if __name__ == "__main__":
     print(f"Лекций с дублями: {result.lectures}")
     print(f"Удалено сегментов: {result.segments}")
     print(f"Поставлено на пересоздание глав, конспекта и поиска: {len(result.regenerated)}")
+    if result.skipped:
+        print("Очищены без пересоздания (не готовы, обработаны на устройстве или без согласия):")
+        for lecture_id in result.skipped:
+            print(lecture_id)
     if result.not_queued:
         print("Не удалось поставить в очередь, пересоздайте вручную:")
         for lecture_id in result.not_queued:

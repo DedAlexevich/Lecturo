@@ -1,6 +1,6 @@
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.db import SessionLocal
 from app.models import (
@@ -11,6 +11,7 @@ from app.models import (
     StepName,
     StepStatus,
     TranscriptSegment,
+    User,
 )
 from app.pipeline import dedup_segments, tasks
 
@@ -22,7 +23,7 @@ async def create_lecture(user, phrases, status=LectureStatus.ready, **fields) ->
         lecture = Lecture(
             owner_id=user.id,
             title="Матанализ",
-            source_type=SourceType.link,
+            source_type=fields.pop("source_type", SourceType.link),
             status=status,
             **fields,
         )
@@ -139,20 +140,39 @@ async def test_close_but_different_segments_are_kept(user, enqueued):
     [
         {"status": LectureStatus.failed},
         {"status": LectureStatus.ready, "processed_locally": True},
+        {"status": LectureStatus.ready, "source_type": SourceType.local},
     ],
-    ids=["not-ready", "local"],
+    ids=["not-ready", "processed-locally", "local-source"],
 )
 async def test_only_server_ready_lectures_are_regenerated(user, enqueued, fields):
     lecture = await create_lecture(user, doubled(PHRASES), **fields)
 
     result = await dedup_segments.dedup_segments()
 
-    assert (result.lectures, result.regenerated) == (1, [])
+    assert (result.lectures, result.regenerated, result.skipped) == (1, [], [lecture.id])
     assert enqueued == []
     assert len(await segments_of(lecture.id)) == 3
     status, steps = await state_of(lecture.id)
     assert status == fields["status"]
     assert steps[StepName.summarize] == StepStatus.done
+
+
+async def test_owner_without_consent_is_not_regenerated(user, enqueued):
+    async with SessionLocal() as session:
+        await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(ai_transfer_accepted_at=None, ai_transfer_revision=None)
+        )
+        await session.commit()
+    lecture = await create_lecture(user, doubled(PHRASES))
+
+    result = await dedup_segments.dedup_segments()
+
+    assert (result.regenerated, result.skipped) == ([], [lecture.id])
+    assert enqueued == []
+    assert len(await segments_of(lecture.id)) == 3
+    assert (await state_of(lecture.id))[0] == LectureStatus.ready
 
 
 async def test_queue_error_restores_lecture_and_continues(user, enqueued, monkeypatch):
