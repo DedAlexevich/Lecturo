@@ -7,6 +7,7 @@ from app.api import (
     admin_logs,
     admin_promo,
     admin_users,
+    admin_zoomer,
     auth,
     billing,
     courses,
@@ -26,6 +27,7 @@ from app.api import (
     shares,
     telegram,
     uploads,
+    zoomer,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -56,5 +58,7 @@ for module in (
     maintenance,
     admin_users,
     admin_promo,
+    admin_zoomer,
+    zoomer,
 ):
     api_router.include_router(module.router)
