@@ -2,13 +2,16 @@
 set -eu
 
 backups=$1
-shift
+logs=$2
+storage=$3
 
-mkdir -p "$backups"
+mkdir -p "$backups" "$logs" "$storage"
+
 chgrp 1500 "$backups"
 chmod g+rwxs "$backups"
 
-for dir in "$@"; do
-  mkdir -p "$dir"
-  find "$dir" \( ! -user 1000 -o ! -group 1000 \) ! -name 'caddy.log*' ! -name 'mail.log*' -exec chown -h 1000:1000 {} +
-done
+chown 0:0 "$logs"
+chmod 1777 "$logs"
+find "$logs" -mindepth 1 \( ! -user 1000 -o ! -group 1000 \) ! -name 'caddy*' ! -name 'mail.log*' -exec chown -h 1000:1000 {} +
+
+find "$storage" \( ! -user 1000 -o ! -group 1000 \) -exec chown -h 1000:1000 {} +
