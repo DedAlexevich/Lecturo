@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import SessionLocal
 from app.models import BusinessEvent, BusinessEventKind, User
 from app.services.admin import user_label
+from app.services.admin_logs import mask_text
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,9 @@ async def record_event(
                     user_id=user.id if user else user_id,
                     user_label=user_label(user) if user else label,
                     details={
-                        key: str(value) for key, value in details.items() if value is not None
+                        key: mask_text(str(value))
+                        for key, value in details.items()
+                        if value is not None
                     },
                 )
             )
