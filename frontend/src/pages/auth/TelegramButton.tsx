@@ -1,39 +1,82 @@
-import { useEffect, useRef } from "react";
-import { telegramBotUsername } from "../../telegram/bot";
+import { useEffect, useRef, useState } from "react";
+import { telegramBotId } from "../../telegram/bot";
+import { loadTelegramLogin, requestTelegramAuth, type TelegramLoginApi } from "../../telegram/login";
+import { ProviderButton } from "./ProviderButton";
 import type { TelegramUser } from "./useAuthRequests";
 
-declare global {
-  interface Window {
-    onLecturoTelegramAuth?: (user: TelegramUser) => void;
-  }
-}
+export const telegramEnabled = telegramBotId !== undefined;
 
-const botUsername = telegramBotUsername;
+type TelegramButtonProps = {
+  label: string;
+  ariaLabel?: string;
+  size?: "sm" | "md";
+  fullWidth?: boolean;
+  loading?: boolean;
+  onAuth: (user: TelegramUser) => void;
+  onError: (error: unknown) => void;
+};
 
-export const telegramEnabled = Boolean(botUsername);
-
-export function TelegramButton({ onAuth }: { onAuth: (user: TelegramUser) => void }) {
-  const container = useRef<HTMLDivElement>(null);
+export function TelegramButton({
+  label,
+  ariaLabel,
+  size = "md",
+  fullWidth = false,
+  loading = false,
+  onAuth,
+  onError,
+}: TelegramButtonProps) {
+  const [login, setLogin] = useState<TelegramLoginApi>();
+  const [failure, setFailure] = useState<unknown>();
+  const [attempt, setAttempt] = useState(0);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    const host = container.current;
-    if (!host || !botUsername) return;
-    window.onLecturoTelegramAuth = onAuth;
-    const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
-    script.async = true;
-    script.dataset.telegramLogin = botUsername;
-    script.dataset.size = "large";
-    script.dataset.radius = "8";
-    script.dataset.requestAccess = "write";
-    script.dataset.onauth = "onLecturoTelegramAuth(user)";
-    host.append(script);
+    mounted.current = true;
     return () => {
-      host.replaceChildren();
-      delete window.onLecturoTelegramAuth;
+      mounted.current = false;
     };
-  }, [onAuth]);
+  }, []);
 
-  if (!botUsername) return null;
-  return <div ref={container} className="auth-telegram" />;
+  useEffect(() => {
+    if (!telegramEnabled) return;
+    let active = true;
+    loadTelegramLogin().then(
+      (api) => {
+        if (active) setLogin(api);
+      },
+      (error: unknown) => {
+        if (active) setFailure(error);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+
+  if (telegramBotId === undefined) return null;
+  const botId = telegramBotId;
+
+  const start = () => {
+    if (!login) {
+      onError(failure);
+      setFailure(undefined);
+      setAttempt((value) => value + 1);
+      return;
+    }
+    void requestTelegramAuth(login, botId).then((user) => {
+      if (user && mounted.current) onAuth(user);
+    });
+  };
+
+  return (
+    <ProviderButton
+      provider="telegram"
+      label={label}
+      aria-label={ariaLabel}
+      size={size}
+      fullWidth={fullWidth}
+      loading={loading || (!login && failure === undefined)}
+      onClick={start}
+    />
+  );
 }

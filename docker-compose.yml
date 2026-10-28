@@ -256,6 +256,7 @@ services:
       context: ./frontend
       args:
         VITE_TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+        VITE_TELEGRAM_BOT_ID: ${TELEGRAM_BOT_ID:-}
     logging: *default-logging
     restart: unless-stopped
 

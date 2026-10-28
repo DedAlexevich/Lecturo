@@ -161,6 +161,7 @@ jobs:
       - name: Telegram Mini App tests
         env:
           VITE_TELEGRAM_BOT_USERNAME: lecturo_test_bot
+          VITE_TELEGRAM_BOT_ID: "1234567890"
         run: |
           npx vite --host 127.0.0.1 --port 5186 --strictPort &
           timeout 30 bash -c 'until curl -fsS http://127.0.0.1:5186/ >/dev/null; do sleep 1; done'

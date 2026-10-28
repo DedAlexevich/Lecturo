@@ -1,3 +1,5 @@
+import type { TelegramLoginApi } from "./login";
+
 export type WebApp = {
   initData: string;
   colorScheme: "light" | "dark";
@@ -18,7 +20,7 @@ export type WebApp = {
 
 declare global {
   interface Window {
-    Telegram?: { WebApp?: WebApp };
+    Telegram?: { WebApp?: WebApp; Login?: TelegramLoginApi };
   }
 }
 

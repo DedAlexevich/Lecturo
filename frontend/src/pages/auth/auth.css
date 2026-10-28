@@ -121,12 +121,6 @@
   gap: var(--space-3);
 }
 
-.auth-telegram {
-  display: flex;
-  justify-content: center;
-  min-height: 40px;
-}
-
 .auth__footer {
   margin-top: var(--space-5);
   color: var(--color-text-muted);
