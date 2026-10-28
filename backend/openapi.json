@@ -4716,6 +4716,60 @@
         }
       }
     },
+    "/api/v1/admin/users/{user_id}/admin": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make Admin",
+        "operationId": "make_admin_api_v1_admin_users__user_id__admin_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "409": {
+            "description": "Действие сейчас недоступно"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/{user_id}/hours": {
       "post": {
         "tags": [
@@ -8310,6 +8364,33 @@
           "blocked": {
             "type": "boolean",
             "title": "Blocked"
+          },
+          "telegram_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Username"
+          },
+          "subscription_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Until"
+          },
+          "package_left_sec": {
+            "type": "integer",
+            "title": "Package Left Sec"
           }
         },
         "type": "object",
@@ -8319,7 +8400,10 @@
           "display_name",
           "created_at",
           "is_admin",
-          "blocked"
+          "blocked",
+          "telegram_username",
+          "subscription_until",
+          "package_left_sec"
         ],
         "title": "UserBriefOut"
       },
