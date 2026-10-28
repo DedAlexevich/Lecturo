@@ -18,7 +18,9 @@ class OpenAICompatibleError(RuntimeError):
 
 
 class OpenAICompatibleTruncated(OpenAICompatibleError):
-    pass
+    def __init__(self, message: str, content: str = "") -> None:
+        super().__init__(message)
+        self.content = content
 
 
 class OpenAICompatibleUnavailable(OpenAICompatibleError):
@@ -158,7 +160,7 @@ class OpenAICompatibleLLM:
                 logger.warning("Ответ дошёл до лимита %s токенов, но JSON полный", limit)
                 return content.strip()
             raise OpenAICompatibleTruncated(
-                f"/chat/completions: ответ обрезан на лимите {limit} токенов"
+                f"/chat/completions: ответ обрезан на лимите {limit} токенов", content or ""
             )
         if not content:
             raise OpenAICompatibleError("/chat/completions: модель вернула пустой ответ")
