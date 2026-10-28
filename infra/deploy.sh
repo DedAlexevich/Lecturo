@@ -6,7 +6,7 @@ compose_up() {
 }
 
 alembic_revision() {
-  docker compose run --rm --no-deps -T migrate alembic "$1" 2>/dev/null | awk '$1 ~ /^[0-9A-Za-z_]+$/ {print $1; exit}'
+  docker compose run --rm --no-deps -T migrate alembic "$1" | awk '$1 ~ /^[0-9A-Za-z_]+$/ {print $1; exit}'
 }
 
 restore_code() {
@@ -57,7 +57,12 @@ main() {
     exit 1
   fi
 
-  previous_revision=$(alembic_revision current || true)
+  previous_revision=""
+  if [ -n "$(docker compose ps -q --status running db)" ] && ! previous_revision=$(alembic_revision current); then
+    echo "cannot read current alembic revision, code returned to $previous" >&2
+    restore_code "$previous"
+    exit 1
+  fi
   if ! new_head=$(alembic_revision heads) || [ -z "$new_head" ]; then
     echo "cannot read alembic heads, code returned to $previous" >&2
     restore_code "$previous"
@@ -75,6 +80,11 @@ main() {
     fi
     echo "$backup_log"
     dump=$(sed -n 's/^saved \(.*\) (.*)$/\1/p' <<<"$backup_log")
+    if [ -z "$dump" ]; then
+      echo "backup path not found in backup output, code returned to $previous" >&2
+      restore_code "$previous"
+      exit 1
+    fi
     echo "database saved to $dump before migration"
   fi
 
