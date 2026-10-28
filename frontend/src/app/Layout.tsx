@@ -100,11 +100,6 @@ export function Layout() {
           <Link to="/" className={styles.logo}>
             <Logo />
           </Link>
-          {signedIn && (
-            <button type="button" className={styles.textButton} onClick={signOut}>
-              Выйти
-            </button>
-          )}
           {!signedIn && <Link to="/local" className={styles.textButton}>На устройстве</Link>}
           {!signedIn && !onLoginPage && (
             <Link to="/login" className={styles.textButton}>
