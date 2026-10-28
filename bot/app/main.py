@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Awaitable
 
 import asyncpg
 from aiogram import Bot, Dispatcher
@@ -20,6 +21,20 @@ async def connect(database_url: str) -> asyncpg.Pool | None:
     return await asyncpg.create_pool(database_url, min_size=1, max_size=2)
 
 
+async def serve(polling: Awaitable, tasks: list[asyncio.Task]) -> None:
+    polling_task = asyncio.ensure_future(polling)
+    done, _ = await asyncio.wait([polling_task, *tasks], return_when=asyncio.FIRST_COMPLETED)
+    if polling_task in done:
+        polling_task.result()
+        return
+    polling_task.cancel()
+    await asyncio.gather(polling_task, return_exceptions=True)
+    for task in done:
+        error = None if task.cancelled() else task.exception()
+        logger.error("Фоновая задача %s остановилась", task.get_name(), exc_info=error)
+    raise SystemExit(1)
+
+
 async def run() -> None:
     settings = load_settings()
     if not settings.token:
@@ -33,7 +48,9 @@ async def run() -> None:
     tasks = []
     if pool is not None:
         tasks = [
-            asyncio.create_task(lecture_notices_loop(pool, bot, settings.public_url)),
+            asyncio.create_task(
+                lecture_notices_loop(pool, bot, settings.public_url), name="lecture-notices"
+            ),
             asyncio.create_task(
                 quota_loop(
                     pool,
@@ -41,13 +58,14 @@ async def run() -> None:
                     bot,
                     settings.free_weekly_seconds,
                     settings.subscription_weekly_seconds,
-                )
+                ),
+                name="quotas",
             ),
-            asyncio.create_task(legal_notices_loop(pool, redis, bot)),
+            asyncio.create_task(legal_notices_loop(pool, redis, bot), name="legal-notices"),
         ]
     try:
         await bot.set_my_commands([BotCommand(command="start", description="Открыть Lecturo")])
-        await dispatcher.start_polling(bot)
+        await serve(dispatcher.start_polling(bot), tasks)
     finally:
         for task in tasks:
             task.cancel()

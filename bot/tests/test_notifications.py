@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import asyncpg
 import pytest
 from aiogram.exceptions import (
     TelegramBadRequest,
@@ -12,6 +13,7 @@ from aiogram.exceptions import (
 )
 from aiogram.methods import SendMessage
 
+from app import notifications
 from app.notifications import (
     CLAIM_LECTURE_NOTICES,
     CLOSE_LECTURE_NOTICE,
@@ -30,6 +32,9 @@ from app.notifications import (
     check_quotas,
     deliver_lecture_notices,
     deliver_legal_notices,
+    lecture_notices_loop,
+    legal_notices_loop,
+    quota_loop,
     send_once,
 )
 
@@ -360,3 +365,30 @@ async def test_sent_notice_is_marked_before_next_send():
     with pytest.raises(asyncio.CancelledError):
         await deliver_lecture_notices(pool, bot, "https://lecturo.test")
     assert pool.calls[2:] == [(MARK_LECTURE_NOTICE_SENT, rows[0]["id"])]
+
+
+@pytest.mark.parametrize(
+    ("loop", "deliver", "args"),
+    [
+        (lecture_notices_loop, "deliver_lecture_notices", (None, None, "https://lecturo.test")),
+        (legal_notices_loop, "deliver_legal_notices", (None, None, None)),
+        (quota_loop, "check_quotas", (None, None, None, 7200, 36000)),
+    ],
+)
+async def test_loops_survive_unexpected_errors(monkeypatch, caplog, loop, deliver, args):
+    calls = []
+
+    async def broken(*_):
+        calls.append(deliver)
+        raise asyncpg.InterfaceError("connection is closed")
+
+    async def sleep(seconds):
+        if len(calls) == 2:
+            raise asyncio.CancelledError()
+
+    monkeypatch.setattr(notifications, deliver, broken)
+    monkeypatch.setattr(notifications.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await loop(*args)
+    assert len(calls) == 2
+    assert "connection is closed" in caplog.text
