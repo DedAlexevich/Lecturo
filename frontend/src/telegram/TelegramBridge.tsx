@@ -11,13 +11,12 @@ import { bindTheme, getWebApp } from "./sdk";
 import { TelegramIcon } from "./TelegramIcon";
 import "./TelegramBridge.css";
 
-const app = getWebApp();
 let automaticLoginDone = false;
 let automaticLogin: ReturnType<typeof authenticate> | undefined;
 
 async function authenticate(acceptTerms = false, acceptPersonalData = false) {
   const result = await api.POST("/api/v1/auth/telegram-webapp", {
-    body: { init_data: app!.initData, accept_terms: acceptTerms, accept_personal_data: acceptPersonalData },
+    body: { init_data: getWebApp()?.initData ?? "", accept_terms: acceptTerms, accept_personal_data: acceptPersonalData },
   });
   if (!result.data) throw new ApiError(result.response.status, result.error);
   return result.data;
@@ -35,6 +34,7 @@ export function TelegramBridge() {
   const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
+    const app = getWebApp();
     if (!app) return;
     const cleanup = bindTheme(app);
     app.ready();
@@ -43,6 +43,7 @@ export function TelegramBridge() {
   }, []);
 
   useEffect(() => {
+    const app = getWebApp();
     if (!app) return;
     const back = () => navigate(-1);
     if ((window.history.state?.idx ?? 0) > 0) app.BackButton.show();
@@ -55,7 +56,7 @@ export function TelegramBridge() {
   }, [location.key, navigate]);
 
   useEffect(() => {
-    if (!app || token !== null || automaticLoginDone || wasSignedOutByUser()) return;
+    if (!getWebApp() || token !== null || automaticLoginDone || wasSignedOutByUser()) return;
     let active = true;
     automaticLogin ??= authenticate();
     automaticLogin.then(
@@ -76,7 +77,7 @@ export function TelegramBridge() {
     };
   }, [token]);
 
-  if (!app) return null;
+  if (!getWebApp()) return null;
 
   const submit = async () => {
     setBusy(true);

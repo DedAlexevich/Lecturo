@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { App } from "./App";
 import { reloadOnPreloadError } from "./app/preloadReload";
 import "@fontsource-variable/inter/wght.css";
 import { registerServiceWorker } from "./pwa/register";
@@ -10,12 +11,10 @@ import "./styles/base.css";
 reloadOnPreloadError();
 registerServiceWorker();
 
-void loadTelegramSdk()
-  .then(() => import("./App"))
-  .then(({ App }) => {
-    createRoot(document.getElementById("root")!).render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
-  });
+void loadTelegramSdk().then(() => {
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});
