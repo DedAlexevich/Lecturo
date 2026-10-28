@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
-from sqlalchemy import exists, func, select
+from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -331,9 +331,15 @@ async def apply_succeeded(
     payment.raw = stored_raw(remote)
 
 
-async def has_payment(session: AsyncSession, yookassa_id: str, status: PaymentStatus) -> bool:
+def awaits_notification(refund: bool) -> ColumnElement[bool]:
+    if refund:
+        return (Payment.status == PaymentStatus.succeeded) & ~Payment.raw.has_key("refunded_amount")
+    return Payment.status == PaymentStatus.pending
+
+
+async def awaits_payment(session: AsyncSession, yookassa_id: str, refund: bool) -> bool:
     return await session.scalar(
-        select(exists().where(Payment.yookassa_id == yookassa_id, Payment.status == status))
+        select(exists().where(Payment.yookassa_id == yookassa_id, awaits_notification(refund)))
     )
 
 
@@ -397,6 +403,8 @@ async def process_refund(
 ) -> Payment | None:
     payment, remote = await load_notified_payment(session, client, yookassa_id)
     if payment is None or payment.status != PaymentStatus.succeeded:
+        return payment
+    if "refunded_amount" in (payment.raw or {}):
         return payment
     refunded = parse_amount(remote.get("refunded_amount")) or 0
     if refunded < payment.amount_kopecks:

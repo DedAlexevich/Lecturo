@@ -8,7 +8,6 @@ from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, SessionDep
-from app.models import PaymentStatus
 from app.pipeline.events import publish_status
 from app.pipeline.tasks import enqueue_lecture
 from app.schemas.billing import (
@@ -112,8 +111,7 @@ async def yookassa_webhook(
     except yookassa.NotificationError as error:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
     refund = yookassa.is_refund(body)
-    awaited = PaymentStatus.succeeded if refund else PaymentStatus.pending
-    if not await yookassa.has_payment(session, yookassa_id, awaited):
+    if not await yookassa.awaits_payment(session, yookassa_id, refund):
         return {"status": "ok"}
     process = yookassa.process_refund if refund else yookassa.process_notification
     try:

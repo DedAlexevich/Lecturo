@@ -425,10 +425,12 @@ async def test_refund_revokes_package(client, user, auth_headers, fake):
     await client.post(WEBHOOK, json=notification(payment))
     refund_remote(fake, payment)
 
+    requests_before = len(fake.requests)
     first = await client.post(WEBHOOK, json=refund_notification(payment))
     second = await client.post(WEBHOOK, json=refund_notification(payment))
 
     assert first.status_code == second.status_code == 200
+    assert len(fake.requests) == requests_before + 1
     assert str(fake.requests[-1].url) == f"https://yookassa.test/v3/payments/{payment.yookassa_id}"
     [package] = await packages_of(user)
     assert package.seconds_left == 0
