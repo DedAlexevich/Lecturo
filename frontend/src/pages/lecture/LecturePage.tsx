@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { LectureActions } from "../../features/lecture-actions/LectureActions";
@@ -26,7 +32,14 @@ import { localNotes } from "./localNotes";
 import { Processing } from "./Processing";
 import { parseSection, parseStartTime } from "./time";
 import { Transcript } from "./Transcript";
-import { awaitsVideo, fetchLecture, isPending, useLecture, useLectureStatus, useRetryProcessing } from "./useLecture";
+import {
+  awaitsVideo,
+  fetchLecture,
+  isPending,
+  useLecture,
+  useLectureStatus,
+  useRetryProcessing,
+} from "./useLecture";
 import "./lecture.css";
 
 type Lecture = components["schemas"]["LectureDetail"];
@@ -53,7 +66,9 @@ function LectureMeta({ lecture }: { lecture: Lecture }) {
 }
 
 function NoVideo({ lecture }: { lecture: Lecture }) {
-  const expiresAt = lecture.video_expires_at ? new Date(lecture.video_expires_at) : null;
+  const expiresAt = lecture.video_expires_at
+    ? new Date(lecture.video_expires_at)
+    : null;
   const external = lecture.embed_url !== null || lecture.source_url !== null;
 
   let title = "Видео недоступно";
@@ -63,13 +78,15 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
     description = "Плеер появится здесь, когда обработка закончится.";
   } else if (awaitsVideo(lecture)) {
     title = "Видео ещё сжимается";
-    description = "Расшифровка и конспект уже готовы, плеер появится здесь чуть позже.";
+    description =
+      "Расшифровка и конспект уже готовы, плеер появится здесь чуть позже.";
   } else if (external) {
     title = "Видео на сайте источника";
     description = "Запись хранится на площадке, откуда её добавили.";
   } else if (lecture.processed_locally) {
     title = "Видео осталось на устройстве";
-    description = "Лекцию обработали на устройстве, в аккаунт сохранены только расшифровка и материалы.";
+    description =
+      "Лекцию обработали на устройстве, в аккаунт сохранены только расшифровка и материалы.";
   } else if (expiresAt !== null && expiresAt < new Date()) {
     title = "Срок хранения видео истёк";
     description = `Видео удалено ${dateFormat.format(expiresAt)}. Расшифровка остаётся на странице.`;
@@ -82,7 +99,12 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
       <p className="lecture__no-video-title">{title}</p>
       <p className="lecture__no-video-text">{description}</p>
       {lecture.source_url && (
-        <a href={lecture.source_url} target="_blank" rel="noreferrer" className="lecture__source">
+        <a
+          href={lecture.source_url}
+          target="_blank"
+          rel="noreferrer"
+          className="lecture__source"
+        >
           Открыть источник
         </a>
       )}
@@ -93,7 +115,10 @@ function NoVideo({ lecture }: { lecture: Lecture }) {
 type PanelKind = "summary" | "chapters" | "transcript" | "chat";
 type ContentPanelKind = Exclude<PanelKind, "chat">;
 
-const panelNotes: Record<ContentPanelKind, { pending: string; failed: string; empty: string; local: string }> = {
+const panelNotes: Record<
+  ContentPanelKind,
+  { pending: string; failed: string; empty: string; local: string }
+> = {
   summary: {
     pending: "Конспект появится здесь, когда обработка закончится.",
     failed: "Обработка не удалась, поэтому конспекта нет.",
@@ -114,7 +139,13 @@ const panelNotes: Record<ContentPanelKind, { pending: string; failed: string; em
   },
 };
 
-function PanelEmpty({ kind, lecture }: { kind: ContentPanelKind; lecture: Lecture }) {
+function PanelEmpty({
+  kind,
+  lecture,
+}: {
+  kind: ContentPanelKind;
+  lecture: Lecture;
+}) {
   const notes = panelNotes[kind];
   const { status } = lecture;
   const note = isPending(status)
@@ -144,7 +175,10 @@ function LectureSkeleton() {
         <div className="lecture__media">
           <div className="lecture__bar lecture__bar--video" />
         </div>
-        <section className="lecture__panel" aria-label="Материалы лекции загружаются">
+        <section
+          className="lecture__panel"
+          aria-label="Материалы лекции загружаются"
+        >
           <div className="lecture__tabs-skeleton">
             <span className="lecture__bar lecture__bar--tab" />
             <span className="lecture__bar lecture__bar--tab" />
@@ -161,8 +195,17 @@ function LectureSkeleton() {
   );
 }
 
-function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () => void; retrying: boolean }) {
-  const missing = error instanceof ApiError && (error.status === 404 || error.status === 422);
+function LectureError({
+  error,
+  onRetry,
+  retrying,
+}: {
+  error: Error;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  const missing =
+    error instanceof ApiError && (error.status === 404 || error.status === 422);
   if (missing) {
     return (
       <div className="lecture">
@@ -181,8 +224,16 @@ function LectureError({ error, onRetry, retrying }: { error: Error; onRetry: () 
         <BackLink />
       </header>
       <div className="lecture__error" role="alert">
-        <p>Не удалось загрузить лекцию. Проверьте соединение и попробуйте ещё раз.</p>
-        <Button variant="secondary" size="sm" onClick={onRetry} loading={retrying}>
+        <p>
+          Не удалось загрузить лекцию. Проверьте соединение и попробуйте ещё
+          раз.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          loading={retrying}
+        >
           Повторить
         </Button>
       </div>
@@ -206,16 +257,25 @@ export function LecturePage() {
   const [searching, setSearching] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
   const { currentTime, playFrom, bind } = usePlayer();
-  const zoomer = useZoomerMode(Boolean(lecture.data?.video_url));
+  const zoomer = useZoomerMode(
+    Boolean(
+      lecture.data &&
+      (lecture.data.video_url ||
+        lecture.data.audio_url ||
+        resolveEmbed(lecture.data.embed_url)),
+    ),
+  );
 
   const rawSegments = lecture.data?.segments;
   const segments = useMemo(
-    () => (rawSegments ? [...rawSegments].sort((a, b) => a.start - b.start) : []),
+    () =>
+      rawSegments ? [...rawSegments].sort((a, b) => a.start - b.start) : [],
     [rawSegments],
   );
   const rawChapters = lecture.data?.chapters;
   const chapters = useMemo(
-    () => (rawChapters ? [...rawChapters].sort((a, b) => a.start - b.start) : []),
+    () =>
+      rawChapters ? [...rawChapters].sort((a, b) => a.start - b.start) : [],
     [rawChapters],
   );
 
@@ -243,7 +303,13 @@ export function LecturePage() {
 
   if (lecture.isPending) return <LectureSkeleton />;
   if (lecture.isError) {
-    return <LectureError error={lecture.error} onRetry={() => void lecture.refetch()} retrying={lecture.isFetching} />;
+    return (
+      <LectureError
+        error={lecture.error}
+        onRetry={() => void lecture.refetch()}
+        retrying={lecture.isFetching}
+      />
+    );
   }
 
   const data = lecture.data;
@@ -256,8 +322,13 @@ export function LecturePage() {
   const showProcessing = isPending(data.status) || data.status === "failed";
   const progress = status.data ?? null;
   const shownStatus = progress?.status ?? data.status;
-  const failedSummarize = data.steps.find((step) => step.step === "summarize" && step.status === "failed");
-  const regenerationError = data.status === "ready" && !errorDismissed ? (failedSummarize?.error ?? null) : null;
+  const failedSummarize = data.steps.find(
+    (step) => step.step === "summarize" && step.status === "failed",
+  );
+  const regenerationError =
+    data.status === "ready" && !errorDismissed
+      ? (failedSummarize?.error ?? null)
+      : null;
   const tabs = (
     <Tabs
       label="Материалы лекции"
@@ -309,7 +380,12 @@ export function LecturePage() {
         {
           id: "chat",
           label: "Чат",
-          panel: <ChatPanel lectureId={data.id} onSelectTime={hasPlayer ? playFrom : undefined} />,
+          panel: (
+            <ChatPanel
+              lectureId={data.id}
+              onSelectTime={hasPlayer ? playFrom : undefined}
+            />
+          ),
         },
       ]}
     />
@@ -335,9 +411,14 @@ export function LecturePage() {
           <h1 className="lecture__title">{data.title}</h1>
           <div className="lecture__title-actions">
             <QuizButton lecture={data} />
-            {data.status === "ready" && <ShareButton target={{ lectureId: data.id }} title={data.title} />}
+            {data.status === "ready" && (
+              <ShareButton target={{ lectureId: data.id }} title={data.title} />
+            )}
             <ZoomerToggle mode={zoomer} />
-            <LectureActions lecture={data} onDeleted={() => navigate("/", { replace: true })} />
+            <LectureActions
+              lecture={data}
+              onDeleted={() => navigate("/", { replace: true })}
+            />
           </div>
         </div>
         <LectureMeta lecture={data} />
@@ -349,8 +430,13 @@ export function LecturePage() {
       </header>
       {regenerationError !== null && (
         <p className="processing__error" role="alert">
-          Не удалось пересоздать главы и конспект, остались прежние. {regenerationError}{" "}
-          <Button variant="ghost" size="sm" onClick={() => setErrorDismissed(true)}>
+          Не удалось пересоздать главы и конспект, остались прежние.{" "}
+          {regenerationError}{" "}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setErrorDismissed(true)}
+          >
             Скрыть
           </Button>
         </p>
@@ -359,7 +445,9 @@ export function LecturePage() {
         <Processing
           status={shownStatus}
           queuePosition={progress?.queue_position ?? null}
-          etaSec={progress ? (progress.eta_sec ?? null) : (data.eta_sec ?? null)}
+          etaSec={
+            progress ? (progress.eta_sec ?? null) : (data.eta_sec ?? null)
+          }
           steps={progress?.steps ?? data.steps}
           onRetry={() => retry.mutate()}
           retrying={retry.isPending}
@@ -367,20 +455,31 @@ export function LecturePage() {
           stalled={status.stalled}
           notice={
             (shownStatus === "queued" || shownStatus === "processing") && (
-              <TelegramNotice lectureId={data.id} subject={summary ? "regenerate" : "lecture"} />
+              <TelegramNotice
+                lectureId={data.id}
+                subject={summary ? "regenerate" : "lecture"}
+              />
             )
           }
         />
       )}
       <div className="lecture__body">
         <div className="lecture__media">
-          <div className={zoomer.clip !== null ? "zoomer-stage zoomer-stage--on" : "zoomer-stage"}>
+          <div
+            className={
+              zoomer.clip !== null
+                ? "zoomer-stage zoomer-stage--on"
+                : "zoomer-stage"
+            }
+          >
             {videoUrl ? (
               <VideoPlayer
                 key={videoIdentity(videoUrl)}
                 src={videoUrl}
                 title={data.title}
-                refreshSrc={async () => (await fetchLecture(id)).video_url ?? null}
+                refreshSrc={async () =>
+                  (await fetchLecture(id)).video_url ?? null
+                }
                 {...bind}
               />
             ) : audioUrl ? (
@@ -388,7 +487,9 @@ export function LecturePage() {
                 key={videoIdentity(audioUrl)}
                 src={audioUrl}
                 title={data.title}
-                refreshSrc={async () => (await fetchLecture(id)).audio_url ?? null}
+                refreshSrc={async () =>
+                  (await fetchLecture(id)).audio_url ?? null
+                }
                 audio
                 {...bind}
               />
@@ -407,16 +508,26 @@ export function LecturePage() {
               <NoVideo lecture={data} />
             )}
             {zoomer.clip !== null && (
-              <ZoomerClip src={zoomer.clip} autoplay={zoomer.autoplay} onHide={zoomer.disable} />
+              <ZoomerClip
+                src={zoomer.clip}
+                autoplay={zoomer.autoplay}
+                onHide={zoomer.disable}
+              />
             )}
           </div>
         </div>
         <section
-          className={panelClass(searching || tabHasContent[tab], !searching && tab === "chat")}
+          className={panelClass(
+            searching || tabHasContent[tab],
+            !searching && tab === "chat",
+          )}
           aria-label="Материалы лекции"
         >
           {data.status === "ready" ? (
-            <SearchPanel scope={{ lectureId: data.id }} onActiveChange={setSearching}>
+            <SearchPanel
+              scope={{ lectureId: data.id }}
+              onActiveChange={setSearching}
+            >
               {tabs}
             </SearchPanel>
           ) : (
