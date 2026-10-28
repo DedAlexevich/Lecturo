@@ -45,7 +45,9 @@ from app.models import (
     UsageEntry,
 )
 from app.pipeline import events, media, stages, tasks
+from app.pipeline.runner import run_step
 from app.providers.stub import STUB_PHRASES
+from app.services.quota import QuotaExceeded
 from tests.conftest import notifications
 
 
@@ -601,6 +603,7 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
     async def fake_download(session, lecture, report):
         order.append(StepName.download)
         lecture.audio_path = f"/data/storage/audio/{lecture.id}.opus"
+        lecture.duration_sec = 600.0
 
     original = tasks.HANDLERS[StepName.transcribe]
 
@@ -723,7 +726,7 @@ async def test_transcribe_waits_for_quota(user, sample_audio, monkeypatch):
     assert await charged_seconds(lecture.id) == 0
 
 
-async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
+async def test_transcribe_probes_missing_duration_before_charging(user, sample_audio):
     lecture = await create_lecture(user, sample_audio)
     async with SessionLocal() as session:
         stored = await session.get(Lecture, lecture.id)
@@ -732,8 +735,108 @@ async def test_transcribe_takes_duration_from_last_segment(user, sample_audio):
 
     await run_transcribe(lecture.id)
 
-    assert (await load(lecture.id)).duration_sec == 59.5
-    assert await charged_seconds(lecture.id) == 60
+    duration = (await load(lecture.id)).duration_sec
+    assert duration == pytest.approx(2.0, abs=0.1)
+    assert await charged_seconds(lecture.id) == math.ceil(duration)
+
+
+class RecordingSpeechToText:
+    def __init__(self, lecture_id, fail: bool = False) -> None:
+        self.lecture_id = lecture_id
+        self.fail = fail
+        self.charged_at_start: list[int] = []
+
+    async def transcribe(
+        self, audio_path, language="ru", *, duration=None, on_progress=None, operations=None
+    ):
+        self.charged_at_start.append(await charged_seconds(self.lecture_id))
+        if self.fail:
+            raise RuntimeError("SpeechKit недоступен")
+        return []
+
+
+async def test_transcribe_is_skipped_without_quota(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    async with SessionLocal() as session:
+        stored = await session.get(Lecture, lecture.id)
+        stored.duration_sec = 10_000_000.0
+        await session.commit()
+    stt = RecordingSpeechToText(lecture.id)
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+
+    with pytest.raises(QuotaExceeded):
+        await run_transcribe(lecture.id)
+
+    assert stt.charged_at_start == []
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def test_quota_is_charged_before_recognition_and_refunded_on_failure(
+    user, sample_audio, monkeypatch
+):
+    lecture = await create_lecture(user, sample_audio)
+    stt = RecordingSpeechToText(lecture.id, fail=True)
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.audio, noop_step)
+    monkeypatch.setitem(tasks.HANDLERS, StepName.video, noop_step)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.failed
+
+    assert stt.charged_at_start == [2]
+    assert await charged_seconds(lecture.id) == 0
+
+
+async def noop_step(session, lecture, report):
+    pass
+
+
+class InterruptedSpeechToText:
+    def __init__(self) -> None:
+        self.loaded: list[dict | None] = []
+
+    async def transcribe(
+        self, audio_path, language="ru", *, duration=None, on_progress=None, operations=None
+    ):
+        state = await operations.load("full")
+        self.loaded.append(state)
+        if state is None:
+            await operations.save("full", {"object_key": "stt/a.opus", "operation_id": "op1"})
+            raise asyncio.CancelledError
+        await operations.drop("full")
+        return []
+
+
+async def test_saved_operation_survives_worker_restart(user, sample_audio, monkeypatch):
+    lecture = await create_lecture(user, sample_audio)
+    stt = InterruptedSpeechToText()
+    monkeypatch.setattr(stages, "get_speech_to_text", lambda: stt)
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_step_alone(lecture.id)
+    async with SessionLocal() as session:
+        step = await session.scalar(
+            select(ProcessingStep).where(
+                ProcessingStep.lecture_id == lecture.id, ProcessingStep.step == StepName.transcribe
+            )
+        )
+        assert step.external == {
+            "operations": {"full": {"object_key": "stt/a.opus", "operation_id": "op1"}}
+        }
+
+    await run_step_alone(lecture.id)
+
+    assert stt.loaded == [None, {"object_key": "stt/a.opus", "operation_id": "op1"}]
+    loaded = await load(lecture.id)
+    transcribe_step = steps_by_name(loaded)[StepName.transcribe]
+    assert transcribe_step.status == StepStatus.done
+    assert transcribe_step.external is None
+    assert await charged_seconds(lecture.id) == 2
+
+
+async def run_step_alone(lecture_id) -> None:
+    async with SessionLocal() as session:
+        lecture = await session.get(Lecture, lecture_id)
+        await run_step(session, lecture, StepName.transcribe, stages.transcribe)
 
 
 Received = Callable[[Lecture], Awaitable[list[dict]]]
