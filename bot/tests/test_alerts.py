@@ -133,9 +133,10 @@ def test_toggles():
     assert toggled(preferences, "alerts:enabled").enabled is False
     assert toggled(preferences, "alerts:recoveries").recoveries is False
     assert toggled(preferences, "alerts:kind:payment").muted == {"payment"}
-    assert toggled(
-        Preferences(True, frozenset({"payment"}), True), "alerts:kind:payment"
-    ).muted == frozenset()
+    assert (
+        toggled(Preferences(True, frozenset({"payment"}), True), "alerts:kind:payment").muted
+        == frozenset()
+    )
     assert toggled(preferences, "alerts:kind:weather") is None
     assert toggled(preferences, "alerts:other") is None
 
