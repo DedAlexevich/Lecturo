@@ -13,8 +13,6 @@ from app.providers.openai_compat import OpenAICompatibleError
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 32
-
 
 async def index_sections() -> int:
     async with SessionLocal() as session:
@@ -78,11 +76,11 @@ async def reindex_lecture(embeddings, lecture_id: uuid.UUID) -> int:
                 .order_by(SearchChunk.id)
             )
         )
-        for offset in range(0, len(chunks), BATCH_SIZE):
-            batch = chunks[offset : offset + BATCH_SIZE]
-            vectors = await embeddings.embed_documents([chunk.text for chunk in batch])
-            for chunk, vector in zip(batch, vectors, strict=True):
-                chunk.embedding = vector
+        if not chunks:
+            return 0
+        vectors = await embeddings.embed_documents([chunk.text for chunk in chunks])
+        for chunk, vector in zip(chunks, vectors, strict=True):
+            chunk.embedding = vector
         await session.commit()
         return len(chunks)
 
