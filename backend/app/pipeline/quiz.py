@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Any
@@ -15,6 +16,7 @@ from app.pipeline.summarize import (
     load_prompt,
     parse_json,
     parse_start,
+    render_prompt,
     split_into_parts,
 )
 from app.pipeline.timecodes import locate_timestamp
@@ -33,6 +35,13 @@ COMPACT_QUIZ_NOTE = (
     "evidence из 5–10 слов."
 )
 TRANSCRIPT_CHAR_LIMIT = 60_000
+LONG_TRANSCRIPT_CHARS = 12_000
+PART_TARGET_SECONDS = 600.0
+MAX_QUIZ_PARTS = 6
+PART_MAX_TOKENS = 2048
+PART_PARALLEL = 3
+PART_ATTEMPTS = 2
+PART_CHAR_LIMIT = 20_000
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +139,10 @@ def parse_question(
 
 
 def valid_questions(
-    items: Any, segments: list[TranscriptSegment], lecture_end: float
+    items: Any,
+    segments: list[TranscriptSegment],
+    lecture_end: float,
+    minimum: int = MIN_QUESTIONS,
 ) -> list[dict[str, Any]]:
     if not isinstance(items, list):
         raise InvalidQuiz("в ответе нет списка вопросов")
@@ -143,10 +155,10 @@ def valid_questions(
             reasons.append(str(error))
     if reasons:
         logger.warning("Отброшено вопросов квиза: %s (%s)", len(reasons), "; ".join(reasons))
-    if len(questions) < MIN_QUESTIONS:
+    if len(questions) < minimum:
         details = f": {reasons[0]}" if reasons else ""
         raise InvalidQuiz(
-            f"в квизе {len(questions)} корректных вопросов, нужно хотя бы {MIN_QUESTIONS}" + details
+            f"в квизе {len(questions)} корректных вопросов, нужно хотя бы {minimum}" + details
         )
     return questions[:MAX_QUESTIONS]
 
@@ -224,6 +236,129 @@ async def generate_questions(
     raise failure
 
 
+def part_count(segments: list[TranscriptSegment]) -> int:
+    duration = segments[-1].end - segments[0].start
+    return max(2, min(MAX_QUIZ_PARTS, round(duration / PART_TARGET_SECONDS)))
+
+
+def split_by_time(segments: list[TranscriptSegment], count: int) -> list[list[TranscriptSegment]]:
+    start = segments[0].start
+    width = (segments[-1].end - start) / count
+    parts: list[list[TranscriptSegment]] = [[] for _ in range(count)]
+    for segment in segments:
+        index = min(int((segment.start - start) // width), count - 1) if width > 0 else 0
+        parts[index].append(segment)
+    return [part for part in parts if part]
+
+
+def part_request(title: str, chapters: list[Chapter], part: list[TranscriptSegment]) -> str:
+    first = part[0].start
+    last = part[-1].end
+    return json.dumps(
+        {
+            "title": title,
+            "chapters": [
+                {
+                    "title": chapter.title,
+                    "start": int(chapter.start),
+                    "end": int(chapter.end),
+                    "summary": chapter.summary,
+                }
+                for chapter in chapters
+                if chapter.end > first and chapter.start < last
+            ],
+            "transcript": transcript_excerpt(part, PART_CHAR_LIMIT),
+        },
+        ensure_ascii=False,
+    )
+
+
+async def generate_part(
+    llm: LLM,
+    system: str,
+    request: str,
+    segments: list[TranscriptSegment],
+    lecture_end: float,
+) -> list[dict[str, Any]]:
+    for _ in range(PART_ATTEMPTS):
+        try:
+            content = await llm.complete(
+                system, request, json_mode=True, max_tokens=PART_MAX_TOKENS
+            )
+        except OpenAICompatibleTruncated as error:
+            logger.warning(
+                "Часть квиза обрезана: начало %r, конец %r",
+                error.content[:200],
+                error.content[-200:],
+            )
+            try:
+                return valid_questions(
+                    finished_items(error.content), segments, lecture_end, minimum=1
+                )
+            except InvalidQuiz:
+                continue
+        except OpenAICompatibleError as error:
+            logger.warning("Запрос части квиза не удался: %s", error)
+            continue
+        try:
+            return valid_questions(
+                parse_json(content).get("questions"), segments, lecture_end, minimum=1
+            )
+        except ValueError as error:
+            logger.warning("Часть квиза не разобрана: %s", error)
+    return []
+
+
+def pick_questions(results: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    picked: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for round_index in range(max((len(result) for result in results), default=0)):
+        for result in results:
+            if round_index >= len(result) or len(picked) >= MAX_QUESTIONS:
+                continue
+            key = result[round_index]["question"].strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            picked.append(result[round_index])
+    return sorted(picked, key=lambda question: question["timestamp"])
+
+
+async def generate_by_parts(
+    llm: LLM,
+    title: str,
+    chapters: list[Chapter],
+    segments: list[TranscriptSegment],
+    lecture_end: float,
+    report: Report,
+) -> list[dict[str, Any]]:
+    parts = split_by_time(segments, part_count(segments))
+    per_part = max(2, min(4, -(-10 // len(parts))))
+    system = render_prompt("quiz_part", count=per_part)
+    semaphore = asyncio.Semaphore(PART_PARALLEL)
+    report_lock = asyncio.Lock()
+    finished = 0
+
+    async def run(part: list[TranscriptSegment]) -> list[dict[str, Any]]:
+        nonlocal finished
+        async with semaphore:
+            result = await generate_part(
+                llm, system, part_request(title, chapters, part), segments, lecture_end
+            )
+        async with report_lock:
+            finished += 1
+            await report(finished / len(parts))
+        return result
+
+    results = await asyncio.gather(*(run(part) for part in parts))
+    questions = pick_questions(list(results))
+    if len(questions) < MIN_QUESTIONS:
+        raise InvalidQuiz(
+            f"Не удалось собрать квиз: вопросов {len(questions)}, нужно хотя бы {MIN_QUESTIONS}"
+        )
+    return questions
+
+
 async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     await require_ai_transfer(session, lecture)
     segments = await load_segments(session, lecture)
@@ -237,9 +372,21 @@ async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) ->
     full_request = quiz_request(lecture, chapter_list, segments)
     compact_request = quiz_request(lecture, chapter_list, segments, TRANSCRIPT_CHAR_LIMIT // 2)
     await session.commit()
-    questions = await generate_questions(
-        get_llm(), full_request, compact_request, segments, lecture_end, report
-    )
+    llm = get_llm()
+    if len(format_part(segments)) > LONG_TRANSCRIPT_CHARS:
+        questions = await generate_by_parts(
+            llm, lecture.title, chapter_list, segments, lecture_end, report
+        )
+    else:
+        try:
+            questions = await generate_questions(
+                llm, full_request, compact_request, segments, lecture_end, report
+            )
+        except OpenAICompatibleError:
+            logger.warning("Квиз одним запросом не получился, собираю по частям")
+            questions = await generate_by_parts(
+                llm, lecture.title, chapter_list, segments, lecture_end, report
+            )
     await session.execute(
         insert(Quiz)
         .values(lecture_id=lecture.id, questions=questions)
