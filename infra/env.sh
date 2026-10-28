@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 env_value() {
   local value="${!1:-}"
   if [ -z "$value" ] && [ -f .env ]; then
