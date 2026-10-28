@@ -1,0 +1,11 @@
+version: 2
+
+secret:
+  ignored-paths:
+    - "backend/tests/**"
+    - "frontend/tests/**"
+    - "docs/**/*.md"
+    - ".env.example"
+  ignored-matches:
+    - name: "Пароль PostgreSQL по умолчанию для локального docker compose"
+      match: "lecturo"
