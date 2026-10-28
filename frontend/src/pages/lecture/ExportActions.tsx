@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { getWebApp, openExternalLink } from "../../telegram/sdk";
 import { useToast } from "../../ui/Toast";
@@ -64,6 +64,7 @@ export function ExportButtons({ request, available }: ExportButtonsProps) {
   const [busy, setBusy] = useState<Format | null>(null);
   const [prepared, setPrepared] = useState<{ format: Format; url: string; expiresAt: number } | null>(null);
   const [failed, setFailed] = useState<Format | null>(null);
+  const opened = useRef<{ format: Format; url: string; expiresAt: number } | null>(null);
 
   const download = async (format: Format, url: string) => {
     let link = url;
@@ -87,6 +88,7 @@ export function ExportButtons({ request, available }: ExportButtonsProps) {
         return;
       }
       link = result.url;
+      opened.current = { format, url: link, expiresAt: Date.parse(result.expires_at) };
     }
   };
 
@@ -100,6 +102,11 @@ export function ExportButtons({ request, available }: ExportButtonsProps) {
     setPrepared(null);
     setBusy(format);
     try {
+      const previous = opened.current;
+      if (previous?.format === format && Date.now() < previous.expiresAt) {
+        await download(format, previous.url);
+        return;
+      }
       const result = await request(format);
       if (typeof result === "number") {
         setFailed(null);
@@ -109,7 +116,9 @@ export function ExportButtons({ request, available }: ExportButtonsProps) {
       if (getWebApp()) {
         setPrepared({ format, url: result.url, expiresAt: Date.now() + PREPARED_LINK_MS });
       } else {
-        await download(format, result.url);
+        setFailed(null);
+        opened.current = { format, url: result.url, expiresAt: Date.parse(result.expires_at) };
+        openExternalLink(result.url);
       }
     } catch {
       toast.show("Не удалось скачать файл. Проверьте соединение.", "error");

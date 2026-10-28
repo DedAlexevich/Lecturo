@@ -44,7 +44,7 @@ from app.models import (
     TranscriptSegment,
     UsageEntry,
 )
-from app.pipeline import events, media, stages, tasks
+from app.pipeline import download, events, media, stages, tasks
 from app.providers.stub import STUB_PHRASES
 from tests.conftest import notifications
 
@@ -675,6 +675,36 @@ async def test_link_lecture_downloads_audio_before_transcribe(user, monkeypatch)
     assert order == [StepName.download, StepName.transcribe]
     assert loaded.audio_path == f"/data/storage/audio/{lecture.id}.opus"
     assert steps_by_name(loaded)[StepName.download].status == StepStatus.done
+
+
+async def test_link_lecture_charges_downloaded_duration(user, sample_audio, monkeypatch):
+    async with SessionLocal() as session:
+        lecture = Lecture(
+            owner_id=user.id,
+            title="Лекция по ссылке",
+            source_type=SourceType.link,
+            source_url="https://vkvideo.ru/video-1_2",
+            duration_sec=0.5,
+        )
+        session.add(lecture)
+        await session.commit()
+
+    async def allow(url):
+        pass
+
+    def fake_fetch(url, target, progress):
+        path = target.with_suffix(".opus")
+        shutil.copy(sample_audio, path)
+        return path
+
+    monkeypatch.setattr(download, "ensure_public_host", allow)
+    monkeypatch.setattr(download, "fetch_audio", fake_fetch)
+
+    assert await tasks.process_lecture({}, str(lecture.id)) == LectureStatus.ready
+
+    loaded = await load(lecture.id)
+    assert loaded.duration_sec == pytest.approx(2.0, abs=0.2)
+    assert await charged_seconds(lecture.id) == math.ceil(loaded.duration_sec)
 
 
 async def test_cancelled_ffmpeg_is_killed(sample_video, storage, monkeypatch):
