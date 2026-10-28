@@ -60,6 +60,18 @@ def is_retryable_response(response: httpx.Response) -> bool:
     return isinstance(body, dict) and body.get("code") == INTERNAL_ERROR_CODE
 
 
+def is_unprocessed_response(response: httpx.Response) -> bool:
+    if response.status_code in UNPROCESSED_STATUSES:
+        return True
+    if response.status_code != 500:
+        return False
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("code") == INTERNAL_ERROR_CODE
+
+
 async def request_with_retry(
     send: Callable[[], Awaitable[httpx.Response]],
     *,
@@ -87,7 +99,7 @@ async def request_with_retry(
         else:
             if not is_retryable_response(response):
                 return response
-            if retry_unsent_only and response.status_code not in UNPROCESSED_STATUSES:
+            if retry_unsent_only and not is_unprocessed_response(response):
                 return response
             reason = f"ответ {response.status_code}"
         if attempt >= policy.attempts:
