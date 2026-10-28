@@ -18,6 +18,11 @@ AFTER = AI_TRANSFER.effective_date
 PREVIOUS = AI_TRANSFER.revision_date - timedelta(days=1)
 
 
+@pytest.fixture(autouse=True)
+def only_ai_transfer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(legal_notices, "announced_documents", lambda: [AI_TRANSFER])
+
+
 @pytest.fixture
 async def people() -> AsyncIterator[dict[str, User]]:
     now = datetime.now(UTC)
@@ -91,6 +96,12 @@ def test_ai_transfer_revision_has_effective_date_and_changes():
     terms = read_document("terms")
     assert terms.effective_date == terms.revision_date
     assert terms.changes is None
+
+
+def test_privacy_revision_has_effective_date_and_changes():
+    privacy = read_document("privacy")
+    assert privacy.effective_date >= privacy.revision_date + timedelta(days=7)
+    assert privacy.changes
 
 
 async def apply_after_announcement(day):
@@ -168,11 +179,15 @@ async def test_notice_is_not_sent_after_effective_date(people, mails):
     assert await notices(people) == []
 
 
-async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
-    monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER))
+async def ai_transfer_updates(client) -> list[dict]:
     response = await client.get("/api/v1/legal/updates")
     assert response.status_code == 200
-    assert response.json() == [
+    return [doc for doc in response.json() if doc["slug"] == "ai-transfer"]
+
+
+async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
+    monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER))
+    assert await ai_transfer_updates(client) == [
         {
             "slug": "ai-transfer",
             "title": AI_TRANSFER.title,
@@ -182,7 +197,7 @@ async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
         }
     ]
     monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER + 1))
-    assert (await client.get("/api/v1/legal/updates")).json() == []
+    assert await ai_transfer_updates(client) == []
 
 
 async def test_failed_email_is_logged_without_address(people, monkeypatch, caplog):
