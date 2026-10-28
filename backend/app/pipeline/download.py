@@ -415,9 +415,12 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
         if isinstance(error, BlockedAddress):
             raise LinkError(INTERNAL_NETWORK) from error
         raise
-    duration = await media.probe_duration(audio_path)
-    if duration > MAX_DURATION_SEC:
+    try:
+        duration = await media.probe_duration(audio_path)
+        if duration > MAX_DURATION_SEC:
+            raise LinkError("Видео длиннее 4 часов")
+    except Exception:
         await asyncio.to_thread(audio_path.unlink, missing_ok=True)
-        raise LinkError("Видео длиннее 4 часов")
+        raise
     lecture.audio_path = str(audio_path)
     lecture.duration_sec = duration

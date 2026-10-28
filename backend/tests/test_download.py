@@ -493,6 +493,19 @@ async def test_download_rejects_audio_longer_than_four_hours(
     assert not list((storage / "audio").iterdir())
 
 
+async def test_download_removes_audio_when_duration_unknown(public_host, monkeypatch, storage):
+    async def broken_probe(path):
+        raise media.MediaError("Не удалось определить длительность записи")
+
+    monkeypatch.setattr(download, "fetch_audio", fetch_file)
+    monkeypatch.setattr(media, "probe_duration", broken_probe)
+
+    with pytest.raises(media.MediaError):
+        await download.download(None, link_lecture(), no_report)
+
+    assert not list((storage / "audio").iterdir())
+
+
 async def test_download_removes_partial_files_on_error(public_host, monkeypatch, storage):
     def failing_fetch(url, target, progress):
         target.with_suffix(".webm.part").write_bytes(b"part")
