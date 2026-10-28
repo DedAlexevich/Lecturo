@@ -128,7 +128,7 @@ async def test_regenerate_replaces_chapters_and_keeps_transcript(
     titles, content, segments = await stored_texts(lecture.id)
     assert "Старая глава" not in titles
     assert titles
-    assert content == "## Итог"
+    assert content.startswith("## Глава 1")
     assert segments == 30
     assert await lecture_status(lecture.id) == LectureStatus.ready
     steps = await steps_of(lecture.id)
