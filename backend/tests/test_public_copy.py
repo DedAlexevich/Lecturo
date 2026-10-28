@@ -293,7 +293,7 @@ async def test_repeat_does_not_use_limit(client, visitor, owner, auth_headers, m
 async def test_own_lecture_conflict(client, owner):
     source_id = await create_source(owner.id)
     token = await create_share(owner.id, lecture_id=source_id)
-    headers = {"Authorization": f"Bearer {create_access_token(owner.id)}"}
+    headers = {"Authorization": f"Bearer {create_access_token(owner.id, owner.token_version)}"}
 
     response = await client.post(copy_url(token), headers=headers)
 
@@ -483,7 +483,7 @@ async def test_lecture_outside_course_is_not_copied(client, visitor, owner, auth
 async def test_own_course_conflict(client, owner):
     course_id = await create_course(owner.id, [await create_source(owner.id)])
     token = await create_share(owner.id, course_id=course_id)
-    headers = {"Authorization": f"Bearer {create_access_token(owner.id)}"}
+    headers = {"Authorization": f"Bearer {create_access_token(owner.id, owner.token_version)}"}
 
     response = await client.post(copy_url(token), headers=headers)
 

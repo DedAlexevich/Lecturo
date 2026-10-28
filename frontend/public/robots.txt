@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /s/
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /api/
+Disallow: /media/
+Disallow: /files/

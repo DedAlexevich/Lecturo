@@ -5,11 +5,11 @@ import uuid
 from collections.abc import Collection
 from typing import Any
 
-from sqlalchemy import ColumnElement, Text, cast, func, literal, select, text
+from sqlalchemy import ColumnElement, Row, Text, cast, func, literal, select, text
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ChunkKind, Lecture, SearchChunk, TranscriptSegment
+from app.models import Chapter, ChunkKind, Lecture, SearchChunk, TranscriptSegment
 from app.providers import get_embeddings
 from app.providers.openai_compat import OpenAICompatibleError
 from app.schemas.search import SearchHit
@@ -27,6 +27,8 @@ PINPOINTED_MOMENTS = 3
 MAX_SEGMENT_EMBEDDINGS = 16
 CONTEXT_SECONDS = 30.0
 LEXEME_PATTERN = re.compile(r"'((?:[^']|'')+)'")
+
+ChapterSpan = Row[tuple[uuid.UUID, float, float, str]]
 
 
 async def embed_query(q: str) -> list[float] | None:
@@ -100,6 +102,7 @@ async def semantic_search(
         reverse=True,
     )[:LIMIT]
     await pinpoint(session, moments, query, vector)
+    chapters = await chapter_titles(session, moments)
     return [
         SearchHit(
             lecture_id=moment.lecture_id,
@@ -109,10 +112,41 @@ async def semantic_search(
             end=moment.end,
             section=moment.best.section,
             text=moment.text,
+            description=moment.best.description,
+            chapter_title=chapter_at(chapters.get(moment.lecture_id, []), moment.at),
             score=moment.score,
         )
         for moment in moments
     ]
+
+
+async def chapter_titles(
+    session: AsyncSession, moments: list[Moment]
+) -> dict[uuid.UUID, list[ChapterSpan]]:
+    lecture_ids = {moment.lecture_id for moment in moments if moment.at is not None}
+    if not lecture_ids:
+        return {}
+    chapters: dict[uuid.UUID, list[ChapterSpan]] = {}
+    for chapter in await session.execute(
+        select(Chapter.lecture_id, Chapter.start, Chapter.end, Chapter.title)
+        .where(Chapter.lecture_id.in_(lecture_ids))
+        .order_by(Chapter.start)
+    ):
+        chapters.setdefault(chapter.lecture_id, []).append(chapter)
+    return chapters
+
+
+def chapter_at(chapters: list[ChapterSpan], at: float | None) -> str | None:
+    if at is None:
+        return None
+    current = None
+    for chapter in chapters:
+        if chapter.start > at:
+            break
+        current = chapter
+    if current is None or current.end < at:
+        return None
+    return current.title.strip() or None
 
 
 def group_moments(chunks: list[SearchChunk], scores: dict[int, float]) -> list[Moment]:

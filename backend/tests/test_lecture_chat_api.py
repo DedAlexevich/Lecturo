@@ -52,6 +52,8 @@ async def test_chat_returns_verified_timestamps_for_owned_lecture(
         end=20,
         section=0,
         text="Предел равен двум",
+        description=None,
+        chapter_title=None,
         score=0.5,
     )
     llm = ChatLLM(

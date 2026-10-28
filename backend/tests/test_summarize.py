@@ -216,18 +216,40 @@ class BrokenMapLLM(ScriptedLLM):
         return await super().complete(system, user, json_mode=json_mode)
 
 
-@pytest.mark.parametrize(
-    ("broken_answers", "calls", "summary"), [(1, 2, "Часть с 900"), (2, 2, "")]
-)
-async def test_broken_map_answer_is_retried_once(broken_answers, calls, summary):
-    llm = BrokenMapLLM(broken_answers)
+async def test_broken_map_answer_is_retried_once():
+    llm = BrokenMapLLM(1)
     part = minute_segments(30)[15:]
 
-    digest = await summarize.digest_part(llm, part)
+    digest = await summarize.request_digest(llm, part)
 
-    assert llm.map_calls == calls
-    assert digest.summary == summary
+    assert llm.map_calls == 2
+    assert digest.summary == "Часть с 900"
     assert (digest.start, digest.end) == (900, 1799)
+
+
+async def test_part_is_not_lost_after_two_broken_map_answers(user, monkeypatch, caplog):
+    llm = BrokenMapLLM(2)
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    await run_summarize(lecture.id)
+
+    chapters, _ = await saved(lecture.id)
+    assert llm.map_calls == 2
+    assert chapters[1].start == 900
+    assert chapters[1].summary.startswith("фраза 900 фраза 960")
+    assert "взят текст расшифровки" in caplog.text
+
+
+def test_raw_part_summary_is_cut_to_limit():
+    part = [
+        TranscriptSegment(start=float(i), end=float(i) + 1, text="слово " * 50) for i in range(100)
+    ]
+
+    summary = summarize.raw_part_summary(part)
+
+    assert len(summary) <= summarize.RAW_PART_CHAR_LIMIT + 2
+    assert summary.endswith(" …")
 
 
 async def test_broken_reduce_answer_fails_step(user, monkeypatch):
@@ -244,6 +266,58 @@ async def test_broken_reduce_answer_fails_step(user, monkeypatch):
         await run_summarize(lecture.id)
 
 
+class FlakyReduceLLM(ScriptedLLM):
+    def __init__(self, broken_reduces: int) -> None:
+        super().__init__()
+        self.broken_reduces = broken_reduces
+        self.reduce_calls = 0
+        self.map_calls = 0
+
+    async def complete(self, system: str, user: str, *, json_mode: bool = False) -> str:
+        if "Главы" in system:
+            self.reduce_calls += 1
+            if self.reduce_calls <= self.broken_reduces:
+                return "не JSON"
+        else:
+            self.map_calls += 1
+        return await super().complete(system, user, json_mode=json_mode)
+
+
+async def test_broken_first_reduce_answer_is_retried(user, monkeypatch):
+    llm = FlakyReduceLLM(1)
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert llm.reduce_calls == 2
+    assert llm.map_calls == 4
+    assert summary.content_md == "## Итог"
+    assert [c.title for c in chapters] == ["Глава 1", "Глава 2", "Глава 3", "Глава 4"]
+
+
+async def test_retry_after_failed_reduce_reuses_map_digests(user, monkeypatch):
+    llm = FlakyReduceLLM(2)
+    monkeypatch.setattr(summarize, "get_llm", lambda: llm)
+    lecture = await create_transcribed_lecture(user, 60)
+
+    with pytest.raises(ValueError):
+        await run_summarize(lecture.id)
+    assert llm.map_calls == 4
+
+    await run_summarize(lecture.id)
+
+    assert llm.map_calls == 4
+    assert llm.reduce_calls == 3
+    chapters, _ = await saved(lecture.id)
+    assert [c.summary for c in chapters] == [f"Часть с {start}" for start in (0, 900, 1800, 2700)]
+
+    await run_summarize(lecture.id)
+
+    assert llm.map_calls == 8
+
+
 @pytest.mark.parametrize(
     "content",
     [
@@ -254,6 +328,39 @@ async def test_broken_reduce_answer_fails_step(user, monkeypatch):
 )
 def test_parse_json_finds_object_in_answer(content):
     assert summarize.parse_json(content) == {"summary": "да"}
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        r"\frac{a}{b}",
+        r"\theta + \tau",
+        r"\nabla f",
+        r"\left( x \right)",
+        r"\beta \rho \underline{x}",
+        r"\begin{pmatrix} 1 \end{pmatrix} \neq \textbf{v} \to \forall",
+    ],
+)
+def test_parse_json_keeps_latex_commands(formula):
+    content = '{"summary": "$' + formula + '$"}'
+
+    assert summarize.parse_json(content) == {"summary": f"${formula}$"}
+
+
+def test_parse_json_keeps_escaped_latex_and_json_escapes():
+    content = r'{"summary": "$\\frac{1}{2}$\nПредел\n\nThe end\t\u00e9"}'
+
+    assert summarize.parse_json(content) == {"summary": "$\\frac{1}{2}$\nПредел\n\nThe end\t\u00e9"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [r"\nfor x in xs", r"\r\nsome text", r"\tif", r"\nthe end", r"\bold", r"\frame"],
+)
+def test_parse_json_keeps_json_escapes_before_lowercase_words(text):
+    content = '{"summary": "' + text + '"}'
+
+    assert summarize.parse_json(content) == json.loads(content)
 
 
 @pytest.mark.parametrize("content", ["", "нет JSON", "[1, 2]", "} {"])

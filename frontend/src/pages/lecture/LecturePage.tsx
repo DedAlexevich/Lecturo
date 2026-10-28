@@ -126,6 +126,11 @@ function PanelEmpty({ kind, lecture }: { kind: ContentPanelKind; lecture: Lectur
   return <p className="lecture__panel-note">{note}</p>;
 }
 
+function panelClass(hasContent: boolean, chat: boolean) {
+  if (!hasContent) return "lecture__panel lecture__panel--empty";
+  return chat ? "lecture__panel lecture__panel--chat" : "lecture__panel";
+}
+
 function LectureSkeleton() {
   return (
     <div className="lecture" aria-busy="true">
@@ -404,7 +409,7 @@ export function LecturePage() {
           </div>
         </div>
         <section
-          className={searching || tabHasContent[tab] ? "lecture__panel" : "lecture__panel lecture__panel--empty"}
+          className={panelClass(searching || tabHasContent[tab], !searching && tab === "chat")}
           aria-label="Материалы лекции"
         >
           {data.status === "ready" ? (

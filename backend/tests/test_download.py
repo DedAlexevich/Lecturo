@@ -390,6 +390,12 @@ async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
         return target.with_suffix(".opus")
 
     monkeypatch.setattr(download, "fetch_audio", fake_fetch)
+    mono = []
+
+    async def fake_make_mono(path, duration, report):
+        mono.append(path)
+
+    monkeypatch.setattr(download, "make_mono", fake_make_mono)
     reported = []
 
     async def report(progress):
@@ -409,6 +415,7 @@ async def test_download_saves_audio_path(public_host, monkeypatch, tmp_path):
     assert calls == ["https://vkvideo.ru/video-1_2"]
     assert public_host == ["https://vkvideo.ru/video-1_2"]
     assert lecture.audio_path == str(tmp_path / "audio" / f"{lecture.id}.opus")
+    assert mono == [tmp_path / "audio" / f"{lecture.id}.opus"]
     assert reported[-1] == 1.0
 
 

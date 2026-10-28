@@ -31,7 +31,7 @@ async def account() -> AsyncIterator[User]:
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 async def stored_hash(user: User) -> str | None:
@@ -68,7 +68,7 @@ async def test_change_password(client, account):
         json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
         headers=headers(account),
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
     login = await client.post(
         "/api/v1/auth/login", json={"email": account.email, "password": NEW_PASSWORD}
     )
@@ -110,26 +110,25 @@ async def test_set_password_without_existing(client, user):
     response = await client.post(
         "/api/v1/me/password", json={"new_password": NEW_PASSWORD}, headers=headers(user)
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
     assert verify_password(await stored_hash(user), NEW_PASSWORD)
 
 
-async def test_change_password_revokes_reset_tokens(client, account):
+async def test_change_password_revokes_mail_tokens(client, account):
     async with SessionLocal() as session:
-        await issue_token(session, account.id, AuthTokenKind.reset_password)
+        for kind in AuthTokenKind:
+            await issue_token(session, account.id, account.email, kind)
     response = await client.post(
         "/api/v1/me/password",
         json={"current_password": PASSWORD, "new_password": NEW_PASSWORD},
         headers=headers(account),
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
     async with SessionLocal() as session:
         active = (
             await session.scalars(
                 select(AuthToken).where(
-                    AuthToken.user_id == account.id,
-                    AuthToken.kind == AuthTokenKind.reset_password,
-                    AuthToken.used_at.is_(None),
+                    AuthToken.user_id == account.id, AuthToken.used_at.is_(None)
                 )
             )
         ).all()

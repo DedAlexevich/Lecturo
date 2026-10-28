@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
+import { api, tokenStorage } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { meQueryKey } from "../../app/useMe";
@@ -60,6 +60,7 @@ export function useChangePassword() {
   return useMutation({
     mutationFn: async (body: components["schemas"]["PasswordChangeIn"]) =>
       unwrap(await api.POST("/api/v1/me/password", { body })),
+    onSuccess: (tokens) => tokenStorage.set(tokens.access_token),
   });
 }
 
@@ -88,9 +89,13 @@ export function useLinkEmail() {
 }
 
 export function useUnlink() {
-  return useMeMutation(async (provider: Provider) =>
-    unwrap(await api.DELETE("/api/v1/me/identities/{provider}", { params: { path: { provider } } })),
-  );
+  return useMeMutation(async (provider: Provider) => {
+    const result = await api.DELETE("/api/v1/me/identities/{provider}", { params: { path: { provider } } });
+    const me = unwrap(result);
+    const token = result.response.headers.get("X-Access-Token");
+    if (token) tokenStorage.set(token);
+    return me;
+  });
 }
 
 export function useRevokeAiTransfer() {

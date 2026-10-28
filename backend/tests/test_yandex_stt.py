@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -47,6 +48,27 @@ def test_parse_recognition_empty_response():
     assert parse_recognition({}) == []
 
 
+def stereo_chunk(channel: str, start: str, end: str, text: str) -> dict:
+    words = [{"startTime": start, "endTime": end, "word": text.lower(), "confidence": 1}]
+    return {"alternatives": [{"words": words, "text": text}], "channelTag": channel}
+
+
+def test_parse_recognition_keeps_one_channel_of_stereo_audio():
+    response = {
+        "chunks": [
+            stereo_chunk("1", "41.2s", "44.8s", "Надуть, перекрыть выход воздуха."),
+            stereo_chunk("2", "41.2s", "44.8s", "Надуть, перекрыть выход воздуха."),
+            stereo_chunk("2", "45.1s", "47s", "Подключить к лопастям."),
+            stereo_chunk("1", "45.1s", "47s", "Подключить к лопастям."),
+        ]
+    }
+
+    assert parse_recognition(response) == [
+        Segment(start=41.2, end=44.8, text="Надуть, перекрыть выход воздуха."),
+        Segment(start=45.1, end=47.0, text="Подключить к лопастям."),
+    ]
+
+
 def test_factory_returns_yandex_provider():
     assert isinstance(get_speech_to_text(yandex_settings()), YandexSpeechToText)
 
@@ -81,6 +103,9 @@ async def test_transcribe_uploads_polls_and_cleans_up(tmp_path: Path):
     assert upload.url.path.startswith("/lecturo-audio/stt/")
     assert upload.headers["authorization"].startswith("AWS4-HMAC-SHA256 Credential=access/")
     assert upload.content == b"OggS-audio"
+    assert upload.headers["content-length"] == str(len(b"OggS-audio"))
+    assert "transfer-encoding" not in upload.headers
+    assert upload.headers["x-amz-content-sha256"] == hashlib.sha256(b"OggS-audio").hexdigest()
     body = json.loads(start.content)
     assert start.headers["authorization"] == "Api-Key api-key"
     assert body["config"]["specification"]["languageCode"] == "ru-RU"
