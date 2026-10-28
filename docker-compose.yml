@@ -66,6 +66,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_DIR: /var/log/lecturo
       LOG_SERVICE: api
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
     volumes:
       - ${DATA_DIR:-./data}/storage:/data/storage
       - ${DATA_DIR:-./data}/logs:/var/log/lecturo
