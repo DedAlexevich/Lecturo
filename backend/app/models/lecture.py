@@ -114,6 +114,7 @@ class ProcessingStep(UUIDPk, CreatedAt, Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    external: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class TranscriptSegment(Base):
