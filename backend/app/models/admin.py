@@ -24,6 +24,12 @@ class AdminAction(enum.StrEnum):
     restore_failed = "restore_failed"
     restore_denied = "restore_denied"
     maintenance_disabled = "maintenance_disabled"
+    users_searched = "users_searched"
+    user_viewed = "user_viewed"
+    hours_granted = "hours_granted"
+    subscription_extended = "subscription_extended"
+    user_blocked = "user_blocked"
+    user_unblocked = "user_unblocked"
 
 
 class AdminAuditEntry(UUIDPk, CreatedAt, Base):

@@ -10,11 +10,22 @@ import { AuditSection } from "./AuditSection";
 const AdminLogsPage = lazy(() =>
   import("./logs/AdminLogsPage").then((module) => ({ default: module.AdminLogsPage })),
 );
+const UsersSection = lazy(() =>
+  import("./users/UsersSection").then((module) => ({ default: module.UsersSection })),
+);
+const UserCardSection = lazy(() =>
+  import("./users/UserCardSection").then((module) => ({ default: module.UserCardSection })),
+);
+const StatsSection = lazy(() =>
+  import("./users/StatsSection").then((module) => ({ default: module.StatsSection })),
+);
 const AdminBackupsPage = lazy(() =>
   import("./backups/AdminBackupsPage").then((module) => ({ default: module.AdminBackupsPage })),
 );
 
 const sections = [
+  { to: "/admin/users", label: "Пользователи" },
+  { to: "/admin/stats", label: "Статистика" },
   { to: "/admin/audit", label: "Журнал действий" },
   { to: "/admin/admins", label: "Администраторы" },
   { to: "/admin/logs", label: "Логи и ошибки" },
@@ -45,6 +56,9 @@ export function AdminPage() {
         <div className={styles.content}>
           <Routes>
             <Route index element={<Navigate to="/admin/audit" replace />} />
+            <Route path="users" element={<UsersSection meId={me.id} />} />
+            <Route path="users/:userId" element={<UserCardSection meId={me.id} />} />
+            <Route path="stats" element={<StatsSection />} />
             <Route path="audit" element={<AuditSection />} />
             <Route path="admins" element={<AdminsSection meId={me.id} />} />
             <Route path="logs" element={<AdminLogsPage />} />

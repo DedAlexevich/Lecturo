@@ -4,6 +4,7 @@ from app.api import (
     admin,
     admin_backups,
     admin_logs,
+    admin_users,
     auth,
     billing,
     courses,
@@ -50,5 +51,6 @@ for module in (
     admin_logs,
     admin_backups,
     maintenance,
+    admin_users,
 ):
     api_router.include_router(module.router)

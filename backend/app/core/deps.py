@@ -19,7 +19,7 @@ async def user_by_token(session: AsyncSession, token: str) -> User | None:
     if grant is None:
         return None
     user = await session.get(User, grant.user_id)
-    if user is None or user.token_version != grant.version:
+    if user is None or user.token_version != grant.version or user.blocked_at is not None:
         return None
     return user
 

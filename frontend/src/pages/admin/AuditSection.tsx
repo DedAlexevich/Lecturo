@@ -21,6 +21,12 @@ const actionLabels: Record<AdminAction, string> = {
   restore_failed: "Восстановление базы не удалось",
   restore_denied: "Восстановление отклонено: подтверждение не прошло",
   maintenance_disabled: "Выключил режим обслуживания",
+  users_searched: "Искал пользователей",
+  user_viewed: "Открыл карточку пользователя",
+  hours_granted: "Начислил часы",
+  subscription_extended: "Продлил подписку",
+  user_blocked: "Заблокировал аккаунт",
+  user_unblocked: "Разблокировал аккаунт",
 };
 
 const sourceLabels: Record<string, string> = {

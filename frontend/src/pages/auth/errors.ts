@@ -32,6 +32,8 @@ export function messageOf(error: unknown): string {
     case 403:
     case 409:
       return typeof detail === "string" ? detail : "Не получилось, попробуйте ещё раз";
+    case 423:
+      return typeof detail === "string" ? detail : "Аккаунт заблокирован. Напишите в поддержку, если это ошибка";
     case 503:
       return typeof detail === "string" ? detail : "Сервис временно недоступен, попробуйте позже";
     case 400:

@@ -29,7 +29,13 @@ from app.schemas.user import (
 )
 from app.services import business_events, yandex_auth
 from app.services.admin_logs import mask_text
-from app.services.auth import authenticate, hash_password, normalize_email, register_user
+from app.services.auth import (
+    authenticate,
+    hash_password,
+    login_token,
+    normalize_email,
+    register_user,
+)
 from app.services.auth_tokens import (
     bump_token_version,
     consume_token,
@@ -86,7 +92,10 @@ async def register(body: RegisterIn, session: SessionDep, request: Request) -> T
 
 @router.post(
     "/login",
-    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"}},
+    responses={
+        status.HTTP_423_LOCKED: {"description": "Аккаунт заблокирован"},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"},
+    },
 )
 async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOut:
     settings = get_settings()
@@ -110,14 +119,16 @@ async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOu
         )
         raise
     await reset_rate_limit(settings.redis_url, email_key)
+    token = login_token(user)
     await business_events.record_event(BusinessEventKind.login, user, provider="email")
-    return TokenOut(access_token=create_access_token(user.id, user.token_version))
+    return token
 
 
 @router.post(
     "/telegram",
     responses={
-        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"}
+        status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_423_LOCKED: {"description": "Аккаунт заблокирован"},
     },
 )
 async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOut:
@@ -126,8 +137,9 @@ async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOu
     user = await get_or_create_telegram_user(
         session, body.id, profile, body.accept_terms, body.accept_personal_data
     )
+    token = login_token(user)
     await business_events.record_event(BusinessEventKind.login, user, provider="telegram")
-    return TokenOut(access_token=create_access_token(user.id, user.token_version))
+    return token
 
 
 @router.get("/providers")
@@ -166,6 +178,7 @@ async def start_vk_login(body: VkStartIn, request: Request) -> VkStartOut:
         status.HTTP_400_BAD_REQUEST: {"description": "Сессия входа не найдена или устарела"},
         status.HTTP_401_UNAUTHORIZED: {"description": "VK отклонил вход"},
         status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_423_LOCKED: {"description": "Аккаунт заблокирован"},
         status.HTTP_502_BAD_GATEWAY: {"description": "VK недоступен"},
         status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через VK не настроен"},
     },
@@ -177,8 +190,9 @@ async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep)
     user = await get_or_create_vk_user(
         session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
+    token = login_token(user)
     await business_events.record_event(BusinessEventKind.login, user, provider="vk")
-    return TokenOut(access_token=create_access_token(user.id, user.token_version))
+    return token
 
 
 @router.post(
@@ -211,6 +225,7 @@ async def start_yandex_login(body: YandexStartIn, request: Request) -> YandexSta
         status.HTTP_400_BAD_REQUEST: {"description": "Сессия входа не найдена или устарела"},
         status.HTTP_401_UNAUTHORIZED: {"description": "Яндекс отклонил вход"},
         status.HTTP_403_FORBIDDEN: {"description": "Новому пользователю нужны оба согласия"},
+        status.HTTP_423_LOCKED: {"description": "Аккаунт заблокирован"},
         status.HTTP_502_BAD_GATEWAY: {"description": "Яндекс недоступен"},
         status.HTTP_503_SERVICE_UNAVAILABLE: {"description": "Вход через Яндекс не настроен"},
     },
@@ -224,8 +239,9 @@ async def login_yandex(
     user = await yandex_auth.get_or_create_yandex_user(
         session, yandex_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
+    token = login_token(user)
     await business_events.record_event(BusinessEventKind.login, user, provider="yandex")
-    return TokenOut(access_token=create_access_token(user.id, user.token_version))
+    return token
 
 
 @router.post(

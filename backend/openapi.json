@@ -102,6 +102,9 @@
               }
             }
           },
+          "423": {
+            "description": "Аккаунт заблокирован"
+          },
           "429": {
             "description": "Слишком много попыток входа"
           },
@@ -148,6 +151,9 @@
           },
           "403": {
             "description": "Новому пользователю нужны оба согласия"
+          },
+          "423": {
+            "description": "Аккаунт заблокирован"
           },
           "422": {
             "description": "Validation Error",
@@ -267,6 +273,9 @@
           "403": {
             "description": "Новому пользователю нужны оба согласия"
           },
+          "423": {
+            "description": "Аккаунт заблокирован"
+          },
           "502": {
             "description": "VK недоступен"
           },
@@ -369,6 +378,9 @@
           },
           "403": {
             "description": "Новому пользователю нужны оба согласия"
+          },
+          "423": {
+            "description": "Аккаунт заблокирован"
           },
           "502": {
             "description": "Яндекс недоступен"
@@ -1089,6 +1101,9 @@
           },
           "403": {
             "description": "Новому пользователю нужны оба согласия"
+          },
+          "423": {
+            "description": "Аккаунт заблокирован"
           },
           "422": {
             "description": "Validation Error",
@@ -4596,6 +4611,489 @@
           }
         }
       }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Search Users",
+        "operationId": "search_users_api_v1_admin_users_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 320,
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserBriefOut"
+                  },
+                  "title": "Response Search Users Api V1 Admin Users Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get User Card",
+        "operationId": "get_user_card_api_v1_admin_users__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/admin": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Make Admin",
+        "operationId": "make_admin_api_v1_admin_users__user_id__admin_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "409": {
+            "description": "Действие сейчас недоступно"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/hours": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Grant Hours",
+        "operationId": "grant_hours_api_v1_admin_users__user_id__hours_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantHoursIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/subscription": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Extend Subscription",
+        "operationId": "extend_subscription_api_v1_admin_users__user_id__subscription_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendSubscriptionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/block": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Block User",
+        "operationId": "block_user_api_v1_admin_users__user_id__block_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReasonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "409": {
+            "description": "Действие сейчас недоступно"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/unblock": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Unblock User",
+        "operationId": "unblock_user_api_v1_admin_users__user_id__unblock_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReasonIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCardOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден"
+          },
+          "409": {
+            "description": "Действие сейчас недоступно"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/stats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Stats",
+        "operationId": "get_stats_api_v1_admin_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOut"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Неверный период"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4656,7 +5154,13 @@
           "restore_finished",
           "restore_failed",
           "restore_denied",
-          "maintenance_disabled"
+          "maintenance_disabled",
+          "users_searched",
+          "user_viewed",
+          "hours_granted",
+          "subscription_extended",
+          "user_blocked",
+          "user_unblocked"
         ],
         "title": "AdminAction"
       },
@@ -4711,6 +5215,21 @@
           "created_at"
         ],
         "title": "AdminOut"
+      },
+      "AdminReasonIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "AdminReasonIn"
       },
       "AuditEntryOut": {
         "properties": {
@@ -5459,6 +5978,50 @@
           "expires_at"
         ],
         "title": "ExportLinkOut"
+      },
+      "ExtendSubscriptionIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "days": {
+            "type": "integer",
+            "maximum": 366.0,
+            "minimum": 1.0,
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "days"
+        ],
+        "title": "ExtendSubscriptionIn"
+      },
+      "GrantHoursIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          },
+          "hours": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "hours"
+        ],
+        "title": "GrantHoursIn"
       },
       "HTTPValidationError": {
         "properties": {
@@ -7256,6 +7819,136 @@
         ],
         "title": "SourceType"
       },
+      "StatsDayOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "new_users": {
+            "type": "integer",
+            "title": "New Users"
+          },
+          "lectures": {
+            "type": "integer",
+            "title": "Lectures"
+          },
+          "processed_seconds": {
+            "type": "integer",
+            "title": "Processed Seconds"
+          },
+          "failed_lectures": {
+            "type": "integer",
+            "title": "Failed Lectures"
+          },
+          "payments": {
+            "type": "integer",
+            "title": "Payments"
+          },
+          "revenue_kopecks": {
+            "type": "integer",
+            "title": "Revenue Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "new_users",
+          "lectures",
+          "processed_seconds",
+          "failed_lectures",
+          "payments",
+          "revenue_kopecks"
+        ],
+        "title": "StatsDayOut"
+      },
+      "StatsOut": {
+        "properties": {
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/StatsTotalsOut"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/StatsDayOut"
+            },
+            "type": "array",
+            "title": "Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date_from",
+          "date_to",
+          "generated_at",
+          "totals",
+          "days"
+        ],
+        "title": "StatsOut"
+      },
+      "StatsTotalsOut": {
+        "properties": {
+          "new_users": {
+            "type": "integer",
+            "title": "New Users"
+          },
+          "lectures": {
+            "type": "integer",
+            "title": "Lectures"
+          },
+          "processed_seconds": {
+            "type": "integer",
+            "title": "Processed Seconds"
+          },
+          "failed_lectures": {
+            "type": "integer",
+            "title": "Failed Lectures"
+          },
+          "payments": {
+            "type": "integer",
+            "title": "Payments"
+          },
+          "revenue_kopecks": {
+            "type": "integer",
+            "title": "Revenue Kopecks"
+          },
+          "refunds": {
+            "type": "integer",
+            "title": "Refunds"
+          },
+          "refunded_kopecks": {
+            "type": "integer",
+            "title": "Refunded Kopecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_users",
+          "lectures",
+          "processed_seconds",
+          "failed_lectures",
+          "payments",
+          "revenue_kopecks",
+          "refunds",
+          "refunded_kopecks"
+        ],
+        "title": "StatsTotalsOut"
+      },
       "StepName": {
         "type": "string",
         "enum": [
@@ -7637,6 +8330,359 @@
         ],
         "title": "TokenOut"
       },
+      "UserBriefOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin"
+          },
+          "blocked": {
+            "type": "boolean",
+            "title": "Blocked"
+          },
+          "telegram_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Username"
+          },
+          "subscription_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Until"
+          },
+          "package_left_sec": {
+            "type": "integer",
+            "title": "Package Left Sec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "created_at",
+          "is_admin",
+          "blocked",
+          "telegram_username",
+          "subscription_until",
+          "package_left_sec"
+        ],
+        "title": "UserBriefOut"
+      },
+      "UserCardOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "email_verified": {
+            "type": "boolean",
+            "title": "Email Verified"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin"
+          },
+          "blocked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked At"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "identities": {
+            "items": {
+              "$ref": "#/components/schemas/UserIdentityOut"
+            },
+            "type": "array",
+            "title": "Identities"
+          },
+          "consents": {
+            "$ref": "#/components/schemas/UserConsentsOut"
+          },
+          "quota": {
+            "$ref": "#/components/schemas/QuotaOut"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/UserPaymentOut"
+            },
+            "type": "array",
+            "title": "Payments"
+          },
+          "lectures": {
+            "$ref": "#/components/schemas/UserLecturesOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "email_verified",
+          "display_name",
+          "created_at",
+          "is_admin",
+          "blocked_at",
+          "blocked_reason",
+          "identities",
+          "consents",
+          "quota",
+          "payments",
+          "lectures"
+        ],
+        "title": "UserCardOut"
+      },
+      "UserConsentsOut": {
+        "properties": {
+          "terms_accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Accepted At"
+          },
+          "terms_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Revision"
+          },
+          "personal_data_accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Data Accepted At"
+          },
+          "personal_data_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personal Data Revision"
+          },
+          "ai_transfer_accepted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Transfer Accepted At"
+          },
+          "ai_transfer_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Transfer Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "terms_accepted_at",
+          "terms_revision",
+          "personal_data_accepted_at",
+          "personal_data_revision",
+          "ai_transfer_accepted_at",
+          "ai_transfer_revision"
+        ],
+        "title": "UserConsentsOut"
+      },
+      "UserIdentityOut": {
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "created_at"
+        ],
+        "title": "UserIdentityOut"
+      },
+      "UserLectureOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LectureStatus"
+          },
+          "source_type": {
+            "$ref": "#/components/schemas/SourceType"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "source_type",
+          "duration_sec",
+          "created_at"
+        ],
+        "title": "UserLectureOut"
+      },
+      "UserLecturesOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/LectureStatus"
+            },
+            "type": "object",
+            "title": "By Status"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/UserLectureOut"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "by_status",
+          "recent"
+        ],
+        "title": "UserLecturesOut"
+      },
       "UserOut": {
         "properties": {
           "id": {
@@ -7702,6 +8748,57 @@
           "is_admin"
         ],
         "title": "UserOut"
+      },
+      "UserPaymentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PaymentKind"
+          },
+          "product_code": {
+            "type": "string",
+            "title": "Product Code"
+          },
+          "amount_kopecks": {
+            "type": "integer",
+            "title": "Amount Kopecks"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "product_code",
+          "amount_kopecks",
+          "status",
+          "created_at",
+          "paid_at"
+        ],
+        "title": "UserPaymentOut"
       },
       "ValidationError": {
         "properties": {
