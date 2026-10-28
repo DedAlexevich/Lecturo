@@ -1665,7 +1665,7 @@ export interface components {
          * PaymentStatus
          * @enum {string}
          */
-        PaymentStatus: "pending" | "succeeded" | "canceled";
+        PaymentStatus: "pending" | "succeeded" | "canceled" | "refunded";
         /** ProductOut */
         ProductOut: {
             /** Code */
