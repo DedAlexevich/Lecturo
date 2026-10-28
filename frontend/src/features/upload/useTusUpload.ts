@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Upload, type DetailedError } from "tus-js-client";
 import { tokenStorage } from "../../api/client";
 import { expireSession } from "../../app/session";
-import { detailOf } from "./errors";
+import { detailOf } from "../../api/errors";
 
 export const MAX_FILE_BYTES = 2 * 1024 ** 3;
 

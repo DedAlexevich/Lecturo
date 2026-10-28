@@ -4,7 +4,7 @@ import { api } from "../../api/client";
 import type { components } from "../../api/schema";
 import { ApiError } from "../../app/queryClient";
 import { lectureQueryKey } from "../../pages/lecture/useLecture";
-import { detailOf } from "../upload/errors";
+import { detailOf } from "../../api/errors";
 
 export type Quiz = components["schemas"]["QuizOut"];
 export type QuizQuestion = components["schemas"]["QuizQuestion"];

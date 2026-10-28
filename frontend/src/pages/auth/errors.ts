@@ -1,4 +1,5 @@
 import { ApiError } from "../../app/queryClient";
+import { detailOf } from "../../api/errors";
 
 export type FieldErrors = Partial<Record<string, string>>;
 
@@ -10,10 +11,6 @@ const fieldMessages: Record<string, Record<string, string>> = {
   accept_terms: { default: "Нужно принять пользовательское соглашение" },
   accept_personal_data: { default: "Нужно дать согласие на обработку персональных данных" },
 };
-
-function detailOf(body: unknown): unknown {
-  return typeof body === "object" && body !== null && "detail" in body ? body.detail : undefined;
-}
 
 export function fieldErrorsOf(error: unknown): FieldErrors {
   if (!(error instanceof ApiError) || error.status !== 422) return {};

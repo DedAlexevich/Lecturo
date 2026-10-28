@@ -4,7 +4,7 @@ import { Dialog } from "../../ui/Dialog";
 import { Field } from "../../ui/Field";
 import { Input } from "../../ui/Input";
 import { ApiError } from "../../app/queryClient";
-import { detailOf } from "../upload/errors";
+import { detailOf } from "../../api/errors";
 import { CoursesDialog } from "./CoursesDialog";
 import { placeMenu } from "./placement";
 import { useDeleteLecture, useRegenerateSummary, useRenameLecture } from "./queries";

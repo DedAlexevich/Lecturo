@@ -1,5 +1,6 @@
 import { api } from "../../api/client";
 import type { ExportFormat, LinkResult } from "../lecture/ExportActions";
+import { detailOf } from "../../api/errors";
 
 export type CopyResult =
   | { kind: "saved"; created: boolean; lectureId: string | null; courseId: string | null }
@@ -7,10 +8,6 @@ export type CopyResult =
   | { kind: "failed"; status: number; message: string | null };
 
 type ConflictDetail = { lecture_id?: string | null; course_id?: string | null };
-
-function detailOf(error: unknown): unknown {
-  return (error as { detail?: unknown } | undefined)?.detail;
-}
 
 function messageOf(error: unknown): string | null {
   const detail = detailOf(error);

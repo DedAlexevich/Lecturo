@@ -1,8 +1,5 @@
 import { ApiError } from "../../app/queryClient";
-
-export function detailOf(body: unknown): unknown {
-  return typeof body === "object" && body !== null && "detail" in body ? body.detail : undefined;
-}
+import { detailOf } from "../../api/errors";
 
 export function linkErrorOf(error: unknown) {
   if (!(error instanceof ApiError)) return "Не удалось связаться с сервером. Проверьте интернет и попробуйте ещё раз";
