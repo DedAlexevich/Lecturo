@@ -550,7 +550,7 @@ async def test_webhook_leaves_business_events(client, user, fake):
 
     kinds = await event_kinds(payment.yookassa_id)
     await drop_events(payment.yookassa_id)
-    assert kinds.count("webhook_received") == 2
+    assert kinds.count("webhook_received") == 1
     assert kinds.count("payment_succeeded") == 1
     assert kinds.count("subscription_granted") == 1
 

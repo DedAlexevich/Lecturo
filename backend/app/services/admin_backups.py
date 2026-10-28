@@ -364,7 +364,7 @@ async def save_upload(stream: AsyncIterator[bytes]) -> tuple[Path, DumpInfo]:
         if not info.ok:
             raise BackupError(info.error or BROKEN_DUMP)
         check_dump_version(info, await server_major(database_target()))
-        final = directory / f"uploaded-{timestamp()}.dump"
+        final = directory / f"uploaded-{timestamp()}-{secrets.token_hex(2)}.dump"
         os.replace(part, final)
     except OSError as error:
         raise BackupError(NO_DISK) from error

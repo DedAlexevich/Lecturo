@@ -11,6 +11,8 @@ from app.services.admin_logs import mask_text
 
 logger = logging.getLogger(__name__)
 
+DETAIL_LIMIT = 200
+
 
 async def record_event(
     kind: BusinessEventKind,
@@ -27,7 +29,7 @@ async def record_event(
                     user_id=user.id if user else user_id,
                     user_label=user_label(user) if user else label,
                     details={
-                        key: mask_text(str(value))
+                        key: mask_text(str(value)[:DETAIL_LIMIT])
                         for key, value in details.items()
                         if value is not None
                     },

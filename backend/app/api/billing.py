@@ -150,11 +150,11 @@ async def yookassa_webhook(
         await reject_webhook(None, str(error))
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
     refund = yookassa.is_refund(body)
+    if not await yookassa.awaits_payment(session, yookassa_id, refund):
+        return {"status": "ok"}
     await business_events.record_event(
         BusinessEventKind.webhook_received, event=body.get("event"), yookassa_id=yookassa_id
     )
-    if not await yookassa.awaits_payment(session, yookassa_id, refund):
-        return {"status": "ok"}
     process = yookassa.process_refund if refund else yookassa.process_notification
     try:
         client = yookassa_factory()

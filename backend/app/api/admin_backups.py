@@ -20,6 +20,7 @@ from app.services.rate_limit import count_failure, ensure_below_limit
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_admin_user)])
 
+INTEGRITY_PARALLEL = 3
 RESTORE_ATTEMPTS = 5
 RESTORE_WINDOW_SECONDS = 900
 NOT_FOUND_RESPONSE = {status.HTTP_404_NOT_FOUND: {"description": admin_backups.NOT_FOUND}}
@@ -61,8 +62,14 @@ async def current_job() -> BackupJobOut | None:
 @router.get("/backups")
 async def get_backups() -> BackupsOut:
     files = await admin_backups.list_backups()
+    gate = asyncio.Semaphore(INTEGRITY_PARALLEL)
+
+    async def limited(item: admin_backups.BackupFile) -> BackupOut:
+        async with gate:
+            return await describe(item)
+
     return BackupsOut(
-        items=list(await asyncio.gather(*(describe(item) for item in files))),
+        items=list(await asyncio.gather(*(limited(item) for item in files))),
         job=await current_job(),
         maintenance=await maintenance.is_active(use_cache=False),
     )
