@@ -10,6 +10,7 @@ from app.models import Chapter, Lecture, Quiz, TranscriptSegment
 from app.pipeline.runner import Report, UserFacingError
 from app.pipeline.stages import load_segments, require_ai_transfer
 from app.pipeline.summarize import (
+    escape_latex,
     format_part,
     load_prompt,
     parse_json,
@@ -18,6 +19,7 @@ from app.pipeline.summarize import (
 )
 from app.pipeline.timecodes import locate_timestamp
 from app.providers import LLM, get_llm
+from app.providers.openai_compat import OpenAICompatibleError, OpenAICompatibleTruncated
 from app.schemas.lecture import QuizQuestion
 
 MIN_QUESTIONS = 6
@@ -25,7 +27,11 @@ MAX_QUESTIONS = 12
 MIN_OPTIONS = 2
 MAX_OPTIONS = 6
 QUIZ_ATTEMPTS = 3
-QUIZ_MAX_TOKENS = 4096
+QUIZ_MAX_TOKENS = 6144
+COMPACT_QUIZ_NOTE = (
+    "\n\nОтвет должен быть короче: ровно 6 вопросов, объяснение в одно короткое предложение, "
+    "evidence из 5–10 слов."
+)
 TRANSCRIPT_CHAR_LIMIT = 60_000
 
 logger = logging.getLogger(__name__)
@@ -61,7 +67,10 @@ def transcript_excerpt(
 
 
 def quiz_request(
-    lecture: Lecture, chapters: list[Chapter], segments: list[TranscriptSegment]
+    lecture: Lecture,
+    chapters: list[Chapter],
+    segments: list[TranscriptSegment],
+    limit: int = TRANSCRIPT_CHAR_LIMIT,
 ) -> str:
     return json.dumps(
         {
@@ -75,7 +84,7 @@ def quiz_request(
                 }
                 for chapter in chapters
             ],
-            "transcript": transcript_excerpt(segments),
+            "transcript": transcript_excerpt(segments, limit),
         },
         ensure_ascii=False,
     )
@@ -120,10 +129,9 @@ def parse_question(
     ).model_dump()
 
 
-def parse_questions(
-    content: str, segments: list[TranscriptSegment], lecture_end: float
+def valid_questions(
+    items: Any, segments: list[TranscriptSegment], lecture_end: float
 ) -> list[dict[str, Any]]:
-    items = parse_json(content).get("questions")
     if not isinstance(items, list):
         raise InvalidQuiz("в ответе нет списка вопросов")
     questions = []
@@ -143,24 +151,77 @@ def parse_questions(
     return questions[:MAX_QUESTIONS]
 
 
+def parse_questions(
+    content: str, segments: list[TranscriptSegment], lecture_end: float
+) -> list[dict[str, Any]]:
+    return valid_questions(parse_json(content).get("questions"), segments, lecture_end)
+
+
+def finished_items(content: str) -> list[Any]:
+    key = content.find('"questions"')
+    start = content.find("[", key) if key >= 0 else -1
+    if start < 0:
+        return []
+    text = escape_latex(content[start + 1 :])
+    decoder = json.JSONDecoder()
+    items: list[Any] = []
+    position = 0
+    while True:
+        while position < len(text) and text[position] in " \t\r\n,":
+            position += 1
+        if position >= len(text) or text[position] == "]":
+            return items
+        try:
+            item, position = decoder.raw_decode(text, position)
+        except ValueError:
+            return items
+        items.append(item)
+
+
+def rescue_questions(
+    content: str, segments: list[TranscriptSegment], lecture_end: float
+) -> list[dict[str, Any]] | None:
+    try:
+        return valid_questions(finished_items(content), segments, lecture_end)
+    except InvalidQuiz:
+        return None
+
+
 async def generate_questions(
     llm: LLM,
-    request: str,
+    full_request: str,
+    compact_request: str,
     segments: list[TranscriptSegment],
     lecture_end: float,
     report: Report,
 ) -> list[dict[str, Any]]:
-    reason = ""
+    failure: Exception = InvalidQuiz("Не удалось собрать квиз")
+    compact = False
     for attempt in range(1, QUIZ_ATTEMPTS + 1):
-        content = await llm.complete(
-            load_prompt("quiz"), request, json_mode=True, max_tokens=QUIZ_MAX_TOKENS
-        )
+        system = load_prompt("quiz") + (COMPACT_QUIZ_NOTE if compact else "")
+        request = compact_request if compact else full_request
         try:
-            return parse_questions(content, segments, lecture_end)
-        except ValueError as error:
-            reason = str(error)
+            content = await llm.complete(
+                system, request, json_mode=True, max_tokens=QUIZ_MAX_TOKENS
+            )
+        except OpenAICompatibleTruncated as error:
+            rescued = rescue_questions(error.content, segments, lecture_end)
+            if rescued is not None:
+                logger.warning("Ответ с квизом обрезан, взято готовых вопросов: %s", len(rescued))
+                return rescued
+            logger.warning("Ответ с квизом обрезан, запрос сокращён")
+            compact = True
+            failure = error
+        except OpenAICompatibleError as error:
+            logger.warning("Запрос квиза не удался: %s", error)
+            failure = error
+        else:
+            try:
+                return parse_questions(content, segments, lecture_end)
+            except ValueError as error:
+                failure = InvalidQuiz(f"Не удалось собрать квиз: {error}")
         await report(attempt / QUIZ_ATTEMPTS)
-    raise InvalidQuiz(f"Не удалось собрать квиз: {reason}")
+    raise failure
 
 
 async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) -> None:
@@ -172,9 +233,13 @@ async def build_quiz(session: AsyncSession, lecture: Lecture, report: Report) ->
         select(Chapter).where(Chapter.lecture_id == lecture.id).order_by(Chapter.idx)
     )
     lecture_end = lecture.duration_sec or segments[-1].end
-    request = quiz_request(lecture, list(chapters), segments)
+    chapter_list = list(chapters)
+    full_request = quiz_request(lecture, chapter_list, segments)
+    compact_request = quiz_request(lecture, chapter_list, segments, TRANSCRIPT_CHAR_LIMIT // 2)
     await session.commit()
-    questions = await generate_questions(get_llm(), request, segments, lecture_end, report)
+    questions = await generate_questions(
+        get_llm(), full_request, compact_request, segments, lecture_end, report
+    )
     await session.execute(
         insert(Quiz)
         .values(lecture_id=lecture.id, questions=questions)

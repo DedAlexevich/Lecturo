@@ -22,7 +22,12 @@ from app.models import (
     User,
 )
 from app.pipeline import quiz, tasks
-from app.pipeline.quiz import InvalidQuiz, parse_questions, transcript_excerpt
+from app.pipeline.quiz import MIN_QUESTIONS, InvalidQuiz, parse_questions, transcript_excerpt
+from app.providers.openai_compat import (
+    OpenAICompatibleError,
+    OpenAICompatibleTruncated,
+    OpenAICompatibleUnavailable,
+)
 from tests.conftest import notifications
 
 
@@ -502,3 +507,104 @@ async def test_create_quiz_reports_queue_down(client, subscriber, auth_headers, 
     step = await quiz_step(lecture.id)
     assert step.status == StepStatus.failed
     assert step.error == lectures_api.QUEUE_UNAVAILABLE
+
+
+class ScriptedProvider:
+    def __init__(self, *outcomes) -> None:
+        self.outcomes = list(outcomes)
+        self.systems: list[str] = []
+        self.requests: list[str] = []
+        self.limits: list[int | None] = []
+
+    async def complete(
+        self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None
+    ) -> str:
+        self.systems.append(system)
+        self.requests.append(user)
+        self.limits.append(max_tokens)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def cut_off(questions: list[dict], *, tail: str = '{"question": "оборван", "opt') -> Exception:
+    body = json.dumps({"questions": questions}, ensure_ascii=False)
+    partial = body[: body.rindex("]")] + ", " + tail
+    return OpenAICompatibleTruncated("/chat/completions: ответ обрезан", partial)
+
+
+async def test_cut_off_answer_with_enough_finished_questions_is_rescued(user, monkeypatch):
+    llm = ScriptedProvider(cut_off([make_question(n) for n in range(7)]))
+    monkeypatch.setattr(quiz, "get_llm", lambda: llm)
+    lecture = await create_ready_lecture(user)
+
+    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.done
+
+    assert len(llm.requests) == 1
+    assert len((await saved_quiz(lecture.id)).questions) == 7
+    assert llm.limits == [quiz.QUIZ_MAX_TOKENS]
+
+
+async def test_cut_off_answer_with_few_questions_gets_shorter_request(user, monkeypatch):
+    llm = ScriptedProvider(cut_off([make_question(n) for n in range(3)]), VALID)
+    monkeypatch.setattr(quiz, "get_llm", lambda: llm)
+    lecture = await create_ready_lecture(user)
+
+    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.done
+
+    assert len(llm.requests) == 2
+    assert quiz.COMPACT_QUIZ_NOTE not in llm.systems[0]
+    assert quiz.COMPACT_QUIZ_NOTE in llm.systems[1]
+    assert len(llm.requests[1]) <= len(llm.requests[0])
+
+
+def test_unfinished_last_question_is_dropped():
+    questions = [make_question(n) for n in range(6)]
+    error = cut_off(questions, tail='{"question": "оборван", "options": ["а", "б"], "correct_in')
+
+    items = quiz.finished_items(error.content)
+
+    assert [item["question"] for item in items] == [item["question"] for item in questions]
+
+
+def test_rescue_returns_none_below_minimum():
+    error = cut_off([make_question(n) for n in range(MIN_QUESTIONS - 1)])
+
+    assert quiz.rescue_questions(error.content, lecture_segments(), 200) is None
+
+
+def test_finished_items_without_questions_key_is_empty():
+    assert quiz.finished_items('{"title": "x"') == []
+
+
+async def test_provider_error_does_not_stop_after_first_attempt(user, monkeypatch):
+    failure = OpenAICompatibleUnavailable("/chat/completions: API ответил 503")
+    llm = ScriptedProvider(failure, VALID)
+    monkeypatch.setattr(quiz, "get_llm", lambda: llm)
+    lecture = await create_ready_lecture(user)
+
+    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.done
+
+    assert len(llm.requests) == 2
+
+
+async def test_quiz_fails_when_provider_keeps_failing(user, monkeypatch):
+    failure = OpenAICompatibleError("/chat/completions: API ответил 400")
+    llm = ScriptedProvider(failure, failure, failure)
+    monkeypatch.setattr(quiz, "get_llm", lambda: llm)
+    lecture = await create_ready_lecture(user)
+
+    assert await tasks.process_quiz({}, str(lecture.id)) == StepStatus.failed
+
+    assert len(llm.requests) == quiz.QUIZ_ATTEMPTS
+
+
+def test_long_transcript_request_fits_in_both_variants():
+    segments = [
+        TranscriptSegment(start=i * 10.0, end=i * 10.0 + 9, text="слово " * 40) for i in range(2000)
+    ]
+
+    assert len(transcript_excerpt(segments)) <= quiz.TRANSCRIPT_CHAR_LIMIT
+    half = quiz.TRANSCRIPT_CHAR_LIMIT // 2
+    assert len(transcript_excerpt(segments, half)) <= half
