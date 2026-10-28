@@ -141,7 +141,7 @@ async def test_backup_routes_are_404_for_regular_user(
 
 
 @needs_postgres_tools
-async def test_create_list_download_and_delete(client: AsyncClient, admin: User):
+async def test_create_list_download_and_delete(client: AsyncClient, admin: User, clean_state: Path):
     started = await client.post("/api/v1/admin/backups", headers=headers(admin))
     job = await wait_for_job(client, admin)
     listing = await client.get("/api/v1/admin/backups", headers=headers(admin))
@@ -154,6 +154,7 @@ async def test_create_list_download_and_delete(client: AsyncClient, admin: User)
     assert item["integrity"] == "ok"
     assert item["restorable"] is True
     assert item["dump_major"] == 16
+    assert (clean_state / item["name"]).stat().st_mode & 0o777 == 0o660
 
     download = await client.get(
         f"/api/v1/admin/backups/{item['name']}/download", headers=headers(admin)
