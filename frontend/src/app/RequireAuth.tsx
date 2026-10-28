@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from "react-router";
+import { redirectTarget } from "../pages/auth/redirect";
 import { useToken } from "./session";
 
 export function RequireAuth() {
@@ -11,5 +12,6 @@ export function RequireAuth() {
 
 export function GuestOnly() {
   const token = useToken();
-  return token === null ? <Outlet /> : <Navigate to="/" replace />;
+  const location = useLocation();
+  return token === null ? <Outlet /> : <Navigate to={redirectTarget(location.state)} replace />;
 }
