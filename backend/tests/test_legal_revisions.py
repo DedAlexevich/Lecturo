@@ -88,6 +88,9 @@ async def notices(users: dict[str, User]) -> list[LegalNotice]:
 def test_ai_transfer_revision_has_effective_date_and_changes():
     assert AI_TRANSFER.effective_date >= AI_TRANSFER.revision_date + timedelta(days=7)
     assert AI_TRANSFER.changes
+    privacy = read_document("privacy")
+    assert privacy.effective_date >= privacy.revision_date + timedelta(days=7)
+    assert privacy.changes
     terms = read_document("terms")
     assert terms.effective_date == terms.revision_date
     assert terms.changes is None
@@ -138,23 +141,25 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
             await legal_notices.announce_revisions(session, BEFORE)
             await legal_notices.send_email_notices(session)
 
-    rows = await notices(people)
+    rows = [row for row in await notices(people) if row.slug == "ai-transfer"]
     assert sorted((row.user_id, row.channel) for row in rows) == sorted(
         [
             (people["previous"].id, NoticeChannel.email),
             (people["previous"].id, NoticeChannel.telegram),
         ]
     )
-    assert all(row.slug == "ai-transfer" for row in rows)
     email = next(row for row in rows if row.channel == NoticeChannel.email)
     assert email.sent_at is not None
     telegram = next(row for row in rows if row.channel == NoticeChannel.telegram)
     assert telegram.sent_at is None
     assert telegram.link.endswith("/legal/ai-transfer")
-    ours = [mail for mail in mails if mail[0] == people["previous"].email]
+    ours = [
+        mail
+        for mail in mails
+        if mail[0] == people["previous"].email and AI_TRANSFER.title in mail[1]
+    ]
     assert len(ours) == 1
-    _, subject, body = ours[0]
-    assert AI_TRANSFER.title in subject
+    _, _, body = ours[0]
     assert AI_TRANSFER.changes in body
     assert AI_TRANSFER.effective_date.strftime("%d.%m.%Y") in body
     assert "/legal/ai-transfer" in body
@@ -164,15 +169,19 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
 
 async def test_notice_is_not_sent_after_effective_date(people, mails):
     async with SessionLocal() as session:
-        assert await legal_notices.announce_revisions(session, AFTER + timedelta(days=1)) == 0
-    assert await notices(people) == []
+        await legal_notices.announce_revisions(session, AFTER + timedelta(days=1))
+    assert [row for row in await notices(people) if row.slug == "ai-transfer"] == []
+
+
+async def ai_transfer_updates(client) -> list[dict]:
+    response = await client.get("/api/v1/legal/updates")
+    assert response.status_code == 200
+    return [doc for doc in response.json() if doc["slug"] == "ai-transfer"]
 
 
 async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
     monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER))
-    response = await client.get("/api/v1/legal/updates")
-    assert response.status_code == 200
-    assert response.json() == [
+    assert await ai_transfer_updates(client) == [
         {
             "slug": "ai-transfer",
             "title": AI_TRANSFER.title,
@@ -182,7 +191,7 @@ async def test_updates_show_revision_until_banner_ends(client, monkeypatch):
         }
     ]
     monkeypatch.setattr(legal_api, "today", lambda: AFTER + timedelta(days=NOTICE_DAYS_AFTER + 1))
-    assert (await client.get("/api/v1/legal/updates")).json() == []
+    assert await ai_transfer_updates(client) == []
 
 
 async def test_failed_email_is_logged_without_address(people, monkeypatch, caplog):
