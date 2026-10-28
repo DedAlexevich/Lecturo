@@ -13,6 +13,7 @@ from app.core.db import SessionLocal
 from app.models import (
     AdminAuditEntry,
     AuthIdentity,
+    HourPackage,
     Lecture,
     LectureStatus,
     Payment,
@@ -115,11 +116,85 @@ async def test_search_by_email_telegram_id_and_username(
         "created_at",
         "is_admin",
         "blocked",
+        "telegram_username",
+        "subscription_until",
+        "package_left_sec",
     }
+    assert found_name.json()[0]["telegram_username"] == username
     entries = await actions_of(admin)
     assert [entry.action for entry in entries] == ["users_searched"] * 4
     assert entries[1].target_label == str(telegram_id)
     assert entries[1].details == {"found": 1}
+
+
+async def test_search_by_name_and_username_part_with_plan_marks(
+    client: AsyncClient, make_user: MakeUser, admin: User
+):
+    marker = uuid.uuid4().hex[:8]
+    named = await make_user()
+    subscribed = await make_user(telegram_id=random.randint(10**9, 10**10))
+    now = datetime.now(UTC)
+    async with SessionLocal() as session:
+        stored = await session.get(User, named.id)
+        stored.display_name = f"Мария Иванова {marker}"
+        identity = await session.scalar(
+            select(AuthIdentity).where(AuthIdentity.user_id == subscribed.id)
+        )
+        identity.data = {"username": f"masha_{marker}_ivanova"}
+        session.add_all(
+            [
+                Subscription(
+                    user_id=subscribed.id,
+                    starts_at=now - timedelta(days=1),
+                    ends_at=now + timedelta(days=10),
+                ),
+                Subscription(
+                    user_id=subscribed.id,
+                    starts_at=now + timedelta(days=10),
+                    ends_at=now + timedelta(days=40),
+                ),
+                HourPackage(user_id=subscribed.id, seconds_total=7200, seconds_left=3600),
+            ]
+        )
+        await session.commit()
+
+    by_name = await client.get(
+        "/api/v1/admin/users", params={"q": f"иванова {marker}".upper()}, headers=headers(admin)
+    )
+    by_part = await client.get(
+        "/api/v1/admin/users", params={"q": marker.upper()}, headers=headers(admin)
+    )
+
+    assert [item["id"] for item in by_name.json()] == [str(named.id)]
+    found = {item["id"]: item for item in by_part.json()}
+    assert set(found) == {str(named.id), str(subscribed.id)}
+    assert found[str(named.id)]["subscription_until"] is None
+    assert found[str(named.id)]["package_left_sec"] == 0
+    until = datetime.fromisoformat(found[str(subscribed.id)]["subscription_until"])
+    assert abs(until - (now + timedelta(days=40))) < timedelta(seconds=1)
+    assert found[str(subscribed.id)]["package_left_sec"] == 3600
+
+
+async def test_make_admin_from_card(client: AsyncClient, make_user: MakeUser, admin: User):
+    target = await make_user()
+    blocked = await make_user()
+    async with SessionLocal() as session:
+        stored = await session.get(User, blocked.id)
+        stored.blocked_at = datetime.now(UTC)
+        await session.commit()
+
+    granted = await client.post(f"/api/v1/admin/users/{target.id}/admin", headers=headers(admin))
+    again = await client.post(f"/api/v1/admin/users/{target.id}/admin", headers=headers(admin))
+    refused = await client.post(f"/api/v1/admin/users/{blocked.id}/admin", headers=headers(admin))
+
+    assert granted.status_code == 200
+    assert granted.json()["is_admin"] is True
+    assert again.status_code == 409
+    assert refused.status_code == 409
+    entries = await actions_of(admin)
+    assert [(entry.action, entry.target_id) for entry in entries] == [
+        ("admin_granted", str(target.id))
+    ]
 
 
 async def test_card_shows_account_and_logs_access(
