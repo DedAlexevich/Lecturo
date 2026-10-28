@@ -58,8 +58,8 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 
 if [ ! -d "$app_dir/.git" ]; then
   git clone "$repo_url" "$app_dir"
+  chown -R deploy:deploy "$app_dir"
 fi
-chown -R deploy:deploy "$app_dir"
 
 if [ ! -f "$app_dir/.env" ]; then
   sed \
