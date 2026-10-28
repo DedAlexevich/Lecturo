@@ -52,7 +52,7 @@ from app.schemas.lecture import (
 from app.services import quota
 from app.services.account import lecture_files, remove_files
 from app.services.consents import require_ai_transfer_consent
-from app.services.rate_limit import is_rate_limited, reset_rate_limit
+from app.services.rate_limit import enforce_rate_limit, is_rate_limited, reset_rate_limit
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -250,16 +250,28 @@ async def add_existing_to_course(
 @router.post(
     "/link",
     status_code=status.HTTP_201_CREATED,
-    responses={status.HTTP_200_OK: {"model": LinkLectureOut}},
+    responses={
+        status.HTTP_200_OK: {"model": LinkLectureOut},
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много ссылок подряд"},
+    },
 )
 async def add_link(
     body: LinkIn, user: CurrentUser, session: SessionDep, response: Response
 ) -> LinkLectureOut:
     require_ai_transfer_consent(user)
+    settings = get_settings()
+    await enforce_rate_limit(
+        settings.redis_url,
+        f"rate:lecture-link:{user.id}",
+        settings.link_rate_limit,
+        settings.link_rate_window_seconds,
+        "Слишком много ссылок подряд, попробуйте через минуту",
+    )
     url = str(body.url)
+    if body.course_id is not None:
+        await get_own_course(session, body.course_id, user)
     if (same := await find_same_link(session, user.id, url)) is not None:
         if body.course_id is not None:
-            await get_own_course(session, body.course_id, user)
             await add_existing_to_course(session, body.course_id, same.id)
         existing = LinkLectureOut.model_validate(same).model_copy(update={"existing": True})
         await session.commit()
@@ -267,11 +279,15 @@ async def add_link(
         return existing
     await session.commit()
     try:
-        link = await inspect_link(url)
+        async with asyncio.timeout(settings.link_inspect_timeout_seconds):
+            link = await inspect_link(url)
     except LinkError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-    if body.course_id is not None:
-        await get_own_course(session, body.course_id, user)
+    except TimeoutError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Видео по ссылке не ответило вовремя, попробуйте позже",
+        ) from error
 
     lecture = Lecture(
         owner_id=user.id,

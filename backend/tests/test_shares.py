@@ -194,7 +194,9 @@ async def test_cannot_share_or_revoke_foreign(client, verified_user, auth_header
         await session.commit()
         other_id = other.id
     try:
-        other_headers = {"Authorization": f"Bearer {create_access_token(other_id)}"}
+        other_headers = {
+            "Authorization": f"Bearer {create_access_token(other.id, other.token_version)}"
+        }
         lecture_id = await create_lecture(verified_user.id)
         assert (
             await create_share(client, other_headers, lecture_id=str(lecture_id))

@@ -58,6 +58,9 @@ services:
     restart: always
 
   caddy:
+    environment:
+      WWW_SITE_ADDRESS: www.${SITE_ADDRESS}
+      API_DOCS: "off"
     ports: !override
       - "80:80"
       - "443:443"

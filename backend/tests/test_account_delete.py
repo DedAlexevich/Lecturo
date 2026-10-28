@@ -62,7 +62,7 @@ async def account() -> AsyncIterator[User]:
 
 
 def headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(user.id)}"}
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.token_version)}"}
 
 
 async def add_lecture(user: User, storage: Path) -> tuple[Lecture, list[Path]]:
@@ -144,6 +144,12 @@ async def test_wrong_password_keeps_everything(client, account, storage):
 
 async def test_requires_confirmation(client, account):
     response = await client.post(URL, json={}, headers=headers(account))
+    assert response.status_code == 422
+    assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
+
+
+async def test_too_long_password_rejected(client, account):
+    response = await client.post(URL, json={"password": "я" * 129}, headers=headers(account))
     assert response.status_code == 422
     assert (await client.get("/api/v1/me", headers=headers(account))).status_code == 200
 

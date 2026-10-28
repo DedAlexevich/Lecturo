@@ -18,7 +18,7 @@ class RegisterIn(Schema):
 
 class LoginIn(Schema):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class TokenOut(Schema):
@@ -147,7 +147,7 @@ class EmailIdentityIn(Schema):
 
 
 class AccountDeleteIn(Schema):
-    password: str | None = None
+    password: str | None = Field(default=None, max_length=128)
     telegram: TelegramLoginIn | None = None
     telegram_init_data: str | None = None
 

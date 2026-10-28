@@ -1,14 +1,16 @@
+import hashlib
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from sqlalchemy import delete, select, update
+from fastapi.exceptions import RequestValidationError
+from sqlalchemy import func, select, update
 
 from app.core.config import get_settings
 from app.core.db import SessionLocal
 from app.core.deps import CurrentUser, SessionDep
 from app.core.security import create_access_token
-from app.models import AuthToken, AuthTokenKind, User
+from app.models import AuthTokenKind, User
 from app.schemas.user import (
     EmailIn,
     LoginIn,
@@ -27,10 +29,21 @@ from app.schemas.user import (
 )
 from app.services import yandex_auth
 from app.services.auth import authenticate, hash_password, normalize_email, register_user
-from app.services.auth_tokens import consume_token, issue_token
+from app.services.auth_tokens import (
+    bump_token_version,
+    consume_token,
+    issue_token,
+    revoke_unused_tokens,
+)
 from app.services.consents import require_signup_consents
 from app.services.mail import send_password_reset_mail, send_verification_mail
-from app.services.rate_limit import enforce_mail_rate_limit, enforce_rate_limit
+from app.services.rate_limit import (
+    count_failure,
+    enforce_mail_rate_limit,
+    enforce_rate_limit,
+    ensure_below_limit,
+    reset_rate_limit,
+)
 from app.services.telegram_auth import (
     TELEGRAM_PROFILE_FIELDS,
     get_or_create_telegram_user,
@@ -48,17 +61,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterIn, session: SessionDep) -> TokenOut:
-    require_signup_consents(body.accept_terms, body.accept_personal_data)
-    user = await register_user(session, body.email, body.password, body.display_name)
-    return TokenOut(access_token=create_access_token(user.id))
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток регистрации"}
+    },
+)
+async def register(body: RegisterIn, session: SessionDep, request: Request) -> TokenOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    ip_key = f"rate:register:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.register_rate_limit)
+    try:
+        require_signup_consents(body.accept_terms, body.accept_personal_data)
+        user = await register_user(session, body.email, body.password, body.display_name)
+    except (HTTPException, RequestValidationError):
+        await count_failure(settings.redis_url, ip_key, settings.register_rate_window_seconds)
+        raise
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
-@router.post("/login")
-async def login(body: LoginIn, session: SessionDep) -> TokenOut:
-    user = await authenticate(session, body.email, body.password)
-    return TokenOut(access_token=create_access_token(user.id))
+@router.post(
+    "/login",
+    responses={status.HTTP_429_TOO_MANY_REQUESTS: {"description": "Слишком много попыток входа"}},
+)
+async def login(body: LoginIn, session: SessionDep, request: Request) -> TokenOut:
+    settings = get_settings()
+    ip = request.client.host if request.client else "unknown"
+    email_digest = hashlib.sha256(normalize_email(body.email).encode()).hexdigest()
+    email_key = f"rate:login:email:{email_digest}"
+    ip_key = f"rate:login:ip:{ip}"
+    await ensure_below_limit(settings.redis_url, ip_key, settings.login_ip_rate_limit)
+    await enforce_rate_limit(
+        settings.redis_url,
+        email_key,
+        settings.login_rate_limit,
+        settings.login_rate_window_seconds,
+    )
+    try:
+        user = await authenticate(session, body.email, body.password)
+    except HTTPException:
+        await count_failure(settings.redis_url, ip_key, settings.login_rate_window_seconds)
+        raise
+    await reset_rate_limit(settings.redis_url, email_key)
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
 @router.post(
@@ -73,7 +120,7 @@ async def login_telegram(body: TelegramSignupIn, session: SessionDep) -> TokenOu
     user = await get_or_create_telegram_user(
         session, body.id, profile, body.accept_terms, body.accept_personal_data
     )
-    return TokenOut(access_token=create_access_token(user.id))
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
 @router.get("/providers")
@@ -123,7 +170,7 @@ async def login_vk(body: VkCallbackIn, session: SessionDep, client: VkClientDep)
     user = await get_or_create_vk_user(
         session, vk_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
-    return TokenOut(access_token=create_access_token(user.id))
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
 @router.post(
@@ -169,7 +216,7 @@ async def login_yandex(
     user = await yandex_auth.get_or_create_yandex_user(
         session, yandex_id, profile, flow["accept_terms"], flow["accept_personal_data"]
     )
-    return TokenOut(access_token=create_access_token(user.id))
+    return TokenOut(access_token=create_access_token(user.id, user.token_version))
 
 
 @router.post(
@@ -188,7 +235,7 @@ async def request_email_verification(
     await enforce_mail_rate_limit(request, f"verify:{user.id}")
     if user.email_verified_at is not None:
         return
-    token = await issue_token(session, user.id, AuthTokenKind.verify_email)
+    token = await issue_token(session, user.id, user.email, AuthTokenKind.verify_email)
     background.add_task(send_verification_mail, user.email, token)
 
 
@@ -225,7 +272,7 @@ async def issue_and_send_password_reset(email: str) -> None:
             user = await session.scalar(select(User).where(User.email == email))
             if user is None or user.email is None:
                 return
-            token = await issue_token(session, user.id, AuthTokenKind.reset_password)
+            token = await issue_token(session, user.id, user.email, AuthTokenKind.reset_password)
         await send_password_reset_mail(user.email, token)
     except Exception:
         logger.exception("Не удалось выдать и отправить ссылку сброса пароля")
@@ -235,9 +282,13 @@ async def issue_and_send_password_reset(email: str) -> None:
 async def confirm_password_reset(body: PasswordResetIn, session: SessionDep) -> None:
     user_id = await consume_token(session, body.token, AuthTokenKind.reset_password)
     await session.execute(
-        update(User).where(User.id == user_id).values(password_hash=hash_password(body.password))
+        update(User)
+        .where(User.id == user_id)
+        .values(
+            password_hash=hash_password(body.password),
+            email_verified_at=func.coalesce(User.email_verified_at, func.now()),
+        )
     )
-    await session.execute(
-        delete(AuthToken).where(AuthToken.user_id == user_id, AuthToken.used_at.is_(None))
-    )
+    await revoke_unused_tokens(session, user_id)
+    await bump_token_version(session, user_id)
     await session.commit()

@@ -4,8 +4,9 @@ import { formatTimecode } from "../../lib/timecode";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
 import { Spinner } from "../../ui/Spinner";
-import { buildMatcher, highlight } from "./highlight";
-import { MIN_QUERY_LENGTH, useDebouncedValue, useSearch } from "./queries";
+import { HitSummary } from "./HitSummary";
+import { buildMatcher } from "./matcher";
+import { MIN_QUERY_LENGTH, searchErrorText, useDebouncedValue, useSearch } from "./queries";
 import "./search.css";
 
 export function momentsCount(count: number) {
@@ -64,7 +65,7 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
         {active && search.isPending && <p className="search__note">Ищем…</p>}
         {active && search.isError && !hits && (
           <div className="search__error" role="alert">
-            <p>Поиск не сработал. Проверьте соединение и попробуйте ещё раз.</p>
+            <p>{searchErrorText(search.error)}</p>
             <Button variant="secondary" size="sm" onClick={() => void search.refetch()}>
               Повторить
             </Button>
@@ -85,7 +86,7 @@ export function SearchPanel({ scope, children, onActiveChange }: SearchPanelProp
                     <span className="search__time">{formatTimecode(hit.start ?? 0)}</span>
                     <span className="search__content">
                       {inCourse && <span className="search__lecture">{hit.lecture_title}</span>}
-                      <span className="search__text">{highlight(hit.text, matcher)}</span>
+                      <HitSummary hit={hit} matcher={matcher} />
                     </span>
                   </Link>
                 </li>

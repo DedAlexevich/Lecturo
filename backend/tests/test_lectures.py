@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 
@@ -246,6 +247,57 @@ async def test_add_link_to_foreign_course(client, auth_headers, link_info):
 
     assert response.status_code == 404
     assert link_info["enqueued"] == []
+
+
+async def test_add_link_to_foreign_course_skips_inspect(client, auth_headers, monkeypatch):
+    inspected = []
+
+    async def fake_inspect(url):
+        inspected.append(url)
+
+    monkeypatch.setattr(lectures_api, "inspect_link", fake_inspect)
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2", "course_id": str(uuid.uuid4())},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 404
+    assert inspected == []
+
+
+async def test_add_link_rate_limit(client, auth_headers, link_info, monkeypatch):
+    monkeypatch.setattr(get_settings(), "link_rate_limit", 2)
+    link_info["info"] = LinkError("Видео длиннее 4 часов")
+
+    statuses = [
+        (
+            await client.post(
+                "/api/v1/lectures/link",
+                json={"url": "https://vkvideo.ru/video-1_2"},
+                headers=auth_headers,
+            )
+        ).status_code
+        for _ in range(3)
+    ]
+
+    assert statuses == [422, 422, 429]
+
+
+async def test_add_link_inspect_timeout(client, auth_headers, monkeypatch):
+    async def hanging_inspect(url):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(lectures_api, "inspect_link", hanging_inspect)
+    monkeypatch.setattr(get_settings(), "link_inspect_timeout_seconds", 0.05)
+    response = await client.post(
+        "/api/v1/lectures/link",
+        json={"url": "https://vkvideo.ru/video-1_2"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Видео по ссылке не ответило вовремя, попробуйте позже"
 
 
 async def test_add_link_publishes_failed_when_queue_is_down(

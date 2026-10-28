@@ -9,7 +9,6 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import Depends, HTTPException, status
-from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -17,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings, get_settings
+from app.core.redis import get_redis
 from app.models import AuthIdentity, AuthProvider, User
 from app.services.consents import record_signup_consents, require_telegram_signup_consents
 
@@ -126,13 +126,12 @@ async def start_flow(
         "accept_terms": accept_terms,
         "accept_personal_data": accept_personal_data,
     }
-    redis = Redis.from_url(settings.redis_url)
     try:
-        await redis.set(state_key(state), json.dumps(record), ex=STATE_TTL_SECONDS)
+        await get_redis(settings.redis_url).set(
+            state_key(state), json.dumps(record), ex=STATE_TTL_SECONDS
+        )
     except (OSError, RedisError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, VK_UNAVAILABLE) from None
-    finally:
-        await redis.aclose()
     query = urlencode(
         {
             "response_type": "code",
@@ -147,13 +146,11 @@ async def start_flow(
 
 
 async def take_flow(settings: Settings, state: str, nonce: str, user_id: uuid.UUID | None) -> dict:
-    redis = Redis.from_url(settings.redis_url)
+    redis = get_redis(settings.redis_url)
     try:
         raw = await redis.getdel(state_key(state))
     except (OSError, RedisError):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, VK_UNAVAILABLE) from None
-    finally:
-        await redis.aclose()
     if raw is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, INVALID_STATE)
     record = json.loads(raw)

@@ -15,7 +15,7 @@ cp .env.example .env
 Для боевого сервера нужно:
 
 - `SITE_ADDRESS` и `PUBLIC_URL` с вашим доменом;
-- уникальный `SECRET_KEY` и свой `POSTGRES_PASSWORD`;
+- уникальный `SECRET_KEY` не короче 32 символов (с ключом из `.env.example` сервер не запустится) и свой `POSTGRES_PASSWORD`;
 - настоящие провайдеры `STT_PROVIDER`, `LLM_PROVIDER`, `EMBEDDINGS_PROVIDER` и их ключи;
 - записи DNS для почты (см. [deploy.md](deploy.md#почта)), иначе письма подтверждения почты и сброса пароля будут попадать в спам;
 - Telegram-бот, если нужен вход через Telegram и бот;
@@ -31,7 +31,7 @@ cp .env.example .env
 | `HTTP_PORT` | Порт хоста для HTTP | нет | `80` | `docker-compose.yml` (caddy) |
 | `HTTPS_PORT` | Порт хоста для HTTPS | нет | `443` | `docker-compose.yml` (caddy) |
 | `PUBLIC_URL` | Публичный адрес сайта, например `https://lecturo.example`. Из него строятся ссылки в письмах, ссылки на шаринг и адрес возврата после оплаты. Бот показывает кнопку «Открыть Lecturo» только если адрес начинается с `https://` | на сервере | `http://localhost` | `backend/app/services/mail.py`, `api/billing.py`, `api/shares.py`, `bot/app/config.py` |
-| `SECRET_KEY` | Секрет для подписи токенов входа (JWT). Длинная случайная строка, например из `openssl rand -hex 32`. После смены все пользователи будут разлогинены | на сервере | `dev-secret-change-me-before-production` | `backend/app/core/security.py` |
+| `SECRET_KEY` | Секрет для подписи токенов входа (JWT), ссылок на экспорт и видео. Длинная случайная строка, например из `openssl rand -hex 32`. Если `PUBLIC_URL` не указывает на localhost или начинается с `https://`, ключ должен быть не короче 32 символов и отличаться от значения по умолчанию и из `.env.example`, иначе `api` и `worker` не стартуют. После смены все пользователи будут разлогинены | на сервере | `dev-secret-change-me-before-production` | `backend/app/core/security.py` |
 | `POSTGRES_PASSWORD` | Пароль пользователя `lecturo` в Postgres. Из него же собираются `DATABASE_URL` для `api`, `worker` и `bot` | на сервере | `lecturo` | `docker-compose.yml` (db, api, worker, bot) |
 | `DB_PORT` | Порт Postgres на `127.0.0.1` хоста | нет | `5432` | `docker-compose.yml` (db) |
 | `REDIS_PORT` | Порт Redis на `127.0.0.1` хоста | нет | `6379` | `docker-compose.yml` (redis) |

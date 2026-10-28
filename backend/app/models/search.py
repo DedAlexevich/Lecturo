@@ -40,6 +40,7 @@ class SearchChunk(Base):
     end: Mapped[float | None] = mapped_column(Float)
     section: Mapped[int | None] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
     tsv: Mapped[str] = mapped_column(
         TSVECTOR, Computed("to_tsvector('russian', text)", persisted=True)
     )

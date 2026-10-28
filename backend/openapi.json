@@ -58,6 +58,9 @@
               }
             }
           },
+          "429": {
+            "description": "Слишком много попыток регистрации"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -98,6 +101,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много попыток входа"
           },
           "422": {
             "description": "Validation Error",
@@ -604,8 +610,15 @@
           "required": true
         },
         "responses": {
-          "204": {
-            "description": "Successful Response"
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -727,6 +740,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много попыток привязки"
           },
           "503": {
             "description": "Вход через VK не настроен"
@@ -968,6 +984,14 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "headers": {
+              "X-Access-Token": {
+                "description": "Новый токен доступа, старые токены больше не действуют",
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -1510,6 +1534,9 @@
               }
             }
           },
+          "429": {
+            "description": "Памятка собиралась недавно"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1555,6 +1582,114 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courses/{course_id}/exam-sheet/exports/pdf/link": {
+      "post": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Exam Sheet Export Link",
+        "operationId": "exam_sheet_export_link_api_v1_courses__course_id__exam_sheet_exports_pdf_link_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportLinkOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/courses/{course_id}/exam-sheet/export.pdf": {
+      "get": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Export Exam Sheet Pdf",
+        "operationId": "export_exam_sheet_pdf_api_v1_courses__course_id__exam_sheet_export_pdf_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "course_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "429": {
+            "description": "Слишком много выгрузок PDF"
           },
           "422": {
             "description": "Validation Error",
@@ -1917,6 +2052,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много ссылок подряд"
           },
           "422": {
             "description": "Validation Error",
@@ -2450,6 +2588,9 @@
           "200": {
             "description": "Successful Response"
           },
+          "429": {
+            "description": "Слишком много выгрузок PDF"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2536,6 +2677,9 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Слишком много поисковых запросов"
           },
           "422": {
             "description": "Validation Error",
@@ -3523,7 +3667,8 @@
           "password": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 128
               },
               {
                 "type": "null"
@@ -3631,6 +3776,8 @@
         "properties": {
           "reason": {
             "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
             "title": "Reason"
           },
           "lecture_id": {
@@ -3777,6 +3924,7 @@
           },
           "description": {
             "type": "string",
+            "maxLength": 2000,
             "title": "Description",
             "default": ""
           }
@@ -3854,7 +4002,8 @@
           "description": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 2000
               },
               {
                 "type": "null"
@@ -4658,11 +4807,42 @@
         ],
         "title": "LinkLectureOut"
       },
+      "LocalChapterIn": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "title": "End"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "title",
+          "summary"
+        ],
+        "title": "LocalChapterIn"
+      },
       "LocalResultIn": {
         "properties": {
           "title": {
             "type": "string",
             "maxLength": 300,
+            "minLength": 1,
             "title": "Title"
           },
           "duration_sec": {
@@ -4673,12 +4853,9 @@
           },
           "language": {
             "type": "string",
+            "maxLength": 8,
             "title": "Language",
             "default": "ru"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
           },
           "segments": {
             "items": {
@@ -4689,7 +4866,7 @@
           },
           "chapters": {
             "items": {
-              "$ref": "#/components/schemas/ChapterOut"
+              "$ref": "#/components/schemas/LocalChapterIn"
             },
             "type": "array",
             "title": "Chapters",
@@ -4698,7 +4875,8 @@
           "summary_md": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 100000
               },
               {
                 "type": "null"
@@ -4711,7 +4889,6 @@
         "required": [
           "title",
           "duration_sec",
-          "model",
           "segments"
         ],
         "title": "LocalResultIn"
@@ -4725,6 +4902,7 @@
           },
           "password": {
             "type": "string",
+            "maxLength": 128,
             "title": "Password"
           }
         },
@@ -5359,6 +5537,28 @@
             "type": "string",
             "title": "Text"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "chapter_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chapter Title"
+          },
           "score": {
             "type": "number",
             "title": "Score"
@@ -5373,6 +5573,8 @@
           "end",
           "section",
           "text",
+          "description",
+          "chapter_title",
           "score"
         ],
         "title": "SearchHit"

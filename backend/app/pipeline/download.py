@@ -15,7 +15,7 @@ from yt_dlp.utils import YoutubeDLError
 
 from app.core.config import get_settings
 from app.models import Lecture
-from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC
+from app.pipeline.media import MAX_DURATION_SEC, PROBE_TIMEOUT_SEC, make_mono
 from app.pipeline.runner import Report
 
 logger = logging.getLogger(__name__)
@@ -223,9 +223,11 @@ async def probe_duration(url: str) -> float | None:
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), PROBE_TIMEOUT_SEC)
     except TimeoutError:
-        process.kill()
-        await process.wait()
         return None
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
     try:
         return float(stdout.decode().strip())
     except ValueError:
@@ -282,6 +284,10 @@ def fetch_audio(url: str, target: Path, progress: dict[str, float]) -> Path:
     return audio_path
 
 
+async def keep_progress(progress: float) -> None:
+    pass
+
+
 async def download(session: AsyncSession, lecture: Lecture, report: Report) -> None:
     url = lecture.source_url or ""
     if is_yandex_disk(url):
@@ -296,4 +302,6 @@ async def download(session: AsyncSession, lecture: Lecture, report: Report) -> N
     while not fetching.done():
         await asyncio.wait({fetching}, timeout=PROGRESS_INTERVAL_SEC)
         await report(progress["fraction"])
-    lecture.audio_path = str(fetching.result())
+    audio_path = fetching.result()
+    await make_mono(audio_path, lecture.duration_sec, keep_progress)
+    lecture.audio_path = str(audio_path)
