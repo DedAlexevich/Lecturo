@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     backup_dir: Path = Path("/backups")
     backup_max_upload_mb: int = 2048
+    zoomer_max_upload_mb: int = 30
+    zoomer_max_duration_sec: int = 180
     restore_idle_wait_seconds: int = 300
 
     stt_provider: str = "stub"
