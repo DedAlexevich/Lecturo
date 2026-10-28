@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from app.models import EMBEDDING_DIM
-from app.providers.base import RecognitionProgress, Segment
+from app.providers.base import OperationStore, RecognitionProgress, Segment
 
 STUB_PHRASES = [
     "Сегодня разберём основные понятия курса.",
@@ -25,6 +25,7 @@ class StubSpeechToText:
         *,
         duration: float | None = None,
         on_progress: RecognitionProgress | None = None,
+        operations: OperationStore | None = None,
     ) -> list[Segment]:
         return [
             Segment(start=i * 10.0, end=i * 10.0 + 9.5, text=phrase)

@@ -18,7 +18,7 @@ import httpx
 from app.core.config import Settings
 from app.models import EMBEDDING_DIM
 from app.pipeline.estimate import is_chunked, recognition_seconds
-from app.providers.base import RecognitionProgress, Segment
+from app.providers.base import OperationStore, RecognitionProgress, Segment
 from app.providers.chunks import ChunkingError, Part, merge_segments, split_audio
 from app.providers.openai_compat import (
     OpenAICompatibleClient,
@@ -59,6 +59,14 @@ class YandexSpeechKitError(RuntimeError):
 
 
 class YandexNetworkError(YandexSpeechKitError):
+    pass
+
+
+class OperationFailed(YandexSpeechKitError):
+    pass
+
+
+class OperationNotFound(YandexSpeechKitError):
     pass
 
 
@@ -123,6 +131,7 @@ class YandexSpeechToText:
         *,
         duration: float | None = None,
         on_progress: RecognitionProgress | None = None,
+        operations: OperationStore | None = None,
     ) -> list[Segment]:
         suffix = audio_path.suffix.lower()
         encoding = AUDIO_ENCODINGS.get(suffix)
@@ -133,13 +142,20 @@ class YandexSpeechToText:
             raise ValueError(f"Язык не поддерживается SpeechKit: {language}")
         if is_chunked(duration, self.settings):
             segments = await self._transcribe_parts(
-                audio_path, language_code, duration, on_progress
+                audio_path, language_code, duration, on_progress, operations
             )
             if segments is not None:
                 return segments
         async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
             return await self._recognize_file(
-                client, audio_path, encoding, language_code, duration, on_progress
+                client,
+                audio_path,
+                encoding,
+                language_code,
+                duration,
+                on_progress,
+                operations,
+                "full",
             )
 
     async def _recognize_file(
@@ -150,18 +166,73 @@ class YandexSpeechToText:
         language_code: str,
         duration: float | None,
         on_progress: RecognitionProgress | None,
+        operations: OperationStore | None,
+        name: str,
     ) -> list[Segment]:
-        key = f"stt/{uuid.uuid4().hex}{audio_path.suffix.lower()}"
+        state = await operations.load(name) if operations else None
+        if state and state.get("operation_id"):
+            await self._notify(on_progress, "recognize", UPLOAD_SHARE)
+            try:
+                response = await self._finish(
+                    client, state, duration, on_progress, operations, name
+                )
+            except OperationNotFound:
+                logger.warning(
+                    "Операция распознавания %s не найдена, запускаю заново", state["operation_id"]
+                )
+            else:
+                await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
+                return parse_recognition(response)
+        key = state["object_key"] if state else f"stt/{uuid.uuid4().hex}{audio_path.suffix.lower()}"
+        if operations:
+            await operations.save(name, {"object_key": key})
         await self._notify(on_progress, "upload", 0.0)
-        await self._upload(client, audio_path, key)
         try:
+            await self._upload(client, audio_path, key)
             await self._notify(on_progress, "recognize", UPLOAD_SHARE)
             operation_id = await self._start(client, key, encoding, language_code)
-            response = await self._wait(client, operation_id, duration, on_progress)
-        finally:
-            await asyncio.shield(self._delete(client, key))
+        except Exception:
+            await self._forget(client, key, operations, name)
+            raise
+        state = {"object_key": key, "operation_id": operation_id}
+        if operations:
+            await operations.save(name, state)
+        response = await self._finish(client, state, duration, on_progress, operations, name)
         await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
         return parse_recognition(response)
+
+    async def _finish(
+        self,
+        client: httpx.AsyncClient,
+        state: dict[str, str],
+        duration: float | None,
+        on_progress: RecognitionProgress | None,
+        operations: OperationStore | None,
+        name: str,
+    ) -> dict[str, Any]:
+        key = state["object_key"]
+        try:
+            response = await self._wait(client, state["operation_id"], duration, on_progress)
+        except OperationFailed:
+            await self._forget(client, key, operations, name)
+            raise
+        except BaseException:
+            if operations is None:
+                await asyncio.shield(self._delete(client, key))
+            raise
+        await self._forget(client, key, operations, name)
+        return response
+
+    async def _forget(
+        self,
+        client: httpx.AsyncClient,
+        key: str,
+        operations: OperationStore | None,
+        name: str,
+    ) -> None:
+        await asyncio.shield(self._delete(client, key))
+        if operations:
+            await operations.drop(name)
 
     async def _transcribe_parts(
         self,
@@ -169,6 +240,7 @@ class YandexSpeechToText:
         language_code: str,
         duration: float,
         on_progress: RecognitionProgress | None,
+        operations: OperationStore | None,
     ) -> list[Segment] | None:
         tmp_dir = self.settings.storage_dir / "tmp"
         await asyncio.to_thread(tmp_dir.mkdir, parents=True, exist_ok=True)
@@ -182,7 +254,7 @@ class YandexSpeechToText:
             except ChunkingError as error:
                 logger.warning("Нарезка аудио не удалась, распознаю целиком: %s", error)
                 return None
-            results = await self._recognize_parts(parts, language_code, on_progress)
+            results = await self._recognize_parts(parts, language_code, on_progress, operations)
         finally:
             await asyncio.to_thread(shutil.rmtree, workdir, ignore_errors=True)
         await self._notify(on_progress, "fetch", RECOGNIZE_LIMIT)
@@ -193,6 +265,7 @@ class YandexSpeechToText:
         parts: list[tuple[Part, Path]],
         language_code: str,
         on_progress: RecognitionProgress | None,
+        operations: OperationStore | None,
     ) -> list[tuple[Part, list[Segment]]]:
         fractions = [0.0] * len(parts)
         gate = asyncio.Semaphore(max(1, self.settings.stt_parallel_parts))
@@ -216,7 +289,14 @@ class YandexSpeechToText:
 
             async with gate:
                 segments = await self._recognize_file(
-                    client, file, "OGG_OPUS", language_code, part.duration, report
+                    client,
+                    file,
+                    "OGG_OPUS",
+                    language_code,
+                    part.duration,
+                    report,
+                    operations,
+                    f"part-{part.index}:{part.start:.3f}-{part.end:.3f}",
                 )
             return part, segments
 
@@ -275,6 +355,7 @@ class YandexSpeechToText:
         response = await self._send(
             "запуск распознавания",
             lambda: client.post(RECOGNIZE_URL, json=body, headers=self._api_headers()),
+            retry_unsent_only=True,
         )
         self._raise_for_status(response, "запуск распознавания")
         return response.json()["id"]
@@ -295,7 +376,7 @@ class YandexSpeechToText:
             if operation.get("done"):
                 if "error" in operation:
                     error = operation["error"]
-                    raise YandexSpeechKitError(
+                    raise OperationFailed(
                         f"Распознавание завершилось ошибкой: {error.get('message', error)}"
                     )
                 return operation.get("response", {})
@@ -320,11 +401,17 @@ class YandexSpeechToText:
             return {}
         if response.status_code == 429 or response.is_server_error:
             return {}
+        if response.status_code == 404:
+            raise OperationNotFound(f"Операция распознавания не найдена: {url}")
         self._raise_for_status(response, "проверка операции распознавания")
         return response.json()
 
     async def _send(
-        self, action: str, send: Callable[[], Awaitable[httpx.Response]]
+        self,
+        action: str,
+        send: Callable[[], Awaitable[httpx.Response]],
+        *,
+        retry_unsent_only: bool = False,
     ) -> httpx.Response:
         return await request_with_retry(
             send,
@@ -332,6 +419,7 @@ class YandexSpeechToText:
             provider="Yandex SpeechKit",
             action=action,
             error_cls=YandexNetworkError,
+            retry_unsent_only=retry_unsent_only,
         )
 
     def _api_headers(self) -> dict[str, str]:

@@ -14,6 +14,14 @@ class Segment:
 RecognitionProgress = Callable[[str, float], Awaitable[None]]
 
 
+class OperationStore(Protocol):
+    async def load(self, name: str) -> dict[str, str] | None: ...
+
+    async def save(self, name: str, state: dict[str, str]) -> None: ...
+
+    async def drop(self, name: str) -> None: ...
+
+
 class SpeechToText(Protocol):
     async def transcribe(
         self,
@@ -22,6 +30,7 @@ class SpeechToText(Protocol):
         *,
         duration: float | None = None,
         on_progress: RecognitionProgress | None = None,
+        operations: OperationStore | None = None,
     ) -> list[Segment]: ...
 
 

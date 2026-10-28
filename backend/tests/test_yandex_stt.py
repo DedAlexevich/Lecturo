@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 
@@ -233,3 +234,127 @@ async def test_transcribe_rejects_unknown_language(tmp_path: Path):
     with pytest.raises(ValueError, match="xx"):
         await provider.transcribe(audio, "xx")
     assert requests == []
+
+
+class MemoryOperations:
+    def __init__(self) -> None:
+        self.states: dict[str, dict[str, str]] = {}
+        self.saved: list[tuple[str, dict[str, str]]] = []
+
+    async def load(self, name: str) -> dict[str, str] | None:
+        return self.states.get(name)
+
+    async def save(self, name: str, state: dict[str, str]) -> None:
+        self.states[name] = state
+        self.saved.append((name, state))
+
+    async def drop(self, name: str) -> None:
+        self.states.pop(name, None)
+
+
+class SpeechKit:
+    def __init__(self) -> None:
+        self.requests: list[httpx.Request] = []
+        self.polled = asyncio.Event()
+        self.finished = False
+        self.missing: set[str] = set()
+        self.started = 0
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            self.started += 1
+            return httpx.Response(200, json={"id": f"op{self.started}", "done": False})
+        operation_id = request.url.path.rsplit("/", 1)[1]
+        if operation_id in self.missing:
+            return httpx.Response(404, json={"code": 5, "message": "not found"})
+        self.polled.set()
+        if self.finished:
+            return httpx.Response(200, json=saved_operation())
+        return httpx.Response(200, json={"id": operation_id, "done": False})
+
+    def methods(self) -> list[str]:
+        return [
+            request.method
+            if request.url.host == "storage.yandexcloud.net"
+            else ("start" if str(request.url) == RECOGNIZE_URL else "poll")
+            for request in self.requests
+        ]
+
+
+async def test_restart_polls_saved_operation_instead_of_starting_new(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    speechkit = SpeechKit()
+    operations = MemoryOperations()
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0.01, transport=httpx.MockTransport(speechkit.handler)
+    )
+
+    running = asyncio.create_task(provider.transcribe(audio, operations=operations))
+    await asyncio.wait_for(speechkit.polled.wait(), 5)
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    assert "DELETE" not in speechkit.methods()
+    [state] = operations.states.values()
+    assert state["operation_id"] == "op1"
+    assert state["object_key"].startswith("stt/")
+
+    speechkit.requests.clear()
+    speechkit.finished = True
+    segments = await provider.transcribe(audio, operations=operations)
+
+    assert len(segments) == 3
+    assert speechkit.started == 1
+    assert speechkit.methods() == ["poll", "DELETE"]
+    assert speechkit.requests[0].url.path == "/operations/op1"
+    assert speechkit.requests[1].url.path == f"/lecturo-audio/{state['object_key']}"
+    assert operations.states == {}
+
+
+async def test_missing_saved_operation_is_started_again(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    speechkit = SpeechKit()
+    speechkit.finished = True
+    speechkit.missing = {"lost"}
+    operations = MemoryOperations()
+    operations.states["full"] = {"object_key": "stt/old.opus", "operation_id": "lost"}
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(speechkit.handler)
+    )
+
+    segments = await provider.transcribe(audio, operations=operations)
+
+    assert len(segments) == 3
+    assert speechkit.methods() == ["poll", "PUT", "start", "poll", "DELETE"]
+    assert speechkit.requests[1].url.path == "/lecturo-audio/stt/old.opus"
+    assert operations.states == {}
+
+
+async def test_failed_operation_forgets_saved_state(tmp_path: Path):
+    audio = tmp_path / "lecture.opus"
+    audio.write_bytes(b"OggS")
+    operations = MemoryOperations()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "storage.yandexcloud.net":
+            return httpx.Response(200)
+        if str(request.url) == RECOGNIZE_URL:
+            return httpx.Response(200, json={"id": "op7", "done": False})
+        return httpx.Response(
+            200, json={"id": "op7", "done": True, "error": {"code": 3, "message": "bad audio"}}
+        )
+
+    provider = YandexSpeechToText(
+        yandex_settings(), poll_interval=0, transport=httpx.MockTransport(handler)
+    )
+    with pytest.raises(YandexSpeechKitError, match="bad audio"):
+        await provider.transcribe(audio, operations=operations)
+
+    assert operations.states == {}
+    assert [name for name, _ in operations.saved] == ["full", "full"]
