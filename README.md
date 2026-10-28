@@ -48,7 +48,7 @@ Lecturo помогает учиться по записям лекций. Вы �
 ## Как это выглядит
 
 <div align="center">
-<a href="https://lecturo.ru"><img src="docs/assets/readme/demo.png" alt="Демо Lecturo" width="800"></a>
+<a href="https://lecturo.ru"><img src="docs/assets/readme/demo.gif" alt="Демо Lecturo" width="800"></a>
 </div>
 
 <table>
@@ -57,12 +57,12 @@ Lecturo помогает учиться по записям лекций. Вы �
 <td width="50%"><img src="docs/assets/readme/summary.png" alt="Конспект с формулами"><p align="center">Конспект с формулами</p></td>
 </tr>
 <tr>
-<td><img src="docs/assets/readme/quiz.png" alt="Квиз"><p align="center">Квиз</p></td>
-<td><img src="docs/assets/readme/search.png" alt="Поиск по курсу"><p align="center">Поиск по курсу</p></td>
+<td width="50%"><img src="docs/assets/readme/quiz-question.png" alt="Квиз"><p align="center">Квиз</p></td>
+<td width="50%"><img src="docs/assets/readme/quiz.png" alt="Разбор ответа и переход к моменту лекции"><p align="center">Разбор ответа и переход к моменту лекции</p></td>
 </tr>
 <tr>
-<td><img src="docs/assets/readme/mini-app.png" alt="Telegram Mini App"><p align="center">Telegram Mini App</p></td>
-<td><img src="docs/assets/readme/local.png" alt="Локальный режим"><p align="center">Локальный режим</p></td>
+<td width="50%"><img src="docs/assets/readme/chapters.png" alt="Главы с таймкодами"><p align="center">Главы с таймкодами</p></td>
+<td width="50%"><img src="docs/assets/readme/local.png" alt="Локальный режим"><p align="center">Локальный режим</p></td>
 </tr>
 </table>
 
