@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from app.api import (
     admin,
+    admin_backups,
+    admin_logs,
     auth,
     billing,
     courses,
@@ -13,6 +15,7 @@ from app.api import (
     lectures,
     legal,
     local_results,
+    maintenance,
     me,
     public_copy,
     public_exports,
@@ -44,5 +47,8 @@ for module in (
     legal,
     local_results,
     admin,
+    admin_logs,
+    admin_backups,
+    maintenance,
 ):
     api_router.include_router(module.router)
