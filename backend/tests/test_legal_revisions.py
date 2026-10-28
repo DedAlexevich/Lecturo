@@ -18,6 +18,11 @@ AFTER = AI_TRANSFER.effective_date
 PREVIOUS = AI_TRANSFER.revision_date - timedelta(days=1)
 
 
+@pytest.fixture(autouse=True)
+def only_ai_transfer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(legal_notices, "announced_documents", lambda: [AI_TRANSFER])
+
+
 @pytest.fixture
 async def people() -> AsyncIterator[dict[str, User]]:
     now = datetime.now(UTC)
@@ -144,25 +149,23 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
             await legal_notices.announce_revisions(session, BEFORE)
             await legal_notices.send_email_notices(session)
 
-    rows = [row for row in await notices(people) if row.slug == "ai-transfer"]
+    rows = await notices(people)
     assert sorted((row.user_id, row.channel) for row in rows) == sorted(
         [
             (people["previous"].id, NoticeChannel.email),
             (people["previous"].id, NoticeChannel.telegram),
         ]
     )
+    assert all(row.slug == "ai-transfer" for row in rows)
     email = next(row for row in rows if row.channel == NoticeChannel.email)
     assert email.sent_at is not None
     telegram = next(row for row in rows if row.channel == NoticeChannel.telegram)
     assert telegram.sent_at is None
     assert telegram.link.endswith("/legal/ai-transfer")
-    ours = [
-        mail
-        for mail in mails
-        if mail[0] == people["previous"].email and AI_TRANSFER.title in mail[1]
-    ]
+    ours = [mail for mail in mails if mail[0] == people["previous"].email]
     assert len(ours) == 1
-    _, _, body = ours[0]
+    _, subject, body = ours[0]
+    assert AI_TRANSFER.title in subject
     assert AI_TRANSFER.changes in body
     assert AI_TRANSFER.effective_date.strftime("%d.%m.%Y") in body
     assert "/legal/ai-transfer" in body
@@ -172,8 +175,8 @@ async def test_notice_is_sent_once_by_mail_and_bot(people, mails):
 
 async def test_notice_is_not_sent_after_effective_date(people, mails):
     async with SessionLocal() as session:
-        await legal_notices.announce_revisions(session, AFTER + timedelta(days=1))
-    assert [row for row in await notices(people) if row.slug == "ai-transfer"] == []
+        assert await legal_notices.announce_revisions(session, AFTER + timedelta(days=1)) == 0
+    assert await notices(people) == []
 
 
 async def ai_transfer_updates(client) -> list[dict]:
