@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     register_rate_limit: int = 10
     register_rate_window_seconds: int = 3600
 
+    initial_admins: str = ""
+
     @property
     def is_local(self) -> bool:
         parts = urlsplit(self.public_url)
