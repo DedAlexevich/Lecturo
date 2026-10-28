@@ -71,12 +71,15 @@ async def test_yandex_start_recovers_after_rate_limit(
     assert "api-key" not in caplog.text
 
 
-@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize(
+    "reply",
+    [httpx.Response(429), httpx.Response(503), httpx.Response(500, json=INTERNAL)],
+)
 async def test_yandex_start_retries_unprocessed_statuses(
-    tmp_path: Path, retry_pauses: list[float], status: int
+    tmp_path: Path, retry_pauses: list[float], reply: httpx.Response
 ):
     calls: dict = {}
-    provider = yandex_provider([httpx.Response(status), started()], calls)
+    provider = yandex_provider([reply, started()], calls)
     await provider.transcribe(make_audio(tmp_path))
     assert len(calls["start"]) == 2
 
@@ -84,7 +87,7 @@ async def test_yandex_start_retries_unprocessed_statuses(
 @pytest.mark.parametrize(
     "reply",
     [
-        httpx.Response(500, json=INTERNAL),
+        httpx.Response(500),
         httpx.Response(502),
         httpx.Response(504),
         httpx.Response(400, json=INTERNAL),
