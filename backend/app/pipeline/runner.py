@@ -7,6 +7,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models import (
     Lecture,
     LectureStatus,
@@ -17,6 +18,7 @@ from app.models import (
     StepStatus,
 )
 from app.pipeline.events import add_notification, publish_status
+from app.providers.openai_compat import OpenAICompatibleUnavailable
 from app.services.quota import QuotaExceeded
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,25 @@ class StepFailed(Exception):
     pass
 
 
+class StepDeferred(Exception):
+    def __init__(self, name: StepName, delay: int) -> None:
+        super().__init__(name)
+        self.delay = delay
+
+
 class UserFacingError(Exception):
     pass
+
+
+TRANSIENT_ERRORS = (OpenAICompatibleUnavailable,)
+
+
+def deferral_delay(ctx: dict) -> int | None:
+    delays = get_settings().llm_retry_defer_seconds
+    job_try = ctx.get("job_try", 1)
+    if job_try > len(delays):
+        return None
+    return delays[job_try - 1]
 
 
 PROCESSING_FAILED = "Не удалось обработать лекцию, попробуйте ещё раз"
@@ -77,6 +96,7 @@ async def run_step(
     *,
     fails_lecture: bool = True,
     notify: NotificationKind | None = None,
+    defer_delay: int | None = None,
 ) -> None:
     step = await get_step(session, lecture.id, name)
     if step.status == StepStatus.done:
@@ -113,6 +133,20 @@ async def run_step(
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status, step.error)
             raise
+        if defer_delay is not None and isinstance(error, TRANSIENT_ERRORS):
+            logger.warning(
+                "Шаг %s лекции %s отложен на %s с из-за временной ошибки провайдера: %s",
+                name.value,
+                lecture.id,
+                defer_delay,
+                error,
+            )
+            step.status = StepStatus.pending
+            step.progress = 0.0
+            step.stage = None
+            step.started_at = None
+            await session.commit()
+            raise StepDeferred(name, defer_delay) from error
         logger.error("Шаг %s лекции %s завершился ошибкой", name.value, lecture.id, exc_info=error)
         step.status = StepStatus.failed
         step.error = step_error(name, error)
