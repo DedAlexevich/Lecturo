@@ -193,19 +193,21 @@ Gmail:
 |---|---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather | для бота и входа через Telegram | пусто | `bot/app/config.py`, `backend/app/services/telegram_auth.py` |
 | `TELEGRAM_BOT_USERNAME` | Имя бота без `@`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_USERNAME` | для кнопки входа | пусто | `backend/app/core/config.py` |
-| `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для кнопки Login Widget на странице входа. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для кнопки входа | не задана | `frontend/src/pages/auth/TelegramButton.tsx` |
+| `TELEGRAM_BOT_ID` | Числовой id бота: часть токена до двоеточия, например `123456789` для токена `123456789:AA...`. Передаётся в сборку фронтенда как `VITE_TELEGRAM_BOT_ID`. Без него кнопки входа и привязки через Telegram на сайте не показываются, в Mini App вход работает и так | для кнопки входа | пусто | `docker-compose.yml` |
+| `VITE_TELEGRAM_BOT_USERNAME` | Имя бота без `@` для ссылок на бота. Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_USERNAME` | для ссылок на бота | не задана | `frontend/src/telegram/bot.ts` |
+| `VITE_TELEGRAM_BOT_ID` | Числовой id бота для кнопки «Войти через Telegram» (`Telegram.Login.auth`). Читается при сборке фронтенда; в Docker-сборке берётся из `TELEGRAM_BOT_ID` | для кнопки входа | не задана | `frontend/src/telegram/bot.ts` |
 | `TELEGRAM_API_IP` | IP, на который в проде указывает `api.telegram.org` для бота и алертов. Нужен, потому что с сервера основной адрес Telegram недоступен. Если бот перестал отвечать с таймаутами, проверьте адрес: `curl --resolve api.telegram.org:443:<ip> https://api.telegram.org/` | только на сервере | `149.154.167.220` | `infra/compose.prod.yml`, `infra/notify.sh` |
 | `YOUTUBE_PROXY` | Прокси для скачивания аудио с YouTube, например `socks5h://ytproxy:<пароль>@<ip>:1080`. С сервера в РФ YouTube недоступен, поэтому ссылки YouTube качаются через зарубежный сервер, остальные источники идут напрямую. Если пусто, YouTube качается напрямую. Как поднять прокси, описано в [deploy.md](deploy.md#прокси-для-youtube) | только на сервере | пусто | `backend/app/pipeline/download.py` |
 | `ALERT_TELEGRAM_CHAT_ID` | Числовой id чата владельца для запасной отправки алертов: туда сообщение уходит, если бот не запущен, база недоступна или нет администраторов с привязанным Telegram. Подробнее в [deploy.md](deploy.md#алерты-администраторам) | для алертов на сервере | пусто | `infra/notify.sh`, `infra/alert.sh` |
 | `ADMIN_ALERT_INTERVAL_MINUTES` | Не чаще какого интервала бот присылает алерты одного типа, минуты. Повторы за это время собираются в одно сообщение | нет | `15` | `bot/app/config.py` |
 
-Если имя бота не задано при сборке, кнопка входа через Telegram не показывается. После изменения `TELEGRAM_BOT_USERNAME` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
+Если id бота не задан при сборке, кнопка входа через Telegram на сайте не показывается. После изменения `TELEGRAM_BOT_USERNAME` или `TELEGRAM_BOT_ID` фронтенд нужно пересобрать: `docker compose up -d --build frontend caddy`.
 
 Получение токена и настройка бота:
 
 1. В Telegram откройте [@BotFather](https://t.me/BotFather) и отправьте `/newbot`.
-2. Задайте имя и username бота (оканчивается на `bot`). BotFather пришлёт токен, его значение идёт в `TELEGRAM_BOT_TOKEN`. Username без `@` впишите в `TELEGRAM_BOT_USERNAME`.
-3. Для Login Widget отправьте BotFather `/setdomain`, выберите бота и укажите домен сайта, например `lecturo.example`. Виджет работает только на этом домене, на `localhost` проверить вход не получится.
+2. Задайте имя и username бота (оканчивается на `bot`). BotFather пришлёт токен, его значение идёт в `TELEGRAM_BOT_TOKEN`. Username без `@` впишите в `TELEGRAM_BOT_USERNAME`, число из токена до двоеточия в `TELEGRAM_BOT_ID`.
+3. Для входа через Telegram на сайте отправьте BotFather `/setdomain`, выберите бота и укажите домен сайта, например `lecturo.example`. Вход работает только на этом домене, на `localhost` проверить вход не получится.
 4. Примените настройки: `docker compose up -d`. Бот отвечает на `/start`, сохраняет `chat_id` пользователя и, если `PUBLIC_URL` начинается с `https://`, показывает кнопку открытия приложения.
 
 Бэкенд проверяет подпись данных входа по токену бота и принимает данные не старше суток. Токен никому не передавайте. Если он утёк, выпустите новый через BotFather.
