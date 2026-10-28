@@ -95,8 +95,9 @@ jobs:
             backend/pyproject.toml
       - name: Apply backend migrations
         working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://lecturo@localhost:5432/lecturo
         run: |
-          export DATABASE_URL="postgresql+asyncpg://$PGUSER:$PGPASSWORD@$PGHOST:5432/$PGDATABASE"
           python -m venv "$RUNNER_TEMP/backend"
           "$RUNNER_TEMP/backend/bin/pip" install -e .
           "$RUNNER_TEMP/backend/bin/alembic" upgrade head
