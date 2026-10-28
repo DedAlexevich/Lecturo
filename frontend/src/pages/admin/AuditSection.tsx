@@ -8,6 +8,19 @@ import { auditPageSize, useAdmins, useAudit, type AdminAction, type AuditEntry }
 const actionLabels: Record<AdminAction, string> = {
   admin_granted: "Назначил администратора",
   admin_revoked: "Снял администратора",
+  logs_stream_started: "Открыл поток логов",
+  lecture_retried: "Перезапустил обработку лекции",
+  backup_downloaded: "Скачал бэкап",
+  backup_created: "Создал дамп",
+  backup_create_failed: "Дамп не создан",
+  backup_uploaded: "Загрузил дамп",
+  backup_deleted: "Удалил бэкап",
+  backup_upload_rejected: "Загрузка дампа отклонена",
+  restore_started: "Запустил восстановление базы",
+  restore_finished: "Восстановление базы завершено",
+  restore_failed: "Восстановление базы не удалось",
+  restore_denied: "Восстановление отклонено: подтверждение не прошло",
+  maintenance_disabled: "Выключил режим обслуживания",
 };
 
 const sourceLabels: Record<string, string> = {
