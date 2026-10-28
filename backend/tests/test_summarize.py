@@ -15,6 +15,7 @@ from app.pipeline.summarize import (
     plan_chapters,
     split_into_parts,
     split_oversized,
+    strip_code_fence,
 )
 from app.providers.openai_compat import OpenAICompatibleTruncated
 
@@ -612,3 +613,21 @@ def test_group_chapters_limits_section_length():
         ["Глава 2"],
         ["Глава 3"],
     ]
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["## Глава\n\nТекст", "```markdown\n## Глава\n\nТекст\n```", "\n```\n## Глава\n\nТекст\n```\n"],
+)
+def test_strip_code_fence(content):
+    assert strip_code_fence(content) == "## Глава\n\nТекст"
+
+
+async def test_long_lecture_on_stub_llm_gets_markdown_by_chapters(user):
+    lecture = await create_transcribed_lecture(user, 40)
+
+    await run_summarize(lecture.id)
+
+    chapters, summary = await saved(lecture.id)
+    assert summary.content_md.startswith(f"## {chapters[0].title}\n\n")
+    assert '"chapters"' not in summary.content_md
