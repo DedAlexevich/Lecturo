@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-chat"
     llm_timeout: float = 600.0
     llm_max_tokens: int = 8192
+    llm_retry_defer_seconds: list[int] = [60, 300, 900]
 
     embeddings_provider: str = "stub"
     embeddings_base_url: str = ""

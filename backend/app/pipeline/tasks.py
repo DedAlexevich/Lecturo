@@ -32,7 +32,14 @@ from app.pipeline.jobs import (
     regeneration_job_id,
     video_job_id,
 )
-from app.pipeline.runner import PROCESSING_FAILED, StepFailed, StepHandler, get_step, run_step
+from app.pipeline.runner import (
+    PROCESSING_FAILED,
+    StepDeferred,
+    StepFailed,
+    StepHandler,
+    get_step,
+    run_step,
+)
 from app.services import maintenance, quota
 from app.services.account import lecture_files, remove_files
 
@@ -69,6 +76,12 @@ AFTER_READY_STEPS = sorted({name for names in AFTER_READY.values() for name in n
 
 LECTURE_STEPS = [name for name in StepName if name != StepName.quiz]
 
+LLM_STEPS = frozenset({StepName.summarize, StepName.quiz})
+
+
+def defer_scope(name: StepName, lecture_id: uuid.UUID) -> str | None:
+    return f"{name.value}:{lecture_id}" if name in LLM_STEPS else None
+
 
 async def process_lecture(ctx: dict, lecture_id: str) -> str:
     await maintenance.hold_job_while_active()
@@ -78,6 +91,8 @@ async def process_lecture(ctx: dict, lecture_id: str) -> str:
             return await run_plan(lecture_uuid)
     except quota.QuotaExceeded:
         return LectureStatus.waiting_quota
+    except StepDeferred as deferred:
+        raise Retry(defer=deferred.delay) from deferred
     except StepFailed:
         await refund(lecture_uuid)
         return LectureStatus.failed
@@ -169,6 +184,8 @@ async def process_regeneration(ctx: dict, lecture_id: str) -> str:
         async with asyncio.timeout(REGENERATION_TIMEOUT_SEC):
             await reset_regeneration_steps(lecture_uuid)
             return await run_regeneration(lecture_uuid)
+    except StepDeferred as deferred:
+        raise Retry(defer=deferred.delay) from deferred
     except asyncio.CancelledError:
         raise
     except BaseException:
@@ -185,7 +202,14 @@ async def run_regeneration(lecture_id: uuid.UUID) -> str:
         error: str | None = None
         try:
             for name in REGENERATION_STEPS:
-                await run_step(session, lecture, name, HANDLERS[name], fails_lecture=False)
+                await run_step(
+                    session,
+                    lecture,
+                    name,
+                    HANDLERS[name],
+                    fails_lecture=False,
+                    defer_scope=defer_scope(name, lecture.id),
+                )
         except StepFailed as failure:
             outcome = StepStatus.failed
             failed = await get_step(session, lecture.id, failure.args[0])
@@ -278,7 +302,10 @@ async def process_quiz(ctx: dict, lecture_id: str) -> str:
                 quiz.build_quiz,
                 fails_lecture=False,
                 notify=NotificationKind.quiz,
+                defer_scope=defer_scope(StepName.quiz, lecture.id),
             )
+        except StepDeferred as deferred:
+            raise Retry(defer=deferred.delay) from deferred
         except StepFailed:
             return StepStatus.failed
         return StepStatus.done
@@ -301,7 +328,13 @@ async def run_plan(lecture_id: uuid.UUID) -> str:
             await session.commit()
             await publish_status(lecture.id, lecture.owner_id, lecture.status)
             for name in PLANS[lecture.source_type]:
-                await run_step(session, lecture, name, HANDLERS[name])
+                await run_step(
+                    session,
+                    lecture,
+                    name,
+                    HANDLERS[name],
+                    defer_scope=defer_scope(name, lecture.id),
+                )
             for name in AFTER_READY.get(lecture.source_type, []):
                 await get_step(session, lecture.id, name)
             lecture.status = LectureStatus.ready

@@ -1,10 +1,13 @@
+import hashlib
 import json
+import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
-from arq import create_pool
+from arq import Retry, create_pool
 from arq.jobs import Job, JobStatus
+from redis.exceptions import RedisError
 from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,11 +17,16 @@ from app.core.db import SessionLocal
 from app.core.redis import get_redis
 from app.models import Course, ExamSheet, Lecture, Summary, User, course_lectures
 from app.pipeline.jobs import queue_settings
+from app.pipeline.runner import TRANSIENT_ERRORS, next_deferral, reset_deferrals
 from app.pipeline.summarize import MAP_ATTEMPTS, complete_json, load_prompt
 from app.pipeline.tasks import enqueue
 from app.providers import LLM, get_llm
 from app.services import maintenance
 from app.services.consents import ai_transfer_given
+
+logger = logging.getLogger(__name__)
+
+DIGEST_CACHE_TTL_SECONDS = 24 * 3600
 
 
 @dataclass(frozen=True)
@@ -137,10 +145,32 @@ def merge_digests(data: dict[str, Any], digests: list[LectureDigest]) -> ExamShe
     return ExamSheetDraft(tickets=tickets, definitions=definitions, cheatsheet_md=cheatsheet)
 
 
+def digest_cache_key(course_id: uuid.UUID) -> str:
+    return f"exam-sheet:digests:{course_id}"
+
+
+async def cached_digest(llm: LLM, notes: LectureNotes, cache_key: str) -> LectureDigest:
+    redis = get_redis(get_settings().redis_url)
+    field = hashlib.sha256(f"{notes.title}\n{notes.content_md}".encode()).hexdigest()
+    try:
+        raw = await redis.hget(cache_key, field)
+        if raw is not None:
+            return LectureDigest(**json.loads(raw))
+    except (OSError, RedisError, ValueError, TypeError):
+        logger.warning("Не удалось прочитать разбор лекции из кеша", exc_info=True)
+    digest = await digest_lecture(llm, notes)
+    try:
+        await redis.hset(cache_key, field, json.dumps(asdict(digest), ensure_ascii=False))
+        await redis.expire(cache_key, DIGEST_CACHE_TTL_SECONDS)
+    except (OSError, RedisError):
+        logger.warning("Не удалось сохранить разбор лекции в кеш", exc_info=True)
+    return digest
+
+
 async def compose_exam_sheet(
-    llm: LLM, course_title: str, notes: list[LectureNotes]
+    llm: LLM, course_title: str, notes: list[LectureNotes], cache_key: str
 ) -> ExamSheetDraft:
-    digests = [await digest_lecture(llm, lecture) for lecture in notes]
+    digests = [await cached_digest(llm, lecture, cache_key) for lecture in notes]
     request = exam_reduce_request(course_title, digests)
     data = await complete_json(llm, load_prompt("exam_reduce"), request, MAP_ATTEMPTS)
     return merge_digests(data, digests)
@@ -185,16 +215,39 @@ async def build_exam_sheet(ctx: dict, course_id: str) -> str:
         if not notes:
             return "empty"
         await session.commit()
+        scope = f"exam-sheet:{course_uuid}"
         try:
-            draft = await compose_exam_sheet(get_llm(), course_title, notes)
+            draft = await compose_exam_sheet(
+                get_llm(), course_title, notes, digest_cache_key(course_uuid)
+            )
             await save_exam_sheet(
                 session, course_uuid, draft, [lecture.lecture_id for lecture in notes]
             )
             await session.commit()
-        except Exception:
+        except Exception as error:
+            delay = await next_deferral(scope) if isinstance(error, TRANSIENT_ERRORS) else None
+            if delay is not None:
+                logger.warning(
+                    "Памятка курса %s отложена на %s с из-за временной ошибки провайдера: %s",
+                    course_uuid,
+                    delay,
+                    error,
+                )
+                raise Retry(defer=delay) from error
+            await reset_deferrals(scope)
+            await clear_digest_cache(course_uuid)
             await mark_exam_sheet_failed(course_uuid)
             raise
+        await reset_deferrals(scope)
+        await clear_digest_cache(course_uuid)
         return "ready"
+
+
+async def clear_digest_cache(course_id: uuid.UUID) -> None:
+    try:
+        await get_redis(get_settings().redis_url).delete(digest_cache_key(course_id))
+    except (OSError, RedisError):
+        logger.warning("Не удалось очистить кеш разборов лекций", exc_info=True)
 
 
 def exam_sheet_failure_key(course_id: uuid.UUID) -> str:
