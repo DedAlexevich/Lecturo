@@ -35,8 +35,8 @@ export function lectureQueryKey(id: string) {
   return ["lectures", id] as const;
 }
 
-function lectureStatusQueryKey(id: string) {
-  return ["lecture-status", id] as const;
+export function lectureStatusQueryKey(id: string) {
+  return ["lectures", id, "status"] as const;
 }
 
 export async function fetchLecture(id: string) {
